@@ -843,8 +843,8 @@ const ReportDashboard: React.FC = () => {
                 </button>
               </div>
 
-              {/* 3 in a row Draggable Reports Grid */}
-              <div className="p-5 sm:p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 bg-slate-50/30 dark:bg-slate-950/20">
+              {/* 2 or 3 in a row Draggable Reports Grid */}
+              <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4.5 bg-slate-50/30 dark:bg-slate-950/20">
                 {categoryReports.map((report, idx) => {
                   const Icon = report.icon || MdAssessment;
                   const isDragging = draggedReportId === report.id;
@@ -922,9 +922,9 @@ const ReportDashboard: React.FC = () => {
           );
         })()
       ) : (
-        /* All Categories Overview with 3 Category Columns (Masonry flow - no vertical gaps) */
-        (() => {
-          const renderCategoryContainer = (category: typeof CATEGORY_META[0], catIdx: number) => {
+        /* All Categories Overview Grid with Responsive CSS Grid */
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start animate-expand-container">
+          {categoriesList.map((category, catIdx) => {
             const categoryReports = filteredReports.filter((r) => r.category === category.key);
             if (categoryReports.length === 0 && searchQuery) return null;
             const isCatDragging = draggedCatKey === category.key;
@@ -941,23 +941,23 @@ const ReportDashboard: React.FC = () => {
                 onDragOver={handleCatDragOver}
                 onDragEnd={handleCatDragEnd}
                 style={{ animationDelay: `${catIdx * 35}ms` }}
-                className={`w-full bg-white dark:bg-slate-900 rounded-2xl border shadow-sm overflow-hidden select-none animate-card-item drag-item-transition ${
+                className={`w-full h-fit bg-white dark:bg-slate-900 rounded-2xl border shadow-sm overflow-hidden select-none animate-card-item drag-item-transition ${
                   isCatDragging
-                    ? 'opacity-30 scale-[0.99] border-dashed border-emerald-500 shadow-inner'
+                    ? 'opacity-30 scale-[0.97] border-dashed border-emerald-500 shadow-inner'
                     : isCatJustDropped
                     ? 'animate-drop-settle border-emerald-500 ring-2 ring-emerald-500/20'
                     : 'border-slate-200 dark:border-slate-800 hover:shadow-md'
                 }`}
               >
-                {/* Category Header with Drag Grip, Icon, Badge & Collapse Control */}
+                {/* Card Header with Category Drag Grip & Collapse Control */}
                 <div
-                  className="px-5 py-3.5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 flex items-center justify-between cursor-pointer"
+                  className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 flex items-center justify-between cursor-pointer"
                   onClick={() => toggleCatCollapse(category.key)}
                 >
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2.5">
                     <div
-                      title="Drag entire category section to rearrange"
-                      className="text-slate-300 hover:text-slate-600 dark:hover:text-slate-300 cursor-grab active:cursor-grabbing p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition shrink-0"
+                      title="Drag entire category column to rearrange"
+                      className="text-slate-300 hover:text-slate-600 dark:hover:text-slate-300 cursor-grab active:cursor-grabbing p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition shrink-0"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <MdDragIndicator size={18} />
@@ -966,84 +966,80 @@ const ReportDashboard: React.FC = () => {
                       {category.icon ? <category.icon size={18} /> : <MdAssessment size={18} />}
                     </div>
                     <div>
-                      <div className="flex items-center gap-2.5">
-                        <h2 className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white">
-                          {category.title}
-                        </h2>
-                        <span className="font-mono text-[11px] font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
-                          {categoryReports.length} {categoryReports.length === 1 ? 'Report' : 'Reports'}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-slate-400 dark:text-slate-400 mt-0.5">
+                      <h2 className="font-extrabold text-sm text-slate-900 dark:text-white">
+                        {category.title}
+                      </h2>
+                      <p className="text-[10px] text-slate-400 dark:text-slate-400 truncate max-w-[160px]">
                         {category.subtitle}
                       </p>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
+                    <span className="font-mono text-[11px] font-black text-slate-500 bg-white dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
+                      {categoryReports.length}
+                    </span>
                     <button
                       type="button"
                       title={isCollapsed ? "Expand category" : "Collapse category"}
                       onClick={() => toggleCatCollapse(category.key)}
-                      className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition cursor-pointer"
+                      className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition cursor-pointer"
                     >
-                      <span>{isCollapsed ? 'Expand' : 'Collapse'}</span>
                       {isCollapsed ? <MdKeyboardArrowDown size={18} /> : <MdKeyboardArrowUp size={18} />}
                     </button>
                   </div>
                 </div>
 
-                {/* Category Grid of Report Cards */}
+                {/* Draggable Reports List with Smooth Collapsible Height */}
                 <div
-                  className={`transition-all duration-300 ease-in-out overflow-hidden ${
-                    isCollapsed || draggedCatKey ? 'max-h-0 opacity-0 pointer-events-none' : 'max-h-[2500px] opacity-100'
+                  className={`divide-y divide-slate-100 dark:divide-slate-800/60 transition-all duration-300 ease-in-out overflow-hidden ${
+                    isCollapsed || draggedCatKey ? 'max-h-0 opacity-0 pointer-events-none' : 'max-h-[1400px] opacity-100'
                   }`}
                 >
-                  <div className="p-4.5 grid grid-cols-1 gap-3 bg-slate-50/20 dark:bg-slate-950/10">
-                    {categoryReports.map((report, idx) => {
-                      const Icon = report.icon || MdAssessment;
-                      const isDragging = draggedReportId === report.id;
-                      const isJustDropped = justDroppedReportId === report.id;
+                  {categoryReports.map((report) => {
+                    const Icon = report.icon || MdAssessment;
+                    const isDragging = draggedReportId === report.id;
+                    const isJustDropped = justDroppedReportId === report.id;
 
-                      return (
-                        <div
-                          key={report.id}
-                          draggable={true}
-                          onDragStart={(e) => handleDragStart(e, report.id)}
-                          onDragEnter={(e) => {
-                            e.stopPropagation();
-                            handleDragEnter(report.id);
-                          }}
-                          onDragOver={handleDragOver}
-                          onDragEnd={handleDragEnd}
-                          onClick={() => handleNavigate(report)}
-                          style={{ animationDelay: `${idx * 25}ms` }}
-                          className={`group relative p-4.5 rounded-xl border bg-white dark:bg-slate-900 cursor-pointer flex flex-col justify-between gap-3.5 select-none animate-card-item drag-item-transition ${
-                            isDragging
-                              ? 'opacity-30 scale-95 border-dashed border-emerald-500 bg-emerald-50/30 dark:bg-emerald-950/30 shadow-inner'
-                              : isJustDropped
-                              ? 'animate-drop-settle border-emerald-500 ring-2 ring-emerald-500/30'
-                              : 'border-slate-200/90 dark:border-slate-800 hover:border-emerald-500 dark:hover:border-emerald-500/80 hover:shadow-md hover:-translate-y-0.5'
-                          }`}
-                        >
-                          <div className="space-y-2.5">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex items-center gap-2">
-                                <div className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 group-hover:bg-emerald-50 dark:group-hover:bg-emerald-950/50 text-slate-600 dark:text-slate-300 group-hover:text-emerald-700 dark:group-hover:text-emerald-300 transition-colors">
-                                  <Icon size={17} />
-                                </div>
-                                <div
-                                  title="Drag to rearrange"
-                                  className="text-slate-300 group-hover:text-slate-500 cursor-grab active:cursor-grabbing p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <MdDragIndicator size={16} />
-                                </div>
-                              </div>
-
+                    return (
+                      <div
+                        key={report.id}
+                        draggable={true}
+                        onDragStart={(e) => handleDragStart(e, report.id)}
+                        onDragEnter={(e) => {
+                          e.stopPropagation();
+                          handleDragEnter(report.id);
+                        }}
+                        onDragOver={handleDragOver}
+                        onDragEnd={handleDragEnd}
+                        onClick={() => handleNavigate(report)}
+                        className={`group p-3.5 cursor-pointer drag-item-transition flex items-start justify-between gap-3 select-none ${
+                          isDragging
+                            ? 'opacity-30 scale-[0.98] bg-emerald-100/60 dark:bg-emerald-950/40 border-y border-dashed border-emerald-500'
+                            : isJustDropped
+                            ? 'animate-drop-settle bg-emerald-50/70 dark:bg-emerald-950/30'
+                            : 'hover:bg-emerald-50/50 dark:hover:bg-slate-800/60'
+                        }`}
+                      >
+                        <div className="flex items-start gap-2.5 flex-1">
+                          <div
+                            title="Drag to rearrange"
+                            className="text-slate-300 group-hover:text-slate-500 cursor-grab active:cursor-grabbing p-0.5 mt-0.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition shrink-0"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <MdDragIndicator size={16} />
+                          </div>
+                          <div className="mt-0.5 text-slate-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors shrink-0">
+                            <Icon size={16} />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-bold text-slate-800 dark:text-slate-200 group-hover:text-emerald-700 dark:group-hover:text-emerald-300 transition-colors text-xs leading-tight">
+                                {report.title}
+                              </h3>
                               {shouldShowBadge(report) && (
                                 <span
-                                  className={`text-[9px] font-black uppercase px-2 py-0.5 rounded tracking-wide border ${
+                                  className={`text-[9px] font-black uppercase px-1.5 py-0.2 rounded tracking-wide border ${
                                     report.badgeType === 'new'
                                       ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800'
                                       : report.badgeType === 'audited'
@@ -1055,75 +1051,23 @@ const ReportDashboard: React.FC = () => {
                                 </span>
                               )}
                             </div>
-
-                            <div>
-                              <h3 className="font-extrabold text-[13px] text-slate-900 dark:text-slate-100 group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors leading-snug">
-                                {report.title}
-                              </h3>
-                              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed line-clamp-2">
-                                {report.description}
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="pt-2.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-[11px] font-bold text-slate-400 group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors">
-                            <span>Open Filter</span>
-                            <div className="group-hover:translate-x-1 transition-transform">
-                              <MdArrowForward size={14} />
-                            </div>
+                            <p className="text-[10.5px] text-slate-500 dark:text-slate-400 mt-1 leading-normal line-clamp-2">
+                              {report.description}
+                            </p>
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
+
+                        <div className="mt-1 text-slate-300 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 group-hover:translate-x-0.5 transition shrink-0">
+                          <MdArrowForward size={16} />
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );
-          };
-
-          return (
-            <>
-              {/* Small screens (< md): Single column */}
-              <div className="flex md:hidden flex-col gap-5 animate-expand-container">
-                {categoriesList.map((category, catIdx) => renderCategoryContainer(category, catIdx))}
-              </div>
-
-              {/* Medium screens (md to lg): 2 columns */}
-              <div className="hidden md:grid lg:hidden md:grid-cols-2 gap-5 items-start animate-expand-container">
-                <div className="flex flex-col gap-5 w-full">
-                  {categoriesList
-                    .filter((_, idx) => idx % 2 === 0)
-                    .map((cat, idx) => renderCategoryContainer(cat, idx * 2))}
-                </div>
-                <div className="flex flex-col gap-5 w-full">
-                  {categoriesList
-                    .filter((_, idx) => idx % 2 !== 0)
-                    .map((cat, idx) => renderCategoryContainer(cat, idx * 2 + 1))}
-                </div>
-              </div>
-
-              {/* Large screens (lg+): 3 columns of category containers */}
-              <div className="hidden lg:grid lg:grid-cols-3 gap-5 items-start animate-expand-container">
-                <div className="flex flex-col gap-5 w-full">
-                  {categoriesList
-                    .filter((_, idx) => idx % 3 === 0)
-                    .map((cat, idx) => renderCategoryContainer(cat, idx * 3))}
-                </div>
-                <div className="flex flex-col gap-5 w-full">
-                  {categoriesList
-                    .filter((_, idx) => idx % 3 === 1)
-                    .map((cat, idx) => renderCategoryContainer(cat, idx * 3 + 1))}
-                </div>
-                <div className="flex flex-col gap-5 w-full">
-                  {categoriesList
-                    .filter((_, idx) => idx % 3 === 2)
-                    .map((cat, idx) => renderCategoryContainer(cat, idx * 3 + 2))}
-                </div>
-              </div>
-            </>
-          );
-        })()
-      )}
+          })}
+        </div>
       )}
 
       {/* Empty State */}
