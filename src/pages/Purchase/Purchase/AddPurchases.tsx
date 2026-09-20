@@ -618,7 +618,7 @@ const AddPurchases = () => {
                       Discounts
                     </div>
 
-                    {/* Additional Charges Toggle */}
+                    {/* Freight Charges Toggle */}
                     <div
                       onClick={() => {
                         const isChecked = !values.showAdditionalCharges;
@@ -631,7 +631,7 @@ const AddPurchases = () => {
                           : 'bg-white text-slate-500 border-stroke dark:bg-boxdark dark:text-slate-400 dark:border-strokedark hover:bg-slate-50 dark:hover:bg-meta-4'
                       }`}
                     >
-                      Additional Charges
+                      Freight Charges
                     </div>
                   </div>
 
@@ -1366,7 +1366,7 @@ const AddPurchases = () => {
 
                       {values.showAdditionalCharges && (
                         <div className="flex justify-between items-center text-sm text-blue-600 dark:text-blue-400">
-                          <span className="font-sans font-bold text-xs">Additional Charges:</span>
+                          <span className="font-sans font-bold text-xs">Freight Charges:</span>
                           <input
                             type="number"
                             min="0"

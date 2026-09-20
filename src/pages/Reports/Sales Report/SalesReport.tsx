@@ -13,8 +13,8 @@ const SalesReport = () => {
     const { tenantId } = useAuth();
     const [loading, setLoading] = useState(true);
 
-    const initialReportType = (location.state?.reportType || location.state?.tab || location.state?.activeTab || 'sale') as 'sale' | 'sales-query' | 'customer-sales' | 'return' | 'invoice' | 'product-sales-history';
-    const [reportType, setReportType] = useState<'sale' | 'sales-query' | 'customer-sales' | 'return' | 'invoice' | 'product-sales-history'>(initialReportType);
+    const initialReportType = (location.state?.reportType || location.state?.tab || location.state?.activeTab || 'category-sales') as 'sale' | 'sales-query' | 'customer-sales' | 'return' | 'invoice' | 'product-sales-history' | 'category-sales';
+    const [reportType, setReportType] = useState<'sale' | 'sales-query' | 'customer-sales' | 'return' | 'invoice' | 'product-sales-history' | 'category-sales'>(initialReportType);
 
     const [customers, setCustomers] = useState<any[]>([]);
     const [salesmen, setSalesmen] = useState<any[]>([]);
@@ -113,7 +113,7 @@ const SalesReport = () => {
         });
     };
 
-    const handleTabChange = (type: 'sale' | 'sales-query' | 'customer-sales' | 'return' | 'invoice' | 'product-sales-history') => {
+    const handleTabChange = (type: 'sale' | 'sales-query' | 'customer-sales' | 'return' | 'invoice' | 'product-sales-history' | 'category-sales') => {
         setReportType(type);
         setCriteria(prev => ({
             customer: [],
@@ -172,6 +172,20 @@ const SalesReport = () => {
             <div className="flex flex-wrap border-b border-stroke dark:border-strokedark gap-2 bg-white dark:bg-boxdark font-black tracking-wider text-[11px] uppercase text-gray-500">
                 <button 
                     type="button" 
+                    onClick={() => handleTabChange('category-sales')} 
+                    className={`py-2.5 px-6 font-bold uppercase transition tracking-wide text-xs border-b-2 cursor-pointer flex items-center gap-2 ${
+                        reportType === 'category-sales' 
+                            ? 'border-emerald-600 text-emerald-600 font-black' 
+                            : 'border-transparent text-gray-500 hover:text-black dark:text-gray-400 dark:hover:text-white cursor-pointer'
+                    }`}
+                >
+                    <span>Category-Wise Sales</span>
+                    <span className="bg-gradient-to-r from-emerald-500 to-emerald-600 text-white text-[9px] px-2 py-0.5 rounded-full font-black shadow-xs tracking-normal">
+                        NEW
+                    </span>
+                </button>
+                <button 
+                    type="button" 
                     onClick={() => handleTabChange('product-sales-history')} 
                     className={`py-2.5 px-6 font-bold uppercase transition tracking-wide text-xs border-b-2 cursor-pointer flex items-center gap-2 ${
                         reportType === 'product-sales-history' 
@@ -180,9 +194,6 @@ const SalesReport = () => {
                     }`}
                 >
                     <span>Product Sales History</span>
-                    <span className="bg-gradient-to-r from-emerald-500 to-emerald-600 text-white text-[9px] px-2 py-0.5 rounded-full font-black shadow-xs tracking-normal">
-                        NEW
-                    </span>
                 </button>
                 <button type="button" onClick={() => handleTabChange('sale')} className={`py-2.5 px-6 font-bold uppercase transition tracking-wide text-xs border-b-2 cursor-pointer ${reportType === 'sale' ? 'border-primary text-primary font-black' : 'border-transparent text-gray-400 hover:text-black cursor-pointer'}`}>Commercial Sales (Salesman-Wise)</button>
                 <button type="button" onClick={() => handleTabChange('sales-query')} className={`py-2.5 px-6 font-bold uppercase transition tracking-wide text-xs border-b-2 cursor-pointer ${reportType === 'sales-query' ? 'border-primary text-primary font-black' : 'border-transparent text-gray-400 hover:text-black cursor-pointer'}`}>Parameter Register</button>
@@ -356,6 +367,63 @@ const SalesReport = () => {
                             </div>
                             <div className="md:col-span-2">
                                 <SearchableMultiSelect label="Filter by Customer:" placeholder="All Customers" options={customerOptions} value={criteria.customer} onChange={(val) => handleInputChange('customer', val)} />
+                            </div>
+                        </>
+                    )}
+
+                    {reportType === 'category-sales' && (
+                        <>
+                            <div className="md:col-span-4 bg-slate-50 dark:bg-slate-800/60 p-3 rounded-lg border border-stroke dark:border-strokedark flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                                <div>
+                                    <span className="font-bold text-xs text-black dark:text-white uppercase tracking-wider">Report Presentation View Mode:</span>
+                                    <p className="text-[11px] text-gray-500">Choose between Executive Category Performance Leaderboard (1 row / category) or Itemized Category Transactions.</p>
+                                </div>
+                                <div className="flex items-center gap-2 bg-white dark:bg-boxdark p-1 rounded border border-stroke dark:border-strokedark shadow-sm">
+                                    <button
+                                        type="button"
+                                        onClick={() => handleInputChange('viewMode', 'summary')}
+                                        className={`px-3 py-1 rounded text-xs font-bold transition cursor-pointer ${
+                                            (criteria.viewMode || 'summary') === 'summary'
+                                                ? 'bg-primary text-white shadow-xs'
+                                                : 'text-gray-600 dark:text-gray-300 hover:text-black'
+                                        }`}
+                                    >
+                                        📊 Summary (Category Leaderboard)
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => handleInputChange('viewMode', 'detailed')}
+                                        className={`px-3 py-1 rounded text-xs font-bold transition cursor-pointer ${
+                                            criteria.viewMode === 'detailed'
+                                                ? 'bg-primary text-white shadow-xs'
+                                                : 'text-gray-600 dark:text-gray-300 hover:text-black'
+                                        }`}
+                                    >
+                                        📑 Detailed (Category Transactions)
+                                    </button>
+                                </div>
+                            </div>
+
+                            <SearchableMultiSelect label="Parent Category:" placeholder="All Parent Categories" options={parentCategoryOptions} value={criteria.parentCategory} onChange={(val) => handleInputChange('parentCategory', val)} />
+                            <SearchableMultiSelect label="Sub Category:" placeholder="All Sub Categories" options={subCategoryOptions} value={criteria.subCategory} onChange={(val) => handleInputChange('subCategory', val)} />
+                            <SearchableMultiSelect label="Category:" placeholder="All Categories" options={subSubCategoryOptions} value={criteria.subSubCategory} onChange={(val) => handleInputChange('subSubCategory', val)} />
+                            <SearchableMultiSelect label="Filter by Product:" placeholder="All Products" options={productOptions} value={criteria.product} onChange={(val) => handleInputChange('product', val)} />
+
+                            <SearchableMultiSelect label="Market Customer:" placeholder="All Customers" options={customerOptions} value={criteria.customer} onChange={(val) => handleInputChange('customer', val)} />
+                            <SearchableMultiSelect label="Salesman:" placeholder="All Salesmen" options={salesmanOptions} value={criteria.salesman} onChange={(val) => handleInputChange('salesman', val)} />
+                            <SearchableMultiSelect label="Brand:" placeholder="All Brands" options={binOptions} value={criteria.bin} onChange={(val) => handleInputChange('bin', val)} />
+                            <SearchableMultiSelect label="Dispatching Warehouse:" placeholder="All Warehouses" options={locationOptions} value={criteria.location} onChange={(val) => handleInputChange('location', val)} />
+
+                            <div className="md:col-span-4 flex items-center gap-4 pt-2 pb-1 border-t border-stroke dark:border-strokedark">
+                                <label className="flex items-center gap-2 cursor-pointer select-none">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={criteria.showZeroSales !== false} 
+                                        onChange={(e) => handleInputChange('showZeroSales', e.target.checked)}
+                                        className="w-4 h-4 text-emerald-600 rounded border-stroke focus:ring-0 cursor-pointer accent-emerald-600"
+                                    />
+                                    <span className="text-xs font-bold text-black dark:text-white">Show Categories With Zero Sales (Include Unsold Categories)</span>
+                                </label>
                             </div>
                         </>
                     )}

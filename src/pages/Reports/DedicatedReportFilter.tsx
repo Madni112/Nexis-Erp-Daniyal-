@@ -29,7 +29,9 @@ import {
   MdBookmarkAdd,
   MdDeleteOutline,
   MdClose,
-  MdCardGiftcard
+  MdCardGiftcard,
+  MdReceiptLong,
+  MdCategory
 } from 'react-icons/md';
 import { toast } from 'react-hot-toast';
 
@@ -80,6 +82,19 @@ const shouldShowBadge = (config: { badge?: string; badgeType?: string; createdAt
 };
 
 const REPORT_REGISTRY: Record<string, ReportConfig> = {
+  'category-wise-sales': {
+    id: 'category-wise-sales',
+    title: 'Category-Wise Sales & Volume Report',
+    categoryName: 'Sales & Distribution',
+    subtitle: 'Header-wise category sales audit, product lines, net volumes, return credits, and revenue share.',
+    badge: 'NEW',
+    badgeType: 'new',
+    createdAt: '2026-09-20',
+    icon: MdCategory,
+    targetPrintPath: '/Reports/Sales-Report/Print',
+    printType: 'category-sales',
+    fields: ['parentCategory', 'subCategory', 'subSubCategory', 'product', 'customer', 'salesman', 'location']
+  },
   'product-sales-history': {
     id: 'product-sales-history',
     title: 'Product Sales History Report',
@@ -150,16 +165,16 @@ const REPORT_REGISTRY: Record<string, ReportConfig> = {
   },
   'customer-loyalty-ledger': {
     id: 'customer-loyalty-ledger',
-    title: 'Customer Loyalty Rewards & Accrual Ledger',
+    title: 'Customer Financial Statement & Invoice Ledger',
     categoryName: 'Sales & Distribution',
-    subtitle: 'Point-by-point rewards accrual on sales invoices, redemption adjustments & cumulative points balances.',
+    subtitle: 'Audited chronological statement tracking sales invoices, payments received & running net dues per customer in PKR.',
     badge: 'NEW',
     badgeType: 'new',
     createdAt: '2026-09-17',
-    icon: MdCardGiftcard,
+    icon: MdReceiptLong,
     targetPrintPath: '/Reports/Sales-Report/Print',
     printType: 'loyalty',
-    fields: ['customer']
+    fields: ['customer', 'salesman']
   },
 
   // ── PURCHASES ──
@@ -314,7 +329,7 @@ const DedicatedReportFilter: React.FC = () => {
   const { tenantId } = useAuth();
 
   const activeConfig = REPORT_REGISTRY[reportId || 'sale-inv-detail'] || REPORT_REGISTRY['sale-inv-detail'];
-  const IconComponent = activeConfig.icon;
+  const IconComponent = activeConfig.icon || MdAssessment;
 
   const [loading, setLoading] = useState(true);
 
@@ -987,7 +1002,7 @@ const DedicatedReportFilter: React.FC = () => {
           </div>
 
           {/* Custom report flags */}
-          {reportId === 'product-sales-history' && (
+          {(reportId === 'category-wise-sales' || reportId === 'product-sales-history') && (
             <div className="md:col-span-2 flex flex-col gap-3 pt-3 pb-1 border-t border-slate-100 dark:border-slate-800/80">
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
                 <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Report Presentation Mode:</span>
@@ -1001,7 +1016,7 @@ const DedicatedReportFilter: React.FC = () => {
                         : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
                     }`}
                   >
-                    📊 Summary View (1 Row / Product)
+                    📊 Summary View {reportId === 'category-wise-sales' ? '(Category Breakdown)' : '(1 Row / Product)'}
                   </button>
                   <button
                     type="button"
@@ -1023,7 +1038,11 @@ const DedicatedReportFilter: React.FC = () => {
                   onChange={(e) => handleInputChange('showZeroSales', e.target.checked)}
                   className="w-4 h-4 text-emerald-600 rounded border-stroke focus:ring-0 cursor-pointer accent-emerald-600"
                 />
-                <span className="text-xs font-bold text-slate-800 dark:text-slate-100">Show Products With Zero Sales (Display Full Inventory Catalog)</span>
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                  {reportId === 'category-wise-sales'
+                    ? 'Show Categories With Zero Sales (Display Full Category Tree)'
+                    : 'Show Products With Zero Sales (Display Full Inventory Catalog)'}
+                </span>
               </label>
             </div>
           )}

@@ -536,7 +536,7 @@ const PrintPurchase = () => {
 
             {additionalCharges > 0 && (
               <div className="flex justify-between items-center text-blue-700 pt-1.5 border-t border-slate-200 font-bold">
-                <span className="font-sans text-[11px]">Additional Charges:</span>
+                <span className="font-sans text-[11px]">Freight Charges:</span>
                 <strong className="font-black text-xs text-blue-950 font-mono">Rs. {formatMoney(additionalCharges)}</strong>
               </div>
             )}

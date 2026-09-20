@@ -1031,7 +1031,7 @@ const NewInvoice = () => {
                       Discounts
                     </div>
 
-                    {/* Additional Charges Toggle */}
+                    {/* Freight Charges Toggle */}
                     <div
                       onClick={() => {
                         const isChecked = !values.showAdditionalCharges;
@@ -1044,7 +1044,7 @@ const NewInvoice = () => {
                           : 'bg-white text-slate-500 border-stroke dark:bg-boxdark dark:text-slate-400 dark:border-strokedark hover:bg-slate-50 dark:hover:bg-meta-4'
                       }`}
                     >
-                      Additional Charges
+                      Freight Charges
                     </div>
                   </div>
 
@@ -1945,7 +1945,7 @@ const NewInvoice = () => {
 
                     {values.showAdditionalCharges && (
                       <div className="flex justify-between items-center border-b pb-1 dark:border-strokedark text-blue-600 dark:text-blue-400">
-                        <span className="text-xs">Additional Charges:</span>
+                        <span className="text-xs">Freight Charges:</span>
                         <input
                           type="number"
                           min="0"

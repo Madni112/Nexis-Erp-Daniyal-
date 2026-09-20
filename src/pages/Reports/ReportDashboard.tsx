@@ -25,6 +25,7 @@ import {
   MdCategory,
   MdCorporateFare,
   MdCardGiftcard,
+  MdReceiptLong,
   MdDragIndicator,
   MdRestartAlt,
   MdKeyboardArrowDown,
@@ -60,6 +61,18 @@ export const shouldShowBadge = (report: { badge?: string; badgeType?: string; cr
 
 const ALL_REPORTS: ReportItem[] = [
   // ── SALES REPORTS ──
+  {
+    id: 'category-wise-sales',
+    title: 'Category-Wise Sales & Volume Report',
+    category: 'sales',
+    description: 'Header-wise category sales audit, product lines, net volumes, return credits, and revenue share.',
+    badge: 'NEW',
+    badgeType: 'new',
+    createdAt: '2026-09-20',
+    path: '/Reports/Sales-Report',
+    state: { reportType: 'category-sales' },
+    icon: MdCategory
+  },
   {
     id: 'product-sales-history',
     title: 'Product Sales History Report',
@@ -124,15 +137,15 @@ const ALL_REPORTS: ReportItem[] = [
   },
   {
     id: 'customer-loyalty-ledger',
-    title: 'Customer Loyalty Rewards & Accrual Ledger',
+    title: 'Customer Financial Statement & Invoice Ledger',
     category: 'sales',
-    description: 'Audited point-by-point statement tracking reward accruals on invoices, redemption deductions, and running net loyalty balances.',
+    description: 'Audited chronological statement tracking sales invoices, cash settlements, and running net receivable balances per customer in PKR.',
     badge: 'NEW',
     badgeType: 'new',
     createdAt: '2026-09-17',
     path: '/Reports/Sales-Report',
     state: { reportType: 'loyalty' },
-    icon: MdCardGiftcard
+    icon: MdReceiptLong
   },
 
   // ── PURCHASES & PAYABLES ──
@@ -355,6 +368,8 @@ const ReportDashboard: React.FC = () => {
   const [exporting, setExporting] = useState(false);
   const [draggedReportId, setDraggedReportId] = useState<string | null>(null);
   const [draggedCatKey, setDraggedCatKey] = useState<string | null>(null);
+  const [justDroppedReportId, setJustDroppedReportId] = useState<string | null>(null);
+  const [justDroppedCatKey, setJustDroppedCatKey] = useState<string | null>(null);
   const [collapsedCats, setCollapsedCats] = useState<Record<string, boolean>>({});
 
   // Auto-scroll window when dragging near top or bottom screen edges
@@ -402,12 +417,24 @@ const ReportDashboard: React.FC = () => {
     setCollapsedCats((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
-  // Filtered reports using reportsList order
+  const handleTabClick = (categoryKey: string) => {
+    if (categoryKey === selectedCategory || categoryKey === 'all') {
+      setSelectedCategory('all');
+      setCollapsedCats({});
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
+    setSelectedCategory(categoryKey);
+    setCollapsedCats((prev) => ({
+      ...prev,
+      [categoryKey]: false,
+    }));
+  };
+
+  // Filtered reports using reportsList order (filtered by search query across all categories)
   const filteredReports = useMemo(() => {
     return reportsList.filter((item) => {
-      if (selectedCategory !== 'all' && item.category !== selectedCategory) {
-        return false;
-      }
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         const matchesTitle = item.title.toLowerCase().includes(q);
@@ -417,7 +444,7 @@ const ReportDashboard: React.FC = () => {
       }
       return true;
     });
-  }, [reportsList, searchQuery, selectedCategory]);
+  }, [reportsList, searchQuery]);
 
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = { all: reportsList.length };
@@ -465,6 +492,10 @@ const ReportDashboard: React.FC = () => {
 
   const handleDragEnd = () => {
     if (draggedReportId) {
+      const droppedId = draggedReportId;
+      setJustDroppedReportId(droppedId);
+      setTimeout(() => setJustDroppedReportId(null), 650);
+
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(reportsListRef.current.map((r) => r.id)));
         toast.success('Card arrangement saved!', { id: 'report-order-save', duration: 1200 });
@@ -504,6 +535,10 @@ const ReportDashboard: React.FC = () => {
 
   const handleCatDragEnd = () => {
     if (draggedCatKey) {
+      const droppedKey = draggedCatKey;
+      setJustDroppedCatKey(droppedKey);
+      setTimeout(() => setJustDroppedCatKey(null), 650);
+
       try {
         localStorage.setItem(STORAGE_CAT_KEY, JSON.stringify(categoriesListRef.current.map((c) => c.key)));
         toast.success('Category container order saved!', { id: 'category-order-save', duration: 1200 });
@@ -520,6 +555,9 @@ const ReportDashboard: React.FC = () => {
       localStorage.removeItem(STORAGE_CAT_KEY);
       setReportsList(ALL_REPORTS);
       setCategoriesList(CATEGORY_META);
+      setCollapsedCats({});
+      setSearchQuery('');
+      setSelectedCategory('all');
       toast.success('Reports layout reset to default order.');
     } catch (err) {
       console.error(err);
@@ -654,7 +692,7 @@ const ReportDashboard: React.FC = () => {
       <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
         <button
           type="button"
-          onClick={() => setSelectedCategory('all')}
+          onClick={() => handleTabClick('all')}
           className={`flex items-center gap-2 px-3.5 py-2 rounded-xl font-bold text-xs whitespace-nowrap cursor-pointer transition ${
             selectedCategory === 'all'
               ? 'bg-emerald-700 text-white shadow-sm'
@@ -672,52 +710,121 @@ const ReportDashboard: React.FC = () => {
           </span>
         </button>
 
-        {categoriesList.map((cat) => (
-          <button
-            key={cat.key}
-            type="button"
-            onClick={() => setSelectedCategory(cat.key)}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-xl font-bold text-xs whitespace-nowrap cursor-pointer transition ${
-              selectedCategory === cat.key
-                ? 'bg-emerald-700 text-white shadow-sm'
-                : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
-            }`}
-          >
-            <cat.icon size={15} />
-            <span>{cat.title}</span>
-            <span
-              className={`px-1.5 py-0.2 rounded text-[10px] font-mono ${
-                selectedCategory === cat.key ? 'bg-emerald-800/80 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+        {categoriesList.map((cat) => {
+          const CatIcon = cat.icon || MdAssessment;
+          return (
+            <button
+              key={cat.key}
+              type="button"
+              onClick={() => handleTabClick(cat.key)}
+              className={`flex items-center gap-2 px-3.5 py-2 rounded-xl font-bold text-xs whitespace-nowrap cursor-pointer transition ${
+                selectedCategory === cat.key
+                  ? 'bg-emerald-700 text-white shadow-sm ring-2 ring-emerald-500/50'
+                  : 'bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
               }`}
             >
-              {categoryCounts[cat.key] || 0}
-            </span>
-          </button>
-        ))}
+              <CatIcon size={15} />
+              <span>{cat.title}</span>
+              <span
+                className={`px-1.5 py-0.2 rounded text-[10px] font-mono ${
+                  selectedCategory === cat.key ? 'bg-emerald-800/80 text-white' : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                }`}
+              >
+                {categoryCounts[cat.key] || 0}
+              </span>
+            </button>
+          );
+        })}
       </div>
 
-      {/* ── CATEGORIZED REPORTS DISPLAY ── */}
+      {/* ── EXPAND & DRAG ANIMATION STYLES ── */}
+      <style>{`
+        @keyframes expandDirectoryContainer {
+          0% {
+            opacity: 0;
+            transform: scale(0.92) translateY(20px);
+            filter: blur(4px);
+          }
+          50% {
+            filter: blur(0px);
+          }
+          100% {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+            filter: blur(0px);
+          }
+        }
+        @keyframes reportCardFadeUp {
+          0% {
+            opacity: 0;
+            transform: translateY(16px) scale(0.96);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0) scale(1);
+          }
+        }
+        @keyframes dropSettle {
+          0% {
+            transform: scale(0.96) translateY(-2px);
+            box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.45);
+          }
+          50% {
+            transform: scale(1.02) translateY(0);
+            box-shadow: 0 12px 28px -4px rgba(16, 185, 129, 0.25);
+          }
+          100% {
+            transform: scale(1) translateY(0);
+            box-shadow: none;
+          }
+        }
+        .animate-expand-container {
+          animation: expandDirectoryContainer 0.52s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+          will-change: transform, opacity, filter;
+        }
+        .animate-card-item {
+          animation: reportCardFadeUp 0.45s cubic-bezier(0.16, 1, 0.3, 1) backwards;
+          will-change: transform, opacity;
+        }
+        .animate-drop-settle {
+          animation: dropSettle 0.65s cubic-bezier(0.16, 1, 0.3, 1) forwards !important;
+          z-index: 20;
+        }
+        .drag-item-transition {
+          transition: transform 0.45s cubic-bezier(0.2, 0.9, 0.3, 1),
+                      opacity 0.45s cubic-bezier(0.2, 0.9, 0.3, 1),
+                      box-shadow 0.45s cubic-bezier(0.2, 0.9, 0.3, 1),
+                      background-color 0.35s ease,
+                      border-color 0.35s ease;
+        }
+      `}</style>
+
+      {/* ── CATEGORIZED REPORTS DISPLAY (EXPANDABLE DIRECTORY) ── */}
       {selectedCategory !== 'all' ? (
-        /* Single Selected Category: Full Width Container with 2 or 3 in a row Grid */
+        /* Single Selected Category: Expanded Container */
         (() => {
           const category = categoriesList.find((c) => c.key === selectedCategory);
           if (!category) return null;
           const categoryReports = filteredReports.filter((r) => r.category === category.key);
+          const CatBannerIcon = category.icon || MdAssessment;
 
           return (
-            <div className="w-full flex flex-col bg-white dark:bg-slate-900 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-sm overflow-hidden">
+            <div
+              key={category.key}
+              className="w-full flex flex-col bg-white dark:bg-slate-900 rounded-2xl border border-emerald-500/80 dark:border-emerald-500/60 shadow-xl shadow-emerald-500/10 dark:shadow-emerald-950/40 overflow-hidden animate-expand-container"
+            >
               {/* Category Full-Width Banner Header */}
-              <div className="p-5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-800/50 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="p-5 border-b border-emerald-100 dark:border-emerald-950 bg-emerald-50/50 dark:bg-emerald-950/20 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <div className="p-3 rounded-xl bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 shadow-sm">
-                    <category.icon size={22} />
+                  <div className="p-3 rounded-xl bg-emerald-600 text-white shadow-sm">
+                    <CatBannerIcon size={24} />
                   </div>
                   <div>
                     <div className="flex items-center gap-2.5">
-                      <h2 className="font-black text-base text-slate-900 dark:text-white">
+                      <h2 className="font-black text-lg text-slate-900 dark:text-white">
                         {category.title}
                       </h2>
-                      <span className="font-mono text-xs font-black text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200/80 dark:border-emerald-800">
+                      <span className="font-mono text-xs font-black text-emerald-800 dark:text-emerald-200 bg-emerald-100 dark:bg-emerald-900/60 px-2.5 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
                         {categoryReports.length} {categoryReports.length === 1 ? 'Report' : 'Reports'}
                       </span>
                     </div>
@@ -730,17 +837,18 @@ const ReportDashboard: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setSelectedCategory('all')}
-                  className="self-start sm:self-auto text-xs font-bold text-slate-500 hover:text-emerald-700 dark:hover:text-emerald-400 underline cursor-pointer"
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded-xl font-bold text-xs border border-slate-200 dark:border-slate-700 transition cursor-pointer self-start sm:self-auto shadow-sm"
                 >
-                  View All Categories
+                  <span>← Back to All Reports</span>
                 </button>
               </div>
 
-              {/* 2 or 3 in a row Draggable Reports Grid */}
-              <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4.5 bg-slate-50/30 dark:bg-slate-950/20">
-                {categoryReports.map((report) => {
-                  const Icon = report.icon;
+              {/* 3 in a row Draggable Reports Grid */}
+              <div className="p-5 sm:p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 bg-slate-50/30 dark:bg-slate-950/20">
+                {categoryReports.map((report, idx) => {
+                  const Icon = report.icon || MdAssessment;
                   const isDragging = draggedReportId === report.id;
+                  const isJustDropped = justDroppedReportId === report.id;
 
                   return (
                     <div
@@ -751,9 +859,12 @@ const ReportDashboard: React.FC = () => {
                       onDragOver={handleDragOver}
                       onDragEnd={handleDragEnd}
                       onClick={() => handleNavigate(report)}
-                      className={`group relative p-4.5 rounded-xl border bg-white dark:bg-slate-900/90 transition-all duration-200 ease-out cursor-pointer flex flex-col justify-between gap-4 select-none ${
+                      style={{ animationDelay: `${idx * 40}ms` }}
+                      className={`group relative p-4.5 rounded-xl border bg-white dark:bg-slate-900/90 cursor-pointer flex flex-col justify-between gap-4 select-none animate-card-item drag-item-transition ${
                         isDragging
-                          ? 'opacity-40 scale-95 border-dashed border-emerald-500 shadow-inner'
+                          ? 'opacity-30 scale-95 border-dashed border-emerald-500 bg-emerald-50/30 dark:bg-emerald-950/30 shadow-inner'
+                          : isJustDropped
+                          ? 'animate-drop-settle border-emerald-500 ring-2 ring-emerald-500/30'
                           : 'border-slate-200/90 dark:border-slate-800 hover:border-emerald-500 dark:hover:border-emerald-500/80 hover:shadow-md hover:-translate-y-0.5'
                       }`}
                     >
@@ -811,116 +922,128 @@ const ReportDashboard: React.FC = () => {
           );
         })()
       ) : (
-        /* All Categories Overview Grid with Dynamic Masonry Columns */
-        <div className="columns-1 md:columns-2 lg:columns-3 gap-6 space-y-6 [column-fill:_balance]">
-          {categoriesList.map((category) => {
+        /* All Categories Overview with 3 Category Columns (Masonry flow - no vertical gaps) */
+        (() => {
+          const renderCategoryContainer = (category: typeof CATEGORY_META[0], catIdx: number) => {
             const categoryReports = filteredReports.filter((r) => r.category === category.key);
             if (categoryReports.length === 0 && searchQuery) return null;
             const isCatDragging = draggedCatKey === category.key;
+            const isCatJustDropped = justDroppedCatKey === category.key;
             const isCollapsed = Boolean(collapsedCats[category.key]);
 
             return (
               <div
+                id={`category-container-${category.key}`}
                 key={category.key}
                 draggable={true}
                 onDragStart={(e) => handleCatDragStart(e, category.key)}
                 onDragEnter={() => handleCatDragEnter(category.key)}
                 onDragOver={handleCatDragOver}
                 onDragEnd={handleCatDragEnd}
-                className={`break-inside-avoid inline-block w-full align-top h-fit bg-white dark:bg-slate-900 rounded-2xl border transition-all duration-200 ease-out shadow-sm overflow-hidden select-none ${
+                style={{ animationDelay: `${catIdx * 35}ms` }}
+                className={`w-full bg-white dark:bg-slate-900 rounded-2xl border shadow-sm overflow-hidden select-none animate-card-item drag-item-transition ${
                   isCatDragging
-                    ? 'opacity-40 scale-[0.98] border-dashed border-emerald-500 shadow-inner'
+                    ? 'opacity-30 scale-[0.99] border-dashed border-emerald-500 shadow-inner'
+                    : isCatJustDropped
+                    ? 'animate-drop-settle border-emerald-500 ring-2 ring-emerald-500/20'
                     : 'border-slate-200 dark:border-slate-800 hover:shadow-md'
                 }`}
               >
-                {/* Card Header with Category Drag Grip & Collapse Control */}
-                <div className="p-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
+                {/* Category Header with Drag Grip, Icon, Badge & Collapse Control */}
+                <div
+                  className="px-5 py-3.5 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40 flex items-center justify-between cursor-pointer"
+                  onClick={() => toggleCatCollapse(category.key)}
+                >
+                  <div className="flex items-center gap-3">
                     <div
-                      title="Drag entire category column to rearrange"
-                      className="text-slate-300 hover:text-slate-600 dark:hover:text-slate-300 cursor-grab active:cursor-grabbing p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition shrink-0"
+                      title="Drag entire category section to rearrange"
+                      className="text-slate-300 hover:text-slate-600 dark:hover:text-slate-300 cursor-grab active:cursor-grabbing p-1.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition shrink-0"
                       onClick={(e) => e.stopPropagation()}
                     >
                       <MdDragIndicator size={18} />
                     </div>
                     <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 shrink-0">
-                      <category.icon size={18} />
+                      {category.icon ? <category.icon size={18} /> : <MdAssessment size={18} />}
                     </div>
                     <div>
-                      <h2 className="font-extrabold text-sm text-slate-900 dark:text-white">
-                        {category.title}
-                      </h2>
-                      <p className="text-[10px] text-slate-400 dark:text-slate-400 truncate max-w-[160px]">
+                      <div className="flex items-center gap-2.5">
+                        <h2 className="font-extrabold text-sm sm:text-base text-slate-900 dark:text-white">
+                          {category.title}
+                        </h2>
+                        <span className="font-mono text-[11px] font-bold text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+                          {categoryReports.length} {categoryReports.length === 1 ? 'Report' : 'Reports'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-400 dark:text-slate-400 mt-0.5">
                         {category.subtitle}
                       </p>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <span className="font-mono text-[11px] font-black text-slate-500 bg-white dark:bg-slate-800 px-2 py-0.5 rounded border border-slate-200 dark:border-slate-700">
-                      {categoryReports.length}
-                    </span>
+                  <div className="flex items-center gap-2 shrink-0" onClick={(e) => e.stopPropagation()}>
                     <button
                       type="button"
                       title={isCollapsed ? "Expand category" : "Collapse category"}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleCatCollapse(category.key);
-                      }}
-                      className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition cursor-pointer"
+                      onClick={() => toggleCatCollapse(category.key)}
+                      className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg transition cursor-pointer"
                     >
+                      <span>{isCollapsed ? 'Expand' : 'Collapse'}</span>
                       {isCollapsed ? <MdKeyboardArrowDown size={18} /> : <MdKeyboardArrowUp size={18} />}
                     </button>
                   </div>
                 </div>
 
-                {/* Draggable Reports List with Smooth Collapsible Height */}
+                {/* Category Grid of Report Cards */}
                 <div
-                  className={`divide-y divide-slate-100 dark:divide-slate-800/60 transition-all duration-300 ease-in-out overflow-hidden ${
-                    isCollapsed || draggedCatKey ? 'max-h-0 opacity-0 pointer-events-none' : 'max-h-[1200px] opacity-100'
+                  className={`transition-all duration-300 ease-in-out overflow-hidden ${
+                    isCollapsed || draggedCatKey ? 'max-h-0 opacity-0 pointer-events-none' : 'max-h-[2500px] opacity-100'
                   }`}
                 >
-                  {categoryReports.map((report) => {
-                    const Icon = report.icon;
-                    const isDragging = draggedReportId === report.id;
+                  <div className="p-4.5 grid grid-cols-1 gap-3 bg-slate-50/20 dark:bg-slate-950/10">
+                    {categoryReports.map((report, idx) => {
+                      const Icon = report.icon || MdAssessment;
+                      const isDragging = draggedReportId === report.id;
+                      const isJustDropped = justDroppedReportId === report.id;
 
-                    return (
-                      <div
-                        key={report.id}
-                        draggable={true}
-                        onDragStart={(e) => handleDragStart(e, report.id)}
-                        onDragEnter={(e) => {
-                          e.stopPropagation();
-                          handleDragEnter(report.id);
-                        }}
-                        onDragOver={handleDragOver}
-                        onDragEnd={handleDragEnd}
-                        onClick={() => handleNavigate(report)}
-                        className={`group p-3.5 cursor-pointer transition-all duration-200 ease-out flex items-start justify-between gap-3 select-none ${
-                          isDragging
-                            ? 'opacity-40 bg-emerald-50/50 dark:bg-emerald-950/30'
-                            : 'hover:bg-emerald-50/50 dark:hover:bg-slate-800/60'
-                        }`}
-                      >
-                        <div className="flex items-start gap-2.5 flex-1">
-                          <div
-                            title="Drag to rearrange"
-                            className="text-slate-300 group-hover:text-slate-500 cursor-grab active:cursor-grabbing p-0.5 mt-0.5 hover:bg-slate-200 dark:hover:bg-slate-700 rounded transition shrink-0"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <MdDragIndicator size={16} />
-                          </div>
-                          <div className="mt-0.5 text-slate-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors shrink-0">
-                            <Icon size={16} />
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-2">
-                              <h3 className="font-bold text-slate-800 dark:text-slate-200 group-hover:text-emerald-700 dark:group-hover:text-emerald-300 transition-colors text-xs leading-tight">
-                                {report.title}
-                              </h3>
+                      return (
+                        <div
+                          key={report.id}
+                          draggable={true}
+                          onDragStart={(e) => handleDragStart(e, report.id)}
+                          onDragEnter={(e) => {
+                            e.stopPropagation();
+                            handleDragEnter(report.id);
+                          }}
+                          onDragOver={handleDragOver}
+                          onDragEnd={handleDragEnd}
+                          onClick={() => handleNavigate(report)}
+                          style={{ animationDelay: `${idx * 25}ms` }}
+                          className={`group relative p-4.5 rounded-xl border bg-white dark:bg-slate-900 cursor-pointer flex flex-col justify-between gap-3.5 select-none animate-card-item drag-item-transition ${
+                            isDragging
+                              ? 'opacity-30 scale-95 border-dashed border-emerald-500 bg-emerald-50/30 dark:bg-emerald-950/30 shadow-inner'
+                              : isJustDropped
+                              ? 'animate-drop-settle border-emerald-500 ring-2 ring-emerald-500/30'
+                              : 'border-slate-200/90 dark:border-slate-800 hover:border-emerald-500 dark:hover:border-emerald-500/80 hover:shadow-md hover:-translate-y-0.5'
+                          }`}
+                        >
+                          <div className="space-y-2.5">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex items-center gap-2">
+                                <div className="p-2 rounded-lg bg-slate-100 dark:bg-slate-800 group-hover:bg-emerald-50 dark:group-hover:bg-emerald-950/50 text-slate-600 dark:text-slate-300 group-hover:text-emerald-700 dark:group-hover:text-emerald-300 transition-colors">
+                                  <Icon size={17} />
+                                </div>
+                                <div
+                                  title="Drag to rearrange"
+                                  className="text-slate-300 group-hover:text-slate-500 cursor-grab active:cursor-grabbing p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded transition"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <MdDragIndicator size={16} />
+                                </div>
+                              </div>
+
                               {shouldShowBadge(report) && (
                                 <span
-                                  className={`text-[9px] font-black uppercase px-1.5 py-0.2 rounded tracking-wide border ${
+                                  className={`text-[9px] font-black uppercase px-2 py-0.5 rounded tracking-wide border ${
                                     report.badgeType === 'new'
                                       ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800'
                                       : report.badgeType === 'audited'
@@ -932,23 +1055,75 @@ const ReportDashboard: React.FC = () => {
                                 </span>
                               )}
                             </div>
-                            <p className="text-[10.5px] text-slate-500 dark:text-slate-400 mt-1 leading-normal line-clamp-2">
-                              {report.description}
-                            </p>
+
+                            <div>
+                              <h3 className="font-extrabold text-[13px] text-slate-900 dark:text-slate-100 group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors leading-snug">
+                                {report.title}
+                              </h3>
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed line-clamp-2">
+                                {report.description}
+                              </p>
+                            </div>
+                          </div>
+
+                          <div className="pt-2.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between text-[11px] font-bold text-slate-400 group-hover:text-emerald-700 dark:group-hover:text-emerald-400 transition-colors">
+                            <span>Open Filter</span>
+                            <div className="group-hover:translate-x-1 transition-transform">
+                              <MdArrowForward size={14} />
+                            </div>
                           </div>
                         </div>
-
-                        <div className="mt-1 text-slate-300 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 group-hover:translate-x-0.5 transition shrink-0">
-                          <MdArrowForward size={16} />
-                        </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
             );
-          })}
-        </div>
+          };
+
+          return (
+            <>
+              {/* Small screens (< md): Single column */}
+              <div className="flex md:hidden flex-col gap-5 animate-expand-container">
+                {categoriesList.map((category, catIdx) => renderCategoryContainer(category, catIdx))}
+              </div>
+
+              {/* Medium screens (md to lg): 2 columns */}
+              <div className="hidden md:grid lg:hidden md:grid-cols-2 gap-5 items-start animate-expand-container">
+                <div className="flex flex-col gap-5 w-full">
+                  {categoriesList
+                    .filter((_, idx) => idx % 2 === 0)
+                    .map((cat, idx) => renderCategoryContainer(cat, idx * 2))}
+                </div>
+                <div className="flex flex-col gap-5 w-full">
+                  {categoriesList
+                    .filter((_, idx) => idx % 2 !== 0)
+                    .map((cat, idx) => renderCategoryContainer(cat, idx * 2 + 1))}
+                </div>
+              </div>
+
+              {/* Large screens (lg+): 3 columns of category containers */}
+              <div className="hidden lg:grid lg:grid-cols-3 gap-5 items-start animate-expand-container">
+                <div className="flex flex-col gap-5 w-full">
+                  {categoriesList
+                    .filter((_, idx) => idx % 3 === 0)
+                    .map((cat, idx) => renderCategoryContainer(cat, idx * 3))}
+                </div>
+                <div className="flex flex-col gap-5 w-full">
+                  {categoriesList
+                    .filter((_, idx) => idx % 3 === 1)
+                    .map((cat, idx) => renderCategoryContainer(cat, idx * 3 + 1))}
+                </div>
+                <div className="flex flex-col gap-5 w-full">
+                  {categoriesList
+                    .filter((_, idx) => idx % 3 === 2)
+                    .map((cat, idx) => renderCategoryContainer(cat, idx * 3 + 2))}
+                </div>
+              </div>
+            </>
+          );
+        })()
+      )}
       )}
 
       {/* Empty State */}
