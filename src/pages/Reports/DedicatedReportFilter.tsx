@@ -47,6 +47,8 @@ interface ReportConfig {
   targetPrintPath: string;
   printType: string;
   tab?: number;
+  hideDateFilter?: boolean;
+  singleDateFilter?: boolean;
   fields: Array<
     | 'customerCategory'
     | 'invoice'
@@ -177,7 +179,7 @@ const REPORT_REGISTRY: Record<string, ReportConfig> = {
     fields: ['customer', 'salesman']
   },
 
-  // ── PURCHASES ──
+  // ── PURCHASES & PAYABLES ──
   'purchase-ledger': {
     id: 'purchase-ledger',
     title: 'Purchase Invoice Register',
@@ -191,6 +193,45 @@ const REPORT_REGISTRY: Record<string, ReportConfig> = {
     printType: 'purchase',
     fields: ['supplier', 'location']
   },
+  'category-purchases': {
+    id: 'category-purchases',
+    title: 'Category-Wise Purchases & Volume Report',
+    categoryName: 'Purchases & Payables',
+    subtitle: 'Header-wise category procurement spend, inward volume, return debits, and expenditure share.',
+    badge: 'NEW',
+    badgeType: 'new',
+    createdAt: '2026-09-22',
+    icon: MdCategory,
+    targetPrintPath: '/Reports/Purchase-Report/Print',
+    printType: 'category-purchases',
+    fields: ['parentCategory', 'subCategory', 'subSubCategory', 'product', 'supplier', 'location']
+  },
+  'product-purchase-history': {
+    id: 'product-purchase-history',
+    title: 'Product Purchase History & Price Trend Report',
+    categoryName: 'Purchases & Payables',
+    subtitle: 'Historical inward procurement trends, purchase cost variations over time, batch quantities, and supplier pricing logs.',
+    badge: 'NEW',
+    badgeType: 'new',
+    createdAt: '2026-09-22',
+    icon: MdInventory,
+    targetPrintPath: '/Reports/Purchase-Report/Print',
+    printType: 'product-purchase-history',
+    fields: ['parentCategory', 'subCategory', 'subSubCategory', 'product', 'brand', 'supplier', 'location']
+  },
+  'purchase-invoice-detail': {
+    id: 'purchase-invoice-detail',
+    title: 'Purchase Invoice Itemized Detail Report',
+    categoryName: 'Purchases & Payables',
+    subtitle: 'Line-by-line itemized purchase bill audit including product SKUs, inward quantities, UOM, and unit costs.',
+    badge: 'NEW',
+    badgeType: 'new',
+    createdAt: '2026-09-22',
+    icon: MdReceiptLong,
+    targetPrintPath: '/Reports/Purchase-Report/Print',
+    printType: 'purchase-invoice-detail',
+    fields: ['invoice', 'supplier', 'location', 'product', 'brand', 'parentCategory']
+  },
   'purchase-query-center': {
     id: 'purchase-query-center',
     title: 'Purchase Parameter Builder',
@@ -198,7 +239,7 @@ const REPORT_REGISTRY: Record<string, ReportConfig> = {
     subtitle: 'Filter vendor inward purchases across date brackets, warehouse destinations and payment terms.',
     icon: MdBarChart,
     targetPrintPath: '/Reports/Purchase-Report/Print',
-    printType: 'purchase',
+    printType: 'purchase-query',
     fields: ['supplier', 'location', 'parentCategory', 'product', 'brand']
   },
   'vendor-return-ledger': {
@@ -248,11 +289,11 @@ const REPORT_REGISTRY: Record<string, ReportConfig> = {
     fields: ['location', 'parentCategory', 'brand']
   },
 
-  // ── ACCOUNTS & TAXES ──
+  // ── ACCOUNTS & FINANCIALS ──
   'customer-balance-detail': {
     id: 'customer-balance-detail',
     title: 'Customer Balance Detail Report',
-    categoryName: 'Accounts & Taxes',
+    categoryName: 'Accounts & Financials',
     subtitle: 'Comprehensive breakdown of customer opening balances, period billing debits, recovery credits, and net closing balances filtered by customer category.',
     badge: 'NEW',
     badgeType: 'new',
@@ -263,33 +304,115 @@ const REPORT_REGISTRY: Record<string, ReportConfig> = {
     tab: 13,
     fields: ['customerCategory', 'customer']
   },
-  'customer-vendor-ledger': {
-    id: 'customer-vendor-ledger',
-    title: 'Customer & Vendor Account Ledgers',
-    categoryName: 'Accounts & Ledgers',
-    subtitle: 'Detailed debit/credit activity per party account with running closing balances.',
+  'vendor-balance-detail': {
+    id: 'vendor-balance-detail',
+    title: 'Vendor Balance Detail & Account Ledger',
+    categoryName: 'Accounts & Financials',
+    subtitle: 'Comprehensive breakdown of vendor opening balances, period procurement liabilities, supplier payments, and net payables.',
+    badge: 'NEW',
+    badgeType: 'new',
+    createdAt: '2026-09-18',
+    icon: MdAccountBalanceWallet,
+    targetPrintPath: '/Reports/Account-Report/Print',
+    printType: 'account',
+    tab: 3,
+    fields: ['supplier']
+  },
+  'customer-ledger': {
+    id: 'customer-ledger',
+    title: 'Customer Account Ledger (General Ledger)',
+    categoryName: 'Accounts & Financials',
+    subtitle: 'Detailed chronological debit/credit ledger per customer account with running balance and sales invoices.',
     badge: 'ACCRUAL',
     badgeType: 'accrual',
     icon: MdAccountBalanceWallet,
     targetPrintPath: '/Reports/Account-Report/Print',
     printType: 'account',
     tab: 1,
-    fields: ['customer', 'supplier', 'accountType']
+    fields: ['customer']
   },
-  'fbr-tax-report': {
-    id: 'fbr-tax-report',
-    title: 'Tax Collected on Sales (FBR Audit)',
-    categoryName: 'Accounts & Taxes',
-    subtitle: 'Output tax liabilities categorized by FBR retail scenarios and verified invoice tokens.',
-    icon: MdAssessment,
-    targetPrintPath: '/Reports/Sales-Report/Print',
-    printType: 'invoice',
-    fields: ['invoice', 'customer', 'taxScenario']
+  'customer-vendor-ledger': {
+    id: 'customer-vendor-ledger',
+    title: 'Customer Account Ledger (General Ledger)',
+    categoryName: 'Accounts & Financials',
+    subtitle: 'Detailed chronological debit/credit ledger per customer account with running balance and sales invoices.',
+    badge: 'ACCRUAL',
+    badgeType: 'accrual',
+    icon: MdAccountBalanceWallet,
+    targetPrintPath: '/Reports/Account-Report/Print',
+    printType: 'account',
+    tab: 1,
+    fields: ['customer']
+  },
+  'daybook-activity-report': {
+    id: 'daybook-activity-report',
+    title: 'Daily Cash & Bank Daybook',
+    categoryName: 'Accounts & Financials',
+    subtitle: 'Chronological daybook of daily cash inflows, customer receipts, vendor payments, and cash-drawer balances.',
+    badge: 'NEW',
+    badgeType: 'new',
+    createdAt: '2026-09-19',
+    icon: MdReceiptLong,
+    targetPrintPath: '/Reports/Account-Report/Print',
+    printType: 'account',
+    tab: 9,
+    singleDateFilter: true,
+    fields: ['location']
+  },
+  'customer-aging-report': {
+    id: 'customer-aging-report',
+    title: 'Customer Receivables Aging Analysis',
+    categoryName: 'Accounts & Financials',
+    subtitle: 'Categorized customer debt aging brackets across 0-30, 31-60, 61-90, and 90+ days overdue balances.',
+    badge: 'AUDITED',
+    badgeType: 'audited',
+    icon: MdAccessTime,
+    targetPrintPath: '/Reports/Account-Report/Print',
+    printType: 'account',
+    tab: 12,
+    hideDateFilter: true,
+    fields: ['customerCategory', 'customer']
+  },
+  'voucher-audit-register': {
+    id: 'voucher-audit-register',
+    title: 'Financial Voucher Audit Register',
+    categoryName: 'Accounts & Financials',
+    subtitle: 'Master chronological register of CPV, CRV, BPV, BRV, and Journal Vouchers (JV) with debit/credit balance trace.',
+    icon: MdReceipt,
+    targetPrintPath: '/Reports/Account-Report/Print',
+    printType: 'account',
+    tab: 8,
+    fields: ['voucherType']
+  },
+  'trial-balance-statement': {
+    id: 'trial-balance-statement',
+    title: 'Trial Balance Audit Statement',
+    categoryName: 'Accounts & Financials',
+    subtitle: 'Authoritative Chart of Accounts trial balance verifying that total ledger debits equal total ledger credits.',
+    badge: 'AUDITED',
+    badgeType: 'audited',
+    icon: MdBalance,
+    targetPrintPath: '/Reports/Account-Report/Print',
+    printType: 'account',
+    tab: 11,
+    hideDateFilter: true,
+    fields: []
+  },
+  'vendor-outstanding-report': {
+    id: 'vendor-outstanding-report',
+    title: 'Vendor Outstanding Payables Schedule',
+    categoryName: 'Accounts & Financials',
+    subtitle: 'Unsettled supplier procurement bills and payment dues sorted by vendor account and invoice date.',
+    icon: MdCorporateFare,
+    targetPrintPath: '/Reports/Account-Report/Print',
+    printType: 'account',
+    tab: 6,
+    fields: ['supplier']
   },
   'expense-ledger': {
     id: 'expense-ledger',
     title: 'Operational Expense Statement',
-    categoryName: 'Accounts & Taxes',
+    categoryName: 'Accounts & Financials',
     subtitle: 'Operating expenditures aggregated across rent, utilities, fuel, and logistics fleets.',
     icon: MdAccountBalance,
     targetPrintPath: '/Reports/Account-Report/Print',
@@ -366,9 +489,13 @@ const DedicatedReportFilter: React.FC = () => {
     invoiceNo: 'All',
     taxScenario: 'All',
     accountType: 'All',
-    sortBy: 'date_desc',
-    dateFrom: firstOfMonthStr,
-    dateTo: todayStr
+    voucherType: [],
+    sortBy: activeConfig.hideDateFilter ? 'amount_desc' : (activeConfig.singleDateFilter ? 'date_asc' : 'date_desc'),
+    dateFrom: activeConfig.singleDateFilter ? todayStr : firstOfMonthStr,
+    dateTo: todayStr,
+    showZeroSales: false,
+    showZeroValues: false,
+    showOnlyTransacted: false
   });
 
   // Saved Filter Presets
@@ -435,7 +562,7 @@ const DedicatedReportFilter: React.FC = () => {
           invRes,
           uomRes
         ] = await Promise.allSettled([
-          supabase.from('customers').select('id, customerName, registrationType'),
+          supabase.from('customers').select('id, customerName, registrationType, customer_code, customerCode'),
           supabase.from('suppliers').select('id, supplier_name'),
           supabase.from('salesmen').select('id, name'),
           supabase.from('logistics_transportation').select('id, name'),
@@ -472,7 +599,10 @@ const DedicatedReportFilter: React.FC = () => {
     setCriteria((prev: any) => ({ ...prev, [field]: value }));
   };
 
-  const customerOptions = useMemo(() => customers.map((c) => c.customerName).filter(Boolean), [customers]);
+  const customerOptions = useMemo(() => customers.map((c) => {
+    const code = c.customer_code || c.customerCode;
+    return code ? `[${code}] ${c.customerName}` : c.customerName;
+  }).filter(Boolean), [customers]);
   const customerCategoryOptions = useMemo(() => {
     const fromCust = customers.map((c: any) => c.registrationType).filter(Boolean);
     const standard = ['Retail / General', 'Contractor / Builder', 'Wholesaler / Dealer', 'Registered Corporate'];
@@ -491,11 +621,30 @@ const DedicatedReportFilter: React.FC = () => {
     () => availableInvoices.map((i) => i.invoice_no || `INV-${String(i.id).padStart(4, '0')}`),
     [availableInvoices]
   );
+  const voucherTypeOptions = useMemo(() => [
+    'Cash Payment Voucher (CPV)',
+    'Cash Receipt Voucher (CRV)',
+    'Bank Payment Voucher (BPV)',
+    'Bank Receipt Voucher (BRV)',
+    'Journal Voucher (JV)',
+    'Expense Voucher (EXP)'
+  ], []);
 
   const handleGenerate = () => {
     const dest = `${tenantId ? `/${tenantId}` : ''}${activeConfig.targetPrintPath}`;
+    let effectiveDateFrom = criteria.dateFrom;
+    let effectiveDateTo = criteria.dateTo;
+    
+    if (activeConfig.singleDateFilter) {
+      const selectedDay = criteria.dateTo || criteria.dateFrom || todayStr;
+      effectiveDateFrom = selectedDay;
+      effectiveDateTo = selectedDay;
+    }
+
     const filterPayload = {
       ...criteria,
+      dateFrom: effectiveDateFrom,
+      dateTo: effectiveDateTo,
       vendor: criteria.supplier
     };
     navigate(dest, {
@@ -885,8 +1034,21 @@ const DedicatedReportFilter: React.FC = () => {
             </div>
           )}
 
-          {/* Sorting Selector */}
-          <div className="md:col-span-2 border-t border-slate-100 dark:border-slate-800 pt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+          {/* Voucher Type Field */}
+          {f.includes('voucherType') && (
+            <div>
+              <SearchableMultiSelect
+                label="Financial Voucher Classification Type:"
+                placeholder="All Voucher Classifications"
+                options={voucherTypeOptions}
+                value={Array.isArray(criteria.voucherType) ? criteria.voucherType : (criteria.voucherType && criteria.voucherType !== 'All' ? [criteria.voucherType] : [])}
+                onChange={(val) => handleInputChange('voucherType', val)}
+              />
+            </div>
+          )}
+
+          {/* Sorting Selector & Optional Date Inputs */}
+          <div className={`md:col-span-2 border-t border-slate-100 dark:border-slate-800 pt-4 grid grid-cols-1 ${activeConfig.hideDateFilter || activeConfig.singleDateFilter ? 'md:grid-cols-2' : 'md:grid-cols-3'} gap-4`}>
             <div>
               <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
                 Sort Ledger Records By:
@@ -896,113 +1058,188 @@ const DedicatedReportFilter: React.FC = () => {
                 onChange={(e) => handleInputChange('sortBy', e.target.value)}
                 className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 bg-slate-50 dark:bg-slate-800 text-xs font-semibold outline-none focus:ring-2 focus:ring-emerald-500/20"
               >
-                <option value="date_desc">Date (Newest First)</option>
-                <option value="date_asc">Date (Oldest First)</option>
-                <option value="amount_desc">Gross Value (Highest First)</option>
-                <option value="amount_asc">Gross Value (Lowest First)</option>
-                <option value="invoice_asc">Document # (Ascending A-Z)</option>
+                {activeConfig.hideDateFilter ? (
+                  <>
+                    <option value="amount_desc">Total Outstanding (Highest First)</option>
+                    <option value="amount_asc">Total Outstanding (Lowest First)</option>
+                    <option value="name_asc">Customer Name (A to Z)</option>
+                    <option value="name_desc">Customer Name (Z to A)</option>
+                  </>
+                ) : activeConfig.singleDateFilter ? (
+                  <>
+                    <option value="date_asc">Entry Order / Time (Chronological)</option>
+                    <option value="amount_desc">Transaction Value (Highest First)</option>
+                    <option value="amount_asc">Transaction Value (Lowest First)</option>
+                    <option value="invoice_asc">Invoice No (Ascending A-Z)</option>
+                  </>
+                ) : (
+                  <>
+                    <option value="date_desc">Date (Newest First)</option>
+                    <option value="date_asc">Date (Oldest First)</option>
+                    <option value="amount_desc">Gross Value (Highest First)</option>
+                    <option value="amount_asc">Gross Value (Lowest First)</option>
+                    <option value="invoice_asc">Invoice No (Ascending A-Z)</option>
+                  </>
+                )}
               </select>
             </div>
 
-            {/* Date From */}
-            <div>
-              <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
-                Date Window (From):
-              </label>
-              <input
-                type="date"
-                max={new Date().toISOString().split('T')[0]}
-                value={criteria.dateFrom}
-                onChange={(e) => handleInputChange('dateFrom', e.target.value)}
-                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 bg-slate-50 dark:bg-slate-800 text-xs font-semibold outline-none"
-              />
-            </div>
+            {/* Single Date Picker Mode (e.g. Daily Cash & Bank Daybook) */}
+            {activeConfig.singleDateFilter && (
+              <div>
+                <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                  Daybook Audit Date:
+                </label>
+                <input
+                  type="date"
+                  max={new Date().toISOString().split('T')[0]}
+                  value={criteria.dateTo || criteria.dateFrom || new Date().toISOString().split('T')[0]}
+                  onChange={(e) => {
+                    handleInputChange('dateFrom', e.target.value);
+                    handleInputChange('dateTo', e.target.value);
+                  }}
+                  className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 bg-slate-50 dark:bg-slate-800 text-xs font-semibold outline-none focus:ring-2 focus:ring-emerald-500/20"
+                />
+              </div>
+            )}
 
-            {/* Date To */}
-            <div>
-              <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
-                Date Window (To):
-              </label>
-              <input
-                type="date"
-                min={criteria.dateFrom}
-                value={criteria.dateTo}
-                onChange={(e) => handleInputChange('dateTo', e.target.value)}
-                className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 bg-slate-50 dark:bg-slate-800 text-xs font-semibold outline-none"
-              />
-            </div>
+            {/* Range Date Picker Mode */}
+            {!activeConfig.hideDateFilter && !activeConfig.singleDateFilter && (
+              <>
+                {/* Date From */}
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                    Date Window (From):
+                  </label>
+                  <input
+                    type="date"
+                    max={new Date().toISOString().split('T')[0]}
+                    value={criteria.dateFrom}
+                    onChange={(e) => handleInputChange('dateFrom', e.target.value)}
+                    className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 bg-slate-50 dark:bg-slate-800 text-xs font-semibold outline-none"
+                  />
+                </div>
+
+                {/* Date To */}
+                <div>
+                  <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
+                    Date Window (To):
+                  </label>
+                  <input
+                    type="date"
+                    min={criteria.dateFrom}
+                    value={criteria.dateTo}
+                    onChange={(e) => handleInputChange('dateTo', e.target.value)}
+                    className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2 bg-slate-50 dark:bg-slate-800 text-xs font-semibold outline-none"
+                  />
+                </div>
+              </>
+            )}
           </div>
 
-          {/* Quick Date Presets */}
-          <div className="md:col-span-2 flex flex-wrap items-center gap-1.5 pt-1">
-            <span className="text-[10px] font-bold text-slate-400 uppercase mr-1">Quick Date Window:</span>
-            <button
-              type="button"
-              onClick={() => {
-                const t = new Date().toISOString().split('T')[0];
-                handleInputChange('dateFrom', t);
-                handleInputChange('dateTo', t);
-              }}
-              className="py-1 px-2.5 bg-slate-100 hover:bg-emerald-600 hover:text-white dark:bg-slate-800 rounded-lg text-[10px] font-bold transition cursor-pointer"
-            >
-              Today
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                const y = new Date();
-                y.setDate(y.getDate() - 1);
-                const ys = y.toISOString().split('T')[0];
-                handleInputChange('dateFrom', ys);
-                handleInputChange('dateTo', ys);
-              }}
-              className="py-1 px-2.5 bg-slate-100 hover:bg-emerald-600 hover:text-white dark:bg-slate-800 rounded-lg text-[10px] font-bold transition cursor-pointer"
-            >
-              Yesterday
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                const d = new Date();
-                const day = d.getDay();
-                const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-                const s = new Date(d.setDate(diff)).toISOString().split('T')[0];
-                handleInputChange('dateFrom', s);
-                handleInputChange('dateTo', new Date().toISOString().split('T')[0]);
-              }}
-              className="py-1 px-2.5 bg-slate-100 hover:bg-emerald-600 hover:text-white dark:bg-slate-800 rounded-lg text-[10px] font-bold transition cursor-pointer"
-            >
-              This Week
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                const d = new Date();
-                const s = new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0];
-                handleInputChange('dateFrom', s);
-                handleInputChange('dateTo', new Date().toISOString().split('T')[0]);
-              }}
-              className="py-1 px-2.5 bg-slate-100 hover:bg-emerald-600 hover:text-white dark:bg-slate-800 rounded-lg text-[10px] font-bold transition cursor-pointer"
-            >
-              This Month
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                const d = new Date();
-                const s = new Date(d.getFullYear(), d.getMonth() - 1, 1).toISOString().split('T')[0];
-                const e = new Date(d.getFullYear(), d.getMonth(), 0).toISOString().split('T')[0];
-                handleInputChange('dateFrom', s);
-                handleInputChange('dateTo', e);
-              }}
-              className="py-1 px-2.5 bg-slate-100 hover:bg-emerald-600 hover:text-white dark:bg-slate-800 rounded-lg text-[10px] font-bold transition cursor-pointer"
-            >
-              Last Month
-            </button>
-          </div>
+          {/* Quick Date Presets for Single Date Mode */}
+          {activeConfig.singleDateFilter && (
+            <div className="md:col-span-2 flex flex-wrap items-center gap-1.5 pt-1">
+              <span className="text-[10px] font-bold text-slate-400 uppercase mr-1">Quick Daybook Select:</span>
+              <button
+                type="button"
+                onClick={() => {
+                  const t = new Date().toISOString().split('T')[0];
+                  handleInputChange('dateFrom', t);
+                  handleInputChange('dateTo', t);
+                }}
+                className="py-1 px-2.5 bg-slate-100 hover:bg-emerald-600 hover:text-white dark:bg-slate-800 rounded-lg text-[10px] font-bold transition cursor-pointer"
+              >
+                Today
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const y = new Date();
+                  y.setDate(y.getDate() - 1);
+                  const ys = y.toISOString().split('T')[0];
+                  handleInputChange('dateFrom', ys);
+                  handleInputChange('dateTo', ys);
+                }}
+                className="py-1 px-2.5 bg-slate-100 hover:bg-emerald-600 hover:text-white dark:bg-slate-800 rounded-lg text-[10px] font-bold transition cursor-pointer"
+              >
+                Yesterday
+              </button>
+            </div>
+          )}
+
+          {/* Quick Date Presets for Range Mode */}
+          {!activeConfig.hideDateFilter && !activeConfig.singleDateFilter && (
+            <div className="md:col-span-2 flex flex-wrap items-center gap-1.5 pt-1">
+              <span className="text-[10px] font-bold text-slate-400 uppercase mr-1">Quick Date Window:</span>
+              <button
+                type="button"
+                onClick={() => {
+                  const t = new Date().toISOString().split('T')[0];
+                  handleInputChange('dateFrom', t);
+                  handleInputChange('dateTo', t);
+                }}
+                className="py-1 px-2.5 bg-slate-100 hover:bg-emerald-600 hover:text-white dark:bg-slate-800 rounded-lg text-[10px] font-bold transition cursor-pointer"
+              >
+                Today
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const y = new Date();
+                  y.setDate(y.getDate() - 1);
+                  const ys = y.toISOString().split('T')[0];
+                  handleInputChange('dateFrom', ys);
+                  handleInputChange('dateTo', ys);
+                }}
+                className="py-1 px-2.5 bg-slate-100 hover:bg-emerald-600 hover:text-white dark:bg-slate-800 rounded-lg text-[10px] font-bold transition cursor-pointer"
+              >
+                Yesterday
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const d = new Date();
+                  const day = d.getDay();
+                  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
+                  const s = new Date(d.setDate(diff)).toISOString().split('T')[0];
+                  handleInputChange('dateFrom', s);
+                  handleInputChange('dateTo', new Date().toISOString().split('T')[0]);
+                }}
+                className="py-1 px-2.5 bg-slate-100 hover:bg-emerald-600 hover:text-white dark:bg-slate-800 rounded-lg text-[10px] font-bold transition cursor-pointer"
+              >
+                This Week
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const d = new Date();
+                  const s = new Date(d.getFullYear(), d.getMonth(), 1).toISOString().split('T')[0];
+                  handleInputChange('dateFrom', s);
+                  handleInputChange('dateTo', new Date().toISOString().split('T')[0]);
+                }}
+                className="py-1 px-2.5 bg-slate-100 hover:bg-emerald-600 hover:text-white dark:bg-slate-800 rounded-lg text-[10px] font-bold transition cursor-pointer"
+              >
+                This Month
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const d = new Date();
+                  const s = new Date(d.getFullYear(), d.getMonth() - 1, 1).toISOString().split('T')[0];
+                  const e = new Date(d.getFullYear(), d.getMonth(), 0).toISOString().split('T')[0];
+                  handleInputChange('dateFrom', s);
+                  handleInputChange('dateTo', e);
+                }}
+                className="py-1 px-2.5 bg-slate-100 hover:bg-emerald-600 hover:text-white dark:bg-slate-800 rounded-lg text-[10px] font-bold transition cursor-pointer"
+              >
+                Last Month
+              </button>
+            </div>
+          )}
 
           {/* Custom report flags */}
-          {(reportId === 'category-wise-sales' || reportId === 'product-sales-history') && (
+          {(reportId === 'category-wise-sales' || reportId === 'product-sales-history' || reportId === 'trial-balance-statement') && (
             <div className="md:col-span-2 flex flex-col gap-3 pt-3 pb-1 border-t border-slate-100 dark:border-slate-800/80">
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
                 <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Report Presentation Mode:</span>
@@ -1016,7 +1253,7 @@ const DedicatedReportFilter: React.FC = () => {
                         : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
                     }`}
                   >
-                    📊 Summary View {reportId === 'category-wise-sales' ? '(Category Breakdown)' : '(1 Row / Product)'}
+                    📊 Summary View {reportId === 'category-wise-sales' ? '(Category Breakdown)' : reportId === 'trial-balance-statement' ? '(Main Ledger Heads)' : '(1 Row / Product)'}
                   </button>
                   <button
                     type="button"
@@ -1027,46 +1264,62 @@ const DedicatedReportFilter: React.FC = () => {
                         : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
                     }`}
                   >
-                    📑 Detailed View (Invoice Breakdown)
+                    📑 Detailed View {reportId === 'trial-balance-statement' ? '(Sub-Ledger Breakdown)' : '(Invoice Breakdown)'}
                   </button>
                 </div>
               </div>
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input 
-                  type="checkbox" 
-                  checked={criteria.showZeroSales !== false} 
-                  onChange={(e) => handleInputChange('showZeroSales', e.target.checked)}
-                  className="w-4 h-4 text-emerald-600 rounded border-stroke focus:ring-0 cursor-pointer accent-emerald-600"
-                />
-                <span className="text-xs font-bold text-slate-800 dark:text-slate-100">
-                  {reportId === 'category-wise-sales'
-                    ? 'Show Categories With Zero Sales (Display Full Category Tree)'
-                    : 'Show Products With Zero Sales (Display Full Inventory Catalog)'}
-                </span>
-              </label>
+              {reportId !== 'trial-balance-statement' && (
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input 
+                    type="checkbox" 
+                    checked={Boolean(criteria.showZeroSales)} 
+                    onChange={(e) => handleInputChange('showZeroSales', e.target.checked)}
+                    className="w-4 h-4 text-emerald-600 rounded border-stroke focus:ring-0 cursor-pointer accent-emerald-600"
+                  />
+                  <span className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                    {reportId === 'category-wise-sales'
+                      ? 'Show Categories With Zero Sales (Display Full Category Tree)'
+                      : 'Show Products With Zero Sales (Display Full Inventory Catalog)'}
+                  </span>
+                </label>
+              )}
             </div>
           )}
 
-          {(reportId === 'customer-balance-detail' || f.includes('customerCategory')) && (
+          {(reportId === 'customer-ledger' || reportId === 'customer-vendor-ledger' || reportId === 'customer-balance-detail' || reportId === 'vendor-balance-detail' || reportId === 'trial-balance-statement' || f.includes('customerCategory') || (reportId === 'vendor-balance-detail' || (f.includes('supplier') && activeConfig.printType === 'account'))) && (
             <div className="md:col-span-2 flex flex-wrap items-center gap-6 pt-3 pb-1 border-t border-slate-100 dark:border-slate-800/80">
               <label className="flex items-center gap-2 cursor-pointer select-none">
                 <input 
                   type="checkbox" 
-                  checked={criteria.showZeroValues !== false} 
+                  checked={Boolean(criteria.showZeroValues)} 
                   onChange={(e) => handleInputChange('showZeroValues', e.target.checked)}
                   className="w-4 h-4 text-emerald-600 rounded border-stroke focus:ring-0 cursor-pointer accent-emerald-600"
                 />
-                <span className="text-xs font-bold text-slate-800 dark:text-slate-100">Show Zero Values (Settled Accounts)</span>
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                  {reportId === 'trial-balance-statement'
+                    ? 'Show Zero Values (Include Zero Debit / Credit Balance Heads)'
+                    : reportId === 'vendor-outstanding-report'
+                    ? 'Show Zero Values (Include Fully Paid Bills)'
+                    : reportId === 'vendor-balance-detail'
+                    ? 'Show Zero Values (Settled / Inactive Vendors)'
+                    : 'Show Zero Values (Settled Accounts)'}
+                </span>
               </label>
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input 
-                  type="checkbox" 
-                  checked={!!criteria.showOnlyTransacted} 
-                  onChange={(e) => handleInputChange('showOnlyTransacted', e.target.checked)}
-                  className="w-4 h-4 text-emerald-600 rounded border-stroke focus:ring-0 cursor-pointer accent-emerald-600"
-                />
-                <span className="text-xs font-bold text-slate-800 dark:text-slate-100">Show Only Customers With Transaction</span>
-              </label>
+              {reportId !== 'trial-balance-statement' && reportId !== 'vendor-outstanding-report' && (
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input 
+                    type="checkbox" 
+                    checked={Boolean(criteria.showOnlyTransacted)} 
+                    onChange={(e) => handleInputChange('showOnlyTransacted', e.target.checked)}
+                    className="w-4 h-4 text-emerald-600 rounded border-stroke focus:ring-0 cursor-pointer accent-emerald-600"
+                  />
+                  <span className="text-xs font-bold text-slate-800 dark:text-slate-100">
+                    {reportId === 'vendor-balance-detail' || f.includes('supplier')
+                      ? 'Show Only Vendors With Transactions'
+                      : 'Show Only Customers With Transactions'}
+                  </span>
+                </label>
+              )}
             </div>
           )}
         </div>

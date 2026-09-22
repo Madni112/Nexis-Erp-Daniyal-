@@ -162,12 +162,48 @@ const ALL_REPORTS: ReportItem[] = [
     icon: MdLocalMall
   },
   {
+    id: 'category-purchases',
+    title: 'Category-Wise Purchases & Volume Report',
+    category: 'purchases',
+    description: 'Header-wise category procurement spend, inward volume, return debits, and expenditure share.',
+    badge: 'NEW',
+    badgeType: 'new',
+    createdAt: '2026-09-22',
+    path: '/Reports/Purchase-Report',
+    state: { reportType: 'category-purchases' },
+    icon: MdCategory
+  },
+  {
+    id: 'product-purchase-history',
+    title: 'Product Purchase History & Price Trend',
+    category: 'purchases',
+    description: 'Historical inward procurement trends, purchase cost variations over time, batch quantities, and supplier pricing logs.',
+    badge: 'NEW',
+    badgeType: 'new',
+    createdAt: '2026-09-22',
+    path: '/Reports/Purchase-Report',
+    state: { reportType: 'product-purchase-history' },
+    icon: MdInventory
+  },
+  {
+    id: 'purchase-invoice-detail',
+    title: 'Purchase Invoice Detail Report',
+    category: 'purchases',
+    description: 'Line-level itemization including product items, inward quantities, UOM, and unit purchase prices.',
+    badge: 'NEW',
+    badgeType: 'new',
+    createdAt: '2026-09-22',
+    path: '/Reports/Purchase-Report',
+    state: { reportType: 'purchase-invoice-detail' },
+    icon: MdReceiptLong
+  },
+  {
     id: 'purchase-query-center',
     title: 'Purchase Parameter Builder',
     category: 'purchases',
     description: 'Filter vendor inward purchases across date brackets, warehouse destinations and payment terms.',
     path: '/Reports/Purchase-Report',
-    state: { reportType: 'purchase' },
+    state: { reportType: 'purchase-query' },
     icon: MdBarChart
   },
   {
@@ -177,6 +213,29 @@ const ALL_REPORTS: ReportItem[] = [
     description: 'Outgoing debit adjustments for damaged or returned supplier merchandise.',
     path: '/Reports/Purchase-Report',
     state: { reportType: 'return' },
+    icon: MdCorporateFare
+  },
+  {
+    id: 'vendor-balance-detail',
+    title: 'Vendor Balance Detail & Account Ledger',
+    category: 'purchases',
+    description: 'Comprehensive breakdown of vendor opening balances, period procurement liabilities, supplier payments, and net payables.',
+    badge: 'NEW',
+    badgeType: 'new',
+    createdAt: '2026-09-18',
+    path: '/Reports/Account-Report',
+    state: { activeTab: 3 },
+    icon: MdAccountBalanceWallet
+  },
+  {
+    id: 'vendor-outstanding-report',
+    title: 'Vendor Outstanding Payables Schedule',
+    category: 'purchases',
+    description: 'Unsettled supplier procurement bills and payment dues sorted by vendor account and invoice date.',
+    badge: 'AUDITED',
+    badgeType: 'audited',
+    path: '/Reports/Account-Report',
+    state: { activeTab: 6 },
     icon: MdCorporateFare
   },
 
@@ -208,7 +267,7 @@ const ALL_REPORTS: ReportItem[] = [
     icon: MdStorefront
   },
 
-  // ── ACCOUNTS & TAXES ──
+  // ── ACCOUNTS & FINANCIALS ──
   {
     id: 'customer-balance-detail',
     title: 'Customer Balance Detail Report',
@@ -222,23 +281,79 @@ const ALL_REPORTS: ReportItem[] = [
     icon: MdAccountBalanceWallet
   },
   {
-    id: 'customer-vendor-ledger',
-    title: 'Customer & Vendor Account Ledgers',
+    id: 'vendor-balance-detail',
+    title: 'Vendor Balance Detail & Account Ledger',
     category: 'accounts',
-    description: 'Detailed debit/credit activity per party account with running closing balances.',
-    badge: 'ACCRUAL',
-    badgeType: 'accrual',
+    description: 'Comprehensive breakdown of vendor opening balances, period procurement liabilities, supplier payments, and net payables.',
+    badge: 'NEW',
+    badgeType: 'new',
+    createdAt: '2026-09-18',
     path: '/Reports/Account-Report',
+    state: { activeTab: 3 },
     icon: MdAccountBalanceWallet
   },
   {
-    id: 'fbr-tax-report',
-    title: 'Tax Collected on Sales (FBR Audit)',
+    id: 'customer-ledger',
+    title: 'Customer Account Ledger (General Ledger)',
     category: 'accounts',
-    description: 'Output tax liabilities categorized by FBR retail scenarios and verified invoice tokens.',
-    path: '/Reports/Sales-Report',
-    state: { reportType: 'invoice' },
-    icon: MdAssessment
+    description: 'Detailed chronological debit/credit ledger per customer account with running balances and invoices.',
+    badge: 'ACCRUAL',
+    badgeType: 'accrual',
+    path: '/Reports/Account-Report',
+    state: { activeTab: 1 },
+    icon: MdAccountBalanceWallet
+  },
+  {
+    id: 'daybook-activity-report',
+    title: 'Daily Cash & Bank Daybook',
+    category: 'accounts',
+    description: 'Chronological daybook of daily cash inflows, customer receipts, vendor payments, and cash-drawer balances.',
+    badge: 'NEW',
+    badgeType: 'new',
+    createdAt: '2026-09-19',
+    path: '/Reports/Account-Report',
+    state: { activeTab: 9 },
+    icon: MdReceiptLong
+  },
+  {
+    id: 'customer-aging-report',
+    title: 'Customer Receivables Aging Analysis',
+    category: 'accounts',
+    description: 'Categorized customer debt aging brackets across 0-30, 31-60, 61-90, and 90+ days overdue balances.',
+    badge: 'AUDITED',
+    badgeType: 'audited',
+    path: '/Reports/Account-Report',
+    state: { activeTab: 12 },
+    icon: MdAccessTime
+  },
+  {
+    id: 'voucher-audit-register',
+    title: 'Financial Voucher Audit Register',
+    category: 'accounts',
+    description: 'Master chronological register of CPV, CRV, BPV, BRV, and Journal Vouchers (JV) with debit/credit balance trace.',
+    path: '/Reports/Account-Report',
+    state: { activeTab: 8 },
+    icon: MdReceipt
+  },
+  {
+    id: 'trial-balance-statement',
+    title: 'Trial Balance Audit Statement',
+    category: 'accounts',
+    description: 'Authoritative Chart of Accounts trial balance verifying that total ledger debits equal total ledger credits.',
+    badge: 'AUDITED',
+    badgeType: 'audited',
+    path: '/Reports/Account-Report',
+    state: { activeTab: 11 },
+    icon: MdBalance
+  },
+  {
+    id: 'vendor-outstanding-report',
+    title: 'Vendor Outstanding Payables Schedule',
+    category: 'accounts',
+    description: 'Unsettled supplier procurement bills and payment dues sorted by vendor account and invoice date.',
+    path: '/Reports/Account-Report',
+    state: { activeTab: 6 },
+    icon: MdCorporateFare
   },
   {
     id: 'expense-ledger',
@@ -246,6 +361,7 @@ const ALL_REPORTS: ReportItem[] = [
     category: 'accounts',
     description: 'Operating expenditures aggregated across rent, utilities, fuel, and logistics fleets.',
     path: '/Reports/Account-Report',
+    state: { activeTab: 4 },
     icon: MdAccountBalance
   },
 
@@ -294,8 +410,8 @@ const CATEGORY_META = [
   },
   {
     key: 'accounts',
-    title: 'Accounts & Taxes',
-    subtitle: 'General ledger, statutory tax compliance & voucher trace',
+    title: 'Accounts & Financials',
+    subtitle: 'General ledgers, cash daybooks, receivable aging & financial statements',
     icon: MdAccountBalanceWallet,
     color: 'purple'
   },
@@ -922,8 +1038,8 @@ const ReportDashboard: React.FC = () => {
           );
         })()
       ) : (
-        /* All Categories Overview Grid with Responsive CSS Grid */
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 items-start animate-expand-container">
+        /* All Categories Overview Grid with Responsive CSS Columns (Zero vertical gaps) */
+        <div className="columns-1 md:columns-2 lg:columns-3 gap-6 animate-expand-container">
           {categoriesList.map((category, catIdx) => {
             const categoryReports = filteredReports.filter((r) => r.category === category.key);
             if (categoryReports.length === 0 && searchQuery) return null;
@@ -941,7 +1057,7 @@ const ReportDashboard: React.FC = () => {
                 onDragOver={handleCatDragOver}
                 onDragEnd={handleCatDragEnd}
                 style={{ animationDelay: `${catIdx * 35}ms` }}
-                className={`w-full h-fit bg-white dark:bg-slate-900 rounded-2xl border shadow-sm overflow-hidden select-none animate-card-item drag-item-transition ${
+                className={`break-inside-avoid inline-block w-full mb-6 bg-white dark:bg-slate-900 rounded-2xl border shadow-sm overflow-hidden select-none animate-card-item drag-item-transition ${
                   isCatDragging
                     ? 'opacity-30 scale-[0.97] border-dashed border-emerald-500 shadow-inner'
                     : isCatJustDropped

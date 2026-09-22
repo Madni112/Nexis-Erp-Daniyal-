@@ -81,28 +81,20 @@ const THEMES = {
 /**
  * Creates a beautifully styled and formatted Excel Worksheet
  */
-const createStyledWorksheet = (config: {
-  companyName?: string;
-  reportTitle: string;
-  filterSummary?: Record<string, string | number | boolean | undefined | null>;
-  columns: ExcelColumn[];
-  data: any[];
-  summaryRow?: Record<string, any> | boolean;
-  theme?: 'navy' | 'emerald' | 'purple' | 'slate';
-}): XLSX.WorkSheet => {
+const createStyledWorksheet = (config: any): XLSX.WorkSheet => {
+  const companyName = String(config.companyName || config.title || 'ZOAIB ALI & COMPANY');
+  const reportTitle = String(config.reportTitle || config.subtitle || 'FINANCIAL AUDIT REPORT');
   const {
-    companyName = 'ZOAIB ALI & COMPANY',
-    reportTitle,
     filterSummary,
-    columns,
-    data,
+    columns = [],
+    data = [],
     summaryRow = true,
     theme = 'emerald'
   } = config;
 
   const activeTheme = THEMES[theme] || THEMES.emerald;
   const numCols = Math.max(columns.length, 4);
-  const endColLetter = XLSX.utils.encode_col(columns.length - 1);
+  const endColLetter = XLSX.utils.encode_col(Math.max(0, columns.length - 1));
 
   const ws: XLSX.WorkSheet = {};
   const merges: XLSX.Range[] = [];
@@ -152,7 +144,7 @@ const createStyledWorksheet = (config: {
     const ref = `${XLSX.utils.encode_col(c)}${currentRow + 1}`;
     ws[ref] = { v: '', t: 's', s: { fill: { fgColor: { rgb: activeTheme.primary } } } };
   }
-  merges.push({ s: { r: currentRow, c: 0 }, e: { r: currentRow, c: columns.length - 1 } });
+  merges.push({ s: { r: currentRow, c: 0 }, e: { r: currentRow, c: Math.max(0, columns.length - 1) } });
   rowHeights.push({ hpt: 32 });
   currentRow++;
 
@@ -173,7 +165,7 @@ const createStyledWorksheet = (config: {
     const ref = `${XLSX.utils.encode_col(c)}${currentRow + 1}`;
     ws[ref] = { v: '', t: 's', s: { fill: { fgColor: { rgb: activeTheme.secondary } } } };
   }
-  merges.push({ s: { r: currentRow, c: 0 }, e: { r: currentRow, c: columns.length - 1 } });
+  merges.push({ s: { r: currentRow, c: 0 }, e: { r: currentRow, c: Math.max(0, columns.length - 1) } });
   rowHeights.push({ hpt: 24 });
   currentRow++;
 
@@ -265,6 +257,90 @@ const createStyledWorksheet = (config: {
   data.forEach((item, rowIdx) => {
     const isZebra = rowIdx % 2 === 1;
     const rowBg = isZebra ? activeTheme.zebra : 'FFFFFF';
+
+    // Special Handling: Grouped Header Banner Row (e.g. Salesman / Customer Banner Box in Excel)
+    if (item._isHeader || item._isSubHeader || item._isSectionHeader) {
+      const isSub = Boolean(item._isSubHeader || item._isSectionHeader);
+      const bannerText = item._bannerText || item.header || '';
+      const isReturnSection = bannerText.toUpperCase().includes('RETURN');
+
+      const bgColor = isSub
+        ? (isReturnSection ? 'FFE4E6' : 'F0FDF4') // Rose for returns, Emerald for sales
+        : 'E2E8F0'; // Slate for master group header
+      const textColor = isSub
+        ? (isReturnSection ? '881337' : '064E3B')
+        : '0F172A';
+      const fontSize = isSub ? 11 : 13;
+
+      const cellRef = `A${currentRow + 1}`;
+      ws[cellRef] = {
+        v: bannerText,
+        t: 's',
+        s: {
+          font: { name: 'Calibri', sz: fontSize, bold: true, color: { rgb: textColor } },
+          fill: { fgColor: { rgb: bgColor } },
+          alignment: { horizontal: 'left', vertical: 'center', indent: 1 },
+          border: {
+            top: { style: isSub ? 'thin' : 'medium', color: { rgb: textColor } },
+            bottom: { style: 'thin', color: { rgb: textColor } },
+            left: { style: isSub ? 'thin' : 'medium', color: { rgb: textColor } },
+            right: { style: isSub ? 'thin' : 'medium', color: { rgb: textColor } }
+          }
+        }
+      };
+
+      for (let c = 1; c < columns.length; c++) {
+        const ref = `${XLSX.utils.encode_col(c)}${currentRow + 1}`;
+        ws[ref] = {
+          v: '',
+          t: 's',
+          s: {
+            fill: { fgColor: { rgb: bgColor } },
+            border: {
+              top: { style: isSub ? 'thin' : 'medium', color: { rgb: textColor } },
+              bottom: { style: 'thin', color: { rgb: textColor } },
+              left: { style: 'thin', color: { rgb: 'CBD5E1' } },
+              right: { style: isSub ? 'thin' : 'medium', color: { rgb: textColor } }
+            }
+          }
+        };
+      }
+
+      merges.push({ s: { r: currentRow, c: 0 }, e: { r: currentRow, c: Math.max(0, columns.length - 1) } });
+      rowHeights.push({ hpt: isSub ? 24 : 30 });
+      currentRow++;
+      return;
+    }
+
+    // Special Handling: Subtotal Row per Customer / Group
+    if (item._isSubtotal) {
+      columns.forEach((col, colIdx) => {
+        const cellRef = `${XLSX.utils.encode_col(colIdx)}${currentRow + 1}`;
+        const rawVal = item[col.key];
+        const isNum = typeof rawVal === 'number';
+
+        ws[cellRef] = {
+          v: rawVal !== undefined && rawVal !== null ? rawVal : '',
+          t: isNum ? 'n' : 's',
+          s: {
+            font: { name: 'Calibri', sz: 10, bold: true, color: { rgb: '0F172A' } },
+            fill: { fgColor: { rgb: 'F1F5F9' } },
+            alignment: { horizontal: col.alignment || (isNum ? 'right' : 'left'), vertical: 'center' },
+            border: {
+              top: { style: 'thin', color: { rgb: '0F172A' } },
+              bottom: { style: 'medium', color: { rgb: '0F172A' } },
+              left: { style: 'thin', color: { rgb: 'CBD5E1' } },
+              right: { style: 'thin', color: { rgb: 'CBD5E1' } }
+            },
+            ...(isNum ? { numFmt: '#,##0.00' } : {})
+          }
+        };
+      });
+
+      rowHeights.push({ hpt: 22 });
+      currentRow++;
+      return;
+    }
 
     columns.forEach((col, colIdx) => {
       const cellRef = `${XLSX.utils.encode_col(colIdx)}${currentRow + 1}`;
@@ -388,13 +464,14 @@ const createStyledWorksheet = (config: {
 /**
  * Exports a single sheet styled Excel document with corporate branding
  */
-export const exportToExcel = async (config: ExcelExportConfig) => {
+export const exportToExcel = async (config: any) => {
   const ws = createStyledWorksheet(config);
   const wb = XLSX.utils.book_new();
   const sheetName = config.sheetName || 'Report Summary';
   XLSX.utils.book_append_sheet(wb, ws, sheetName);
 
-  XLSX.writeFile(wb, config.fileName.endsWith('.xlsx') ? config.fileName : `${config.fileName}.xlsx`);
+  const fileTarget = String(config.fileName || config.filename || 'Report_Export');
+  XLSX.writeFile(wb, fileTarget.endsWith('.xlsx') ? fileTarget : `${fileTarget}.xlsx`);
 };
 
 /**

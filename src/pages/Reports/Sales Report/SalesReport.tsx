@@ -46,7 +46,7 @@ const SalesReport = () => {
             saleMethod: base.saleMethod || 'All', 
             invoiceNo: base.invoiceNo || 'All',
             viewMode: location.state?.viewMode || base.viewMode || 'summary',
-            showZeroSales: location.state?.showZeroSales !== false && base.showZeroSales !== false,
+            showZeroSales: location.state?.showZeroSales === true || base.showZeroSales === true,
             sortBy: base.sortBy || 'date_desc',
             withLedgerSummary: base.withLedgerSummary || false,
             dateFrom: location.state?.dateFrom || base.dateFrom || new Date().toISOString().split('T')[0],
@@ -63,7 +63,7 @@ const SalesReport = () => {
             try {
                 setLoading(true);
                 const [custRes, smRes, transRes, catRes, binRes, prodRes, locRes, invRes, uomRes] = await Promise.all([
-                    supabase.from('customers').select('id, customerName'),
+                    supabase.from('customers').select('id, customerName, customer_code, customerCode'),
                     supabase.from('salesmen').select('id, name'),
                     supabase.from('logistics_transportation').select('id, name'),
                     supabase.from('inventory_categories').select('id, name, parent_id'),
@@ -128,7 +128,10 @@ const SalesReport = () => {
         }));
     };
 
-    const customerOptions = useMemo(() => customers.map(c => c.customerName).filter(Boolean), [customers]);
+    const customerOptions = useMemo(() => customers.map(c => {
+        const code = c.customer_code || c.customerCode;
+        return code ? `[${code}] ${c.customerName}` : c.customerName;
+    }).filter(Boolean), [customers]);
     const salesmanOptions = useMemo(() => salesmen.map(s => s.name).filter(Boolean), [salesmen]);
     const transportOptions = useMemo(() => transports.map(t => t.name).filter(Boolean), [transports]);
     const parentCategories = useMemo(() => categories.filter(c => c.parent_id === null), [categories]);
@@ -418,7 +421,7 @@ const SalesReport = () => {
                                 <label className="flex items-center gap-2 cursor-pointer select-none">
                                     <input 
                                         type="checkbox" 
-                                        checked={criteria.showZeroSales !== false} 
+                                        checked={Boolean(criteria.showZeroSales)} 
                                         onChange={(e) => handleInputChange('showZeroSales', e.target.checked)}
                                         className="w-4 h-4 text-emerald-600 rounded border-stroke focus:ring-0 cursor-pointer accent-emerald-600"
                                     />
@@ -475,7 +478,7 @@ const SalesReport = () => {
                                 <label className="flex items-center gap-2 cursor-pointer select-none">
                                     <input 
                                         type="checkbox" 
-                                        checked={criteria.showZeroSales !== false} 
+                                        checked={Boolean(criteria.showZeroSales)} 
                                         onChange={(e) => handleInputChange('showZeroSales', e.target.checked)}
                                         className="w-4 h-4 text-emerald-600 rounded border-stroke focus:ring-0 cursor-pointer accent-emerald-600"
                                     />

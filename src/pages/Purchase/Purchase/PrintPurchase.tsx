@@ -505,16 +505,19 @@ const PrintPurchase = () => {
 
             {/* Consignment Area Metric Badge */}
             {computedTotalSqm > 0 && (
-              <div className="p-3 rounded-xl bg-teal-50/80 border border-teal-300 text-xs flex items-center justify-between">
-                <div>
+              <div className="p-3.5 rounded-xl bg-teal-50/80 border border-teal-300 text-xs flex items-center justify-between gap-4 sm:gap-6">
+                <div className="min-w-0">
                   <span className="text-[10px] font-black text-teal-800 uppercase tracking-wider block">Total Tile Coverage Area:</span>
-                  <p className="font-black text-teal-950 text-sm font-mono mt-0.5">
+                  <p className="font-black text-teal-950 text-sm font-mono mt-0.5 whitespace-nowrap">
                     {computedTotalSqm.toFixed(2)} Sq.M <span className="text-xs font-medium text-teal-700">({computedTotalSqFt.toLocaleString(undefined, { maximumFractionDigits: 1 })} Sq.Ft)</span>
                   </p>
                 </div>
-                <div className="text-right">
-                  <span className="text-[10px] font-black text-teal-800 uppercase tracking-wider block">Boxes:</span>
-                  <p className="font-black text-teal-950 text-sm font-mono mt-0.5">{computedTotalBoxes} Boxes</p>
+                <div className="text-right shrink-0">
+                  <span className="text-[10px] font-black text-teal-800 uppercase tracking-wider block">TOTAL PACKING:</span>
+                  <p className="font-black text-teal-950 text-sm font-mono mt-0.5 whitespace-nowrap">
+                    {computedTotalBoxes} Box{computedTotalBoxes !== 1 ? 'es' : ''}
+                    {computedTotalLoosePcs > 0 ? ` + ${computedTotalLoosePcs} Pcs` : ''}
+                  </p>
                 </div>
               </div>
             )}

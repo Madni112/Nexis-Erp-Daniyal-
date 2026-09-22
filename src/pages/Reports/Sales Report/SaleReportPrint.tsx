@@ -75,7 +75,11 @@ const SaleReportPrint = () => {
   useEffect(() => {
     const compileExcelStructuredDataset = async () => {
       try {
-        setLoading(true);
+        // Normalize customer filter if it contains [Code] prefix
+        if (filters.customer) {
+          const rawCustList = Array.isArray(filters.customer) ? filters.customer : [filters.customer];
+          filters.customer = rawCustList.map((item: string) => String(item).replace(/^\[.*?\]\s*/, '').trim());
+        }
 
         // Fetch products lookup for UOM, categories & brands
         const { data: prodData } = await supabase.from('products').select('*');
@@ -224,8 +228,8 @@ const SaleReportPrint = () => {
             return { parentNode, subNode, leafNode };
           };
 
-          // Pre-populate catalog if showZeroSales is enabled
-          if (filters.showZeroSales !== false) {
+          // Pre-populate catalog if showZeroSales is explicitly enabled
+          if (filters.showZeroSales === true) {
             allProducts.forEach((p: any) => {
               const pCat = p.category || 'General';
               const sCat = p.sub_category || 'General';
@@ -518,7 +522,7 @@ const SaleReportPrint = () => {
           });
 
           let finalCategories = compiledCategoryRows;
-          if (filters.showZeroSales === false) {
+          if (!filters.showZeroSales) {
             finalCategories = finalCategories.filter(c => c.gross_units > 0 || c.returned_units > 0);
           }
 
@@ -554,7 +558,7 @@ const SaleReportPrint = () => {
           });
 
           let finalHierarchyTree = compiledHierarchyTree;
-          if (filters.showZeroSales === false) {
+          if (!filters.showZeroSales) {
             finalHierarchyTree = finalHierarchyTree
               .map(p => ({
                 ...p,
@@ -645,10 +649,10 @@ const SaleReportPrint = () => {
             });
           });
 
-          // Aggregate sales transactions per product (pre-populate with catalog products if showZeroSales is enabled/default)
+          // Aggregate sales transactions per product (pre-populate with catalog products if showZeroSales is enabled)
           const productSummaryMap: Record<string, any> = {};
 
-          if (filters.showZeroSales !== false) {
+          if (filters.showZeroSales === true) {
             allProducts.forEach((p: any) => {
               const pName = (p.product_name || '').trim();
               if (!pName) return;
@@ -785,7 +789,7 @@ const SaleReportPrint = () => {
           });
 
           let finalRows = compiledRows;
-          if (filters.showZeroSales === false) {
+          if (!filters.showZeroSales) {
             finalRows = finalRows.filter(r => r.sold_qty > 0 || r.returned_qty > 0);
           }
 
@@ -801,92 +805,96 @@ const SaleReportPrint = () => {
 
         // ── 📊 REPORT TYPE: COMMERCIAL SALES AUDIT LEDGER (SALESMAN-WISE) ──
         else if (rType === 'sale') {
-          let query = supabase.from('sales_invoices').select('*');
-          if (filters.customer && filters.customer.length > 0 && !filters.customer.includes('All')) query = query.in('customer_name', filters.customer);
-          if (filters.salesman && filters.salesman.length > 0 && !filters.salesman.includes('All')) query = query.in('salesman', filters.salesman);
-          if (filters.transport && filters.transport.length > 0 && !filters.transport.includes('All')) query = query.in('transport_name', filters.transport);
-          if (filters.location && filters.location.length > 0 && !filters.location.includes('All')) query = query.in('dispatch_warehouse', filters.location);
+          let invQuery = supabase.from('sales_invoices').select('*');
+          if (filters.customer && filters.customer.length > 0 && !filters.customer.includes('All')) invQuery = invQuery.in('customer_name', filters.customer);
+          if (filters.salesman && filters.salesman.length > 0 && !filters.salesman.includes('All')) invQuery = invQuery.in('salesman', filters.salesman);
+          if (filters.transport && filters.transport.length > 0 && !filters.transport.includes('All')) invQuery = invQuery.in('transport_name', filters.transport);
+          if (filters.location && filters.location.length > 0 && !filters.location.includes('All')) invQuery = invQuery.in('dispatch_warehouse', filters.location);
 
           if (filters.saleType && filters.saleType !== 'All') {
-            if (filters.saleType === 'Cash') query = query.eq('payment_term', 'Cash');
-            else query = query.neq('payment_term', 'Cash');
+            if (filters.saleType === 'Cash') invQuery = invQuery.eq('payment_term', 'Cash');
+            else invQuery = invQuery.neq('payment_term', 'Cash');
           }
           if (filters.saleMethod && filters.saleMethod !== 'All') {
-             if (filters.saleMethod === 'Direct') query = query.or('dc_no.is.null,dc_no.eq.""');
-             else query = query.neq('dc_no', '');
-          }
-          if (filters.dateFrom && filters.dateTo) {
-            const startStr = String(filters.dateFrom).split('T')[0];
-            const endStr = String(filters.dateTo).split('T')[0];
-            query = query.gte('created_at', `${startStr}T00:00:00`).lte('created_at', `${endStr}T23:59:59.999Z`);
+             if (filters.saleMethod === 'Direct') invQuery = invQuery.or('dc_no.is.null,dc_no.eq.""');
+             else invQuery = invQuery.neq('dc_no', '');
           }
 
-          const { data: invData, error: invError } = await query;
-          if (invError) throw invError;
+          let retQuery = supabase.from('sales_returns').select('*');
+          if (filters.customer && filters.customer.length > 0 && !filters.customer.includes('All')) retQuery = retQuery.in('customer_name', filters.customer);
+          if (filters.salesman && filters.salesman.length > 0 && !filters.salesman.includes('All')) retQuery = retQuery.in('salesman', filters.salesman);
+          if (filters.transport && filters.transport.length > 0 && !filters.transport.includes('All')) retQuery = retQuery.in('transport_name', filters.transport);
+          if (filters.location && filters.location.length > 0 && !filters.location.includes('All')) retQuery = retQuery.in('dispatch_warehouse', filters.location);
 
-          const { data: returnsData, error: retError } = await supabase
-            .from('sales_returns')
-            .select('original_invoice_no');
-          if (retError) throw retError;
+          const [invRes, retRes] = await Promise.all([invQuery, retQuery]);
+          if (invRes.error) throw invRes.error;
+          if (retRes.error) throw retRes.error;
 
-          const returnedNosList = (returnsData || []).map(r =>
-            String(r.original_invoice_no || '').trim().toLowerCase()
-          );
-
-          let pool = invData || [];
-
-          pool = pool.filter(i => {
-            const rawId = String(i.id).trim().toLowerCase();
-            const isReturnedItem = returnedNosList.some(retRef =>
-              retRef === rawId ||
-              retRef === `inv-${rawId}` ||
-              retRef === `inv-${rawId.padStart(4, '0')}` ||
-              retRef.includes(rawId)
-            );
-            return !isReturnedItem;
-          });
+          let invPool = invRes.data || [];
+          let retPool = retRes.data || [];
 
           if (filters.dateFrom && filters.dateTo) {
             const startStr = String(filters.dateFrom).split('T')[0];
             const endStr = String(filters.dateTo).split('T')[0];
-            pool = pool.filter(i => {
+            invPool = invPool.filter(i => {
               const targetDateStr = String(i.sale_date || i.created_at || '').split('T')[0];
+              return targetDateStr >= startStr && targetDateStr <= endStr;
+            });
+            retPool = retPool.filter(r => {
+              const targetDateStr = String(r.return_date || r.created_at || '').split('T')[0];
               return targetDateStr >= startStr && targetDateStr <= endStr;
             });
           }
 
-          // Sort individual invoices
-          if (filters.sortBy) {
-            if (filters.sortBy === 'date_asc') {
-              pool.sort((a, b) => (a.sale_date || a.created_at || '').localeCompare(b.sale_date || b.created_at || ''));
-            } else if (filters.sortBy === 'amount_desc') {
-              pool.sort((a, b) => Number(b.total_amount || 0) - Number(a.total_amount || 0));
-            } else if (filters.sortBy === 'amount_asc') {
-              pool.sort((a, b) => Number(a.total_amount || 0) - Number(b.total_amount || 0));
-            } else if (filters.sortBy === 'invoice_asc') {
-              pool.sort((a, b) => String(a.invoice_no || a.id).localeCompare(String(b.invoice_no || b.id)));
-            } else {
-              pool.sort((a, b) => (b.sale_date || b.created_at || '').localeCompare(a.sale_date || a.created_at || ''));
-            }
+          // Filter by product / brand / category if specified in filters
+          if ((filters.product && filters.product.length > 0 && !filters.product.includes('All')) ||
+              (filters.parentCategory && filters.parentCategory.length > 0 && !filters.parentCategory.includes('All')) ||
+              (filters.bin && filters.bin.length > 0 && !filters.bin.includes('All'))) {
+            const filterItemMatch = (record: any) => {
+              const items = extractItemDetails(record);
+              return items.some(it => {
+                const pName = it.name;
+                const matchingProd = (prodData || []).find((p: any) => (p.product_name || '').trim().toLowerCase() === pName.trim().toLowerCase());
+                if (filters.product && filters.product.length > 0 && !filters.product.includes('All')) {
+                  if (!filters.product.includes(pName)) return false;
+                }
+                if (filters.parentCategory && filters.parentCategory.length > 0 && !filters.parentCategory.includes('All')) {
+                  const prodCat = matchingProd?.category || matchingProd?.parent_category || '';
+                  if (!filters.parentCategory.includes(prodCat)) return false;
+                }
+                if (filters.bin && filters.bin.length > 0 && !filters.bin.includes('All')) {
+                  const prodBrand = matchingProd?.brand || '';
+                  if (!filters.bin.includes(prodBrand)) return false;
+                }
+                return true;
+              });
+            };
+            invPool = invPool.filter(filterItemMatch);
+            retPool = retPool.filter(filterItemMatch);
           }
 
-          // Group invoices by Salesman / Sales Officer
-          const totalAllPoolSales = pool.reduce((acc, inv) => acc + Number(inv.total_amount || 0), 0);
+          // Group invoices and returns by Salesman / Sales Officer
           const salesmanMap: Record<string, any> = {};
 
-          pool.forEach((inv: any) => {
-            const smName = (inv.salesman && String(inv.salesman).trim()) ? String(inv.salesman).trim() : 'Direct / Counter';
+          invPool.forEach((inv: any) => {
+            const smName = inv.salesman ? String(inv.salesman).trim() : 'Direct / House Account';
             if (!salesmanMap[smName]) {
               salesmanMap[smName] = {
-                salesman: smName,
+                salesman_name: smName,
                 invoices_count: 0,
-                customers_set: new Set<string>(),
+                returns_count: 0,
                 unique_customers_count: 0,
+                customers_set: new Set<string>(),
                 cash_sales: 0,
                 credit_sales: 0,
+                gross_sales: 0,
+                return_amount: 0,
+                returned_amount: 0,
+                net_sales: 0,
                 total_sales: 0,
                 contribution_pct: 0,
-                transactions: []
+                transactions: [],
+                return_transactions: []
               };
             }
 
@@ -894,6 +902,7 @@ const SaleReportPrint = () => {
             const isCash = String(inv.payment_term || '').toLowerCase() === 'cash';
 
             salesmanMap[smName].invoices_count += 1;
+            salesmanMap[smName].gross_sales += invTotal;
             if (inv.customer_name) {
               salesmanMap[smName].customers_set.add(String(inv.customer_name).trim());
             }
@@ -902,20 +911,75 @@ const SaleReportPrint = () => {
             } else {
               salesmanMap[smName].credit_sales += invTotal;
             }
-            salesmanMap[smName].total_sales += invTotal;
-            salesmanMap[smName].transactions.push(inv);
+            salesmanMap[smName].transactions.push({
+              ...inv,
+              record_type: 'invoice'
+            });
+          });
+
+          retPool.forEach((ret: any) => {
+            let smName = ret.salesman ? String(ret.salesman).trim() : '';
+            if (!smName && ret.original_invoice_no) {
+              const orig = invPool.find((i: any) => 
+                String(i.invoice_no || '').toLowerCase() === String(ret.original_invoice_no).toLowerCase() ||
+                String(i.id) === String(ret.original_invoice_no).replace(/\D/g, '')
+              );
+              if (orig && orig.salesman) smName = String(orig.salesman).trim();
+            }
+            if (!smName) smName = 'Direct / House Account';
+
+            if (!salesmanMap[smName]) {
+              salesmanMap[smName] = {
+                salesman_name: smName,
+                invoices_count: 0,
+                returns_count: 0,
+                unique_customers_count: 0,
+                customers_set: new Set<string>(),
+                cash_sales: 0,
+                credit_sales: 0,
+                gross_sales: 0,
+                return_amount: 0,
+                returned_amount: 0,
+                net_sales: 0,
+                total_sales: 0,
+                contribution_pct: 0,
+                transactions: [],
+                return_transactions: []
+              };
+            }
+
+            const retTotal = Number(ret.return_amount || ret.total_amount || 0);
+            salesmanMap[smName].returns_count += 1;
+            salesmanMap[smName].return_amount += retTotal;
+            salesmanMap[smName].returned_amount += retTotal;
+            if (ret.customer_name) {
+              salesmanMap[smName].customers_set.add(String(ret.customer_name).trim());
+            }
+            salesmanMap[smName].return_transactions.push({
+              ...ret,
+              record_type: 'return'
+            });
+          });
+
+          // Compute net sales and contribution percentage per salesman
+          let totalAllPoolNetSales = 0;
+          Object.values(salesmanMap).forEach((sm: any) => {
+            sm.net_sales = sm.gross_sales - sm.return_amount;
+            sm.total_sales = sm.net_sales;
+            totalAllPoolNetSales += sm.net_sales;
           });
 
           const salesmanGroups = Object.values(salesmanMap).map((sm: any) => {
             return {
               ...sm,
-              unique_customers_count: sm.customers_set.size || (sm.invoices_count > 0 ? 1 : 0),
-              contribution_pct: totalAllPoolSales > 0 ? (sm.total_sales / totalAllPoolSales) * 100 : 0
+              salesman: sm.salesman_name,
+              unique_customers_count: sm.customers_set.size || (sm.invoices_count > 0 || sm.returns_count > 0 ? 1 : 0),
+              contribution_pct: totalAllPoolNetSales > 0 ? (sm.net_sales / totalAllPoolNetSales) * 100 : 0
             };
           });
 
-          // Sort salesmen groups by total_sales descending (leaderboard)
-          salesmanGroups.sort((a, b) => b.total_sales - a.total_sales);
+          // Sort salesmen groups by net_sales descending (leaderboard)
+          salesmanGroups.sort((a, b) => b.net_sales - a.net_sales);
 
           setReportRows(salesmanGroups);
         }
@@ -935,11 +999,6 @@ const SaleReportPrint = () => {
           if (filters.saleMethod && filters.saleMethod !== 'All') {
              if (filters.saleMethod === 'Direct') query = query.or('dc_no.is.null,dc_no.eq.""');
              else query = query.neq('dc_no', '');
-          }
-          if (filters.dateFrom && filters.dateTo) {
-            const startStr = String(filters.dateFrom).split('T')[0];
-            const endStr = String(filters.dateTo).split('T')[0];
-            query = query.gte('created_at', `${startStr}T00:00:00`).lte('created_at', `${endStr}T23:59:59.999Z`);
           }
 
           const { data: invData, error: invError } = await query;
@@ -1035,22 +1094,12 @@ const SaleReportPrint = () => {
             if (filters.saleMethod === 'Direct') invQuery = invQuery.or('dc_no.is.null,dc_no.eq.""');
             else invQuery = invQuery.neq('dc_no', '');
           }
-          if (filters.dateFrom && filters.dateTo) {
-            const startStr = String(filters.dateFrom).split('T')[0];
-            const endStr = String(filters.dateTo).split('T')[0];
-            invQuery = invQuery.gte('created_at', `${startStr}T00:00:00`).lte('created_at', `${endStr}T23:59:59.999Z`);
-          }
 
           let retQuery = supabase.from('sales_returns').select('*');
           if (filters.customer && filters.customer.length > 0 && !filters.customer.includes('All')) retQuery = retQuery.in('customer_name', filters.customer);
           if (filters.salesman && filters.salesman.length > 0 && !filters.salesman.includes('All')) retQuery = retQuery.in('salesman', filters.salesman);
           if (filters.transport && filters.transport.length > 0 && !filters.transport.includes('All')) retQuery = retQuery.in('transport_name', filters.transport);
           if (filters.location && filters.location.length > 0 && !filters.location.includes('All')) retQuery = retQuery.in('dispatch_warehouse', filters.location);
-          if (filters.dateFrom && filters.dateTo) {
-            const startStr = String(filters.dateFrom).split('T')[0];
-            const endStr = String(filters.dateTo).split('T')[0];
-            retQuery = retQuery.gte('created_at', `${startStr}T00:00:00`).lte('created_at', `${endStr}T23:59:59.999Z`);
-          }
 
           const [invRes, retRes] = await Promise.all([invQuery, retQuery]);
           if (invRes.error) throw invRes.error;
@@ -1213,11 +1262,6 @@ const SaleReportPrint = () => {
           if (filters.salesman && filters.salesman.length > 0 && !filters.salesman.includes('All')) query = query.in('salesman', filters.salesman);
           if (filters.transport && filters.transport.length > 0 && !filters.transport.includes('All')) query = query.in('transport_name', filters.transport);
           if (filters.location && filters.location.length > 0 && !filters.location.includes('All')) query = query.in('dispatch_warehouse', filters.location);
-          if (filters.dateFrom && filters.dateTo) {
-            const startStr = String(filters.dateFrom).split('T')[0];
-            const endStr = String(filters.dateTo).split('T')[0];
-            query = query.gte('created_at', `${startStr}T00:00:00`).lte('created_at', `${endStr}T23:59:59.999Z`);
-          }
 
           const { data, error } = await query;
           if (error) throw error;
@@ -1316,13 +1360,14 @@ const SaleReportPrint = () => {
         // ── 📊 REPORT TYPE: SALES INVOICE DETAIL REPORT ──
         else if (rType === 'invoice') {
           let query = supabase.from('sales_invoices').select('*');
-          if (filters.invoiceNo && filters.invoiceNo !== 'All') query = query.eq('id', filters.invoiceNo);
-          if (filters.customer && filters.customer.length > 0 && !filters.customer.includes('All')) query = query.in('customer_name', filters.customer);
-          if (filters.dateFrom && filters.dateTo) {
-            const startStr = String(filters.dateFrom).split('T')[0];
-            const endStr = String(filters.dateTo).split('T')[0];
-            query = query.gte('created_at', `${startStr}T00:00:00`).lte('created_at', `${endStr}T23:59:59.999Z`);
+          const targetInv = filters.invoiceNo || filters.invoice;
+          if (targetInv && targetInv !== 'All') {
+            query = query.or(`id.eq.${targetInv},invoice_no.eq.${targetInv}`);
           }
+          if (filters.customer && filters.customer.length > 0 && !filters.customer.includes('All')) query = query.in('customer_name', filters.customer);
+          if (filters.location && filters.location.length > 0 && !filters.location.includes('All')) query = query.in('dispatch_warehouse', filters.location);
+          if (filters.salesman && filters.salesman.length > 0 && !filters.salesman.includes('All')) query = query.in('salesman', filters.salesman);
+
           const { data, error } = await query;
           if (error) throw error;
 
@@ -1358,18 +1403,24 @@ const SaleReportPrint = () => {
           let query = supabase.from('sales_invoices').select('*').order('created_at', { ascending: true });
           if (filters.customer && filters.customer.length > 0 && !filters.customer.includes('All')) query = query.in('customer_name', filters.customer);
           if (filters.salesman && filters.salesman.length > 0 && !filters.salesman.includes('All')) query = query.in('salesman', filters.salesman);
+
+          const { data: invData, error: invError } = await query;
+          if (invError) throw invError;
+
+          let filteredInvs = invData || [];
           if (filters.dateFrom && filters.dateTo) {
             const startStr = String(filters.dateFrom).split('T')[0];
             const endStr = String(filters.dateTo).split('T')[0];
-            query = query.gte('created_at', `${startStr}T00:00:00`).lte('created_at', `${endStr}T23:59:59.999Z`);
+            filteredInvs = filteredInvs.filter(i => {
+              const targetDateStr = String(i.sale_date || i.created_at || '').split('T')[0];
+              return targetDateStr >= startStr && targetDateStr <= endStr;
+            });
           }
-          const { data: invData, error: invError } = await query;
-          if (invError) throw invError;
 
           // Group by customer_name
           const customerMap: Record<string, any> = {};
 
-          (invData || []).forEach((inv: any) => {
+          filteredInvs.forEach((inv: any) => {
             const cName = inv.customer_name || 'Walking Customer';
             if (!customerMap[cName]) {
               customerMap[cName] = {
@@ -1526,9 +1577,7 @@ const SaleReportPrint = () => {
           });
         } else {
           columns = [
-            { header: 'Parent Category', key: 'parent_category', width: 22 },
-            { header: 'Sub Category', key: 'sub_category', width: 22 },
-            { header: 'Category', key: 'category_name', width: 24 },
+            { header: 'S#', key: 'sno', width: 6, alignment: { horizontal: 'center' } },
             { header: 'Processing Date', key: 'date', width: 14, alignment: { horizontal: 'center' } },
             { header: 'Doc / Ref #', key: 'doc_no', width: 18 },
             { header: 'Doc Type', key: 'doc_type', width: 14, alignment: { horizontal: 'center' } },
@@ -1543,25 +1592,64 @@ const SaleReportPrint = () => {
           ];
 
           exportData = [];
-          reportRows.forEach((cat: any) => {
-            (cat.transactions || []).forEach((tx: any) => {
-              const isRet = tx.record_type === 'return';
+          reportRows.forEach((cat: any, cIdx: number) => {
+            const bannerText = `🏢 PARENT: ${cat.parent_name || 'General'}  |  📂 SUB: ${cat.sub_name || '-'}  |  🏷️ CATEGORY: ${cat.category_name}  |  Sold: ${Number(cat.gross_units || 0).toLocaleString()}  |  Ret: ${Number(cat.returned_units || 0).toLocaleString()}  |  Net: ${Number(cat.net_units || 0).toLocaleString()} Units  |  Net Revenue: Rs. ${Number(cat.net_revenue || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+            
+            exportData.push({
+              _isHeader: true,
+              _bannerText: bannerText
+            });
+
+            const txList = cat.transactions || [];
+            if (txList.length === 0) {
               exportData.push({
-                parent_category: cat.parent_name,
-                sub_category: cat.sub_name,
-                category_name: cat.category_name,
-                date: tx.date,
-                doc_no: tx.doc_no,
-                doc_type: isRet ? 'Sales Return' : 'Sales Invoice',
-                customer_name: tx.customer_name,
-                salesman: tx.salesman,
-                product_name: tx.product_name,
-                qty: tx.qty,
-                uom: tx.uom,
-                rate: tx.rate,
-                freight_charges: tx.freight_charges || 0,
-                total_amount: isRet ? -Number(tx.total_amount || 0) : Number(tx.total_amount || 0)
+                sno: '-',
+                date: '-',
+                doc_no: '-',
+                doc_type: '-',
+                customer_name: 'No Transactions',
+                salesman: '-',
+                product_name: '-',
+                qty: 0,
+                uom: '-',
+                rate: 0,
+                freight_charges: 0,
+                total_amount: 0
               });
+            } else {
+              txList.forEach((tx: any, tIdx: number) => {
+                const isRet = tx.record_type === 'return';
+                exportData.push({
+                  sno: tIdx + 1,
+                  date: tx.date,
+                  doc_no: tx.doc_no,
+                  doc_type: isRet ? 'Sales Return' : 'Sales Invoice',
+                  customer_name: tx.customer_name,
+                  salesman: tx.salesman,
+                  product_name: tx.product_name,
+                  qty: tx.qty,
+                  uom: tx.uom,
+                  rate: tx.rate,
+                  freight_charges: tx.freight_charges || 0,
+                  total_amount: isRet ? -Number(tx.total_amount || 0) : Number(tx.total_amount || 0)
+                });
+              });
+            }
+
+            exportData.push({
+              _isSubtotal: true,
+              sno: '',
+              date: '',
+              doc_no: '',
+              doc_type: '',
+              customer_name: `Subtotal (${cat.category_name} : ${txList.length} Records):`,
+              salesman: '',
+              product_name: `Net Vol: ${Number(cat.net_units || 0).toLocaleString()} Units`,
+              qty: Number(cat.gross_units || 0),
+              uom: '',
+              rate: 0,
+              freight_charges: 0,
+              total_amount: Number(cat.net_revenue || 0)
             });
           });
         }
@@ -1598,7 +1686,7 @@ const SaleReportPrint = () => {
           }));
         } else {
           columns = [
-            { header: 'Product Name', key: 'product_name', width: 28 },
+            { header: 'S#', key: 'sno', width: 6, alignment: { horizontal: 'center' } },
             { header: 'Processing Date', key: 'date', width: 14, alignment: { horizontal: 'center' } },
             { header: 'Invoice #', key: 'invoice_no', width: 16 },
             { header: 'Customer Name', key: 'customer_name', width: 26 },
@@ -1613,20 +1701,59 @@ const SaleReportPrint = () => {
 
           exportData = [];
           reportRows.forEach((prod: any) => {
-            (prod.transactions || []).forEach((tx: any) => {
+            const bannerText = `📦 ${prod.product_name.toUpperCase()}  |  SKU: ${prod.sku || '-'}  |  Category: ${prod.category || 'General'}  |  Sold: ${Number(prod.sold_qty || 0).toLocaleString()} ${prod.uom || ''}  |  Ret: ${Number(prod.returned_qty || 0).toLocaleString()}  |  Net Sold: ${Number(prod.net_qty || 0).toLocaleString()}  |  Avg Rate: Rs. ${Number(prod.avg_rate || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}  |  Net Revenue: Rs. ${Number(prod.final_net_sales || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+
+            exportData.push({
+              _isHeader: true,
+              _bannerText: bannerText
+            });
+
+            const txList = prod.transactions || [];
+            if (txList.length === 0) {
               exportData.push({
-                product_name: prod.product_name,
-                date: tx.date,
-                invoice_no: tx.invoice_no,
-                customer_name: tx.customer_name,
-                salesman: tx.salesman,
-                warehouse: tx.warehouse,
-                qty: tx.qty,
-                uom: tx.uom,
-                rate: tx.rate,
-                discount: tx.discount,
-                total: tx.total
+                sno: '-',
+                date: '-',
+                invoice_no: '-',
+                customer_name: 'No Transactions',
+                salesman: '-',
+                warehouse: '-',
+                qty: 0,
+                uom: '-',
+                rate: 0,
+                discount: 0,
+                total: 0
               });
+            } else {
+              txList.forEach((tx: any, tIdx: number) => {
+                exportData.push({
+                  sno: tIdx + 1,
+                  date: tx.date,
+                  invoice_no: tx.invoice_no,
+                  customer_name: tx.customer_name,
+                  salesman: tx.salesman,
+                  warehouse: tx.warehouse,
+                  qty: tx.qty,
+                  uom: tx.uom,
+                  rate: tx.rate,
+                  discount: tx.discount,
+                  total: tx.total
+                });
+              });
+            }
+
+            exportData.push({
+              _isSubtotal: true,
+              sno: '',
+              date: '',
+              invoice_no: '',
+              customer_name: `Subtotal (${prod.product_name}):`,
+              salesman: '',
+              warehouse: '',
+              qty: Number(prod.net_qty || 0),
+              uom: prod.uom,
+              rate: 0,
+              discount: 0,
+              total: Number(prod.final_net_sales || 0)
             });
           });
         }
@@ -1693,19 +1820,30 @@ const SaleReportPrint = () => {
           }));
         } else {
           columns = [
-            { header: 'Customer Name', key: 'customer_name', width: 24 },
-            { header: 'Processing Date', key: 'processingDate', width: 16, alignment: { horizontal: 'center' } },
+            { header: 'S#', key: 'sno', width: 6, alignment: { horizontal: 'center' } },
+            { header: 'Date', key: 'processingDate', width: 14, alignment: { horizontal: 'center' } },
             { header: 'Doc / Ref #', key: 'docRef', width: 18 },
-            { header: 'Doc Type', key: 'docType', width: 16, alignment: { horizontal: 'center' } },
             { header: 'Sales Officer', key: 'salesman', width: 20 },
             { header: 'Product Line Items', key: 'products', width: 45 },
-            { header: 'Payment Term / Status', key: 'paymentTerm', width: 18, alignment: { horizontal: 'center' } },
+            { header: 'Doc Type / Term', key: 'paymentTerm', width: 18, alignment: { horizontal: 'center' } },
             { header: 'Freight Charges (PKR)', key: 'freightCharges', width: 22, numFmt: '#,##0.00', alignment: { horizontal: 'right' } },
             { header: 'Amount (PKR)', key: 'totalAmount', width: 22, numFmt: '#,##0.00', alignment: { horizontal: 'right' } }
           ];
 
           exportData = [];
           reportRows.forEach((cust: any) => {
+            const custGross = Number(cust.gross_sales || 0);
+            const custReturn = Number(cust.return_amount || 0);
+            const custNet = Number(cust.net_sales || custGross - custReturn);
+            const custNetUnits = Number(cust.net_units || (cust.gross_units || 0) - (cust.returned_units || 0));
+
+            const bannerText = `👤 ${cust.customer_name.toUpperCase()}  |  Invoices: ${cust.invoices_count}  |  Returns: ${cust.returns_count}  |  Net Volume: ${custNetUnits.toLocaleString()} Units  |  Gross: Rs. ${custGross.toLocaleString(undefined, { minimumFractionDigits: 2 })}  |  Returns: -Rs. ${custReturn.toLocaleString(undefined, { minimumFractionDigits: 2 })}  |  Net Revenue: Rs. ${custNet.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+
+            exportData.push({
+              _isHeader: true,
+              _bannerText: bannerText
+            });
+
             const combinedTx = [
               ...(cust.transactions || []),
               ...(cust.return_transactions || [])
@@ -1715,32 +1853,56 @@ const SaleReportPrint = () => {
               return dateA.localeCompare(dateB);
             });
 
-            combinedTx.forEach((row: any) => {
-              const isReturn = row.record_type === 'return';
-              const itemDetails = extractItemDetails(row);
-              const productsFormatted = itemDetails.length > 0
-                ? itemDetails.map(it => `${it.name} (${it.qty} ${it.uom} @ Rs. ${Number(it.price).toLocaleString()})`).join(' | ')
-                : extractItemNames(row).join(' | ');
-              const rowAmount = Number(isReturn ? (row.return_amount || row.total_amount || 0) : (row.total_amount || 0));
-              const rowFreight = isReturn ? 0 : (Number(row.additional_charges || 0) + Number(row.transport_charges || 0));
-
+            if (combinedTx.length === 0) {
               exportData.push({
-                customer_name: cust.customer_name,
-                processingDate: row.sale_date || row.return_date || String(row.created_at || '').split('T')[0],
-                docRef: isReturn ? (row.return_no || `RTN-${String(row.id).padStart(4, '0')}`) : (row.invoice_no || `INV-${String(row.id).padStart(4, '0')}`),
-                docType: isReturn ? 'Sales Return' : 'Sales Invoice',
-                salesman: row.salesman || 'Direct',
-                products: productsFormatted,
-                paymentTerm: isReturn ? 'Return Credit' : (row.payment_term || 'Credit'),
-                freightCharges: rowFreight,
-                totalAmount: isReturn ? -rowAmount : rowAmount
+                sno: '-',
+                processingDate: '-',
+                docRef: '-',
+                salesman: '-',
+                products: 'No Transactions',
+                paymentTerm: '-',
+                freightCharges: 0,
+                totalAmount: 0
               });
+            } else {
+              combinedTx.forEach((row: any, tIdx: number) => {
+                const isReturn = row.record_type === 'return';
+                const itemDetails = extractItemDetails(row);
+                const productsFormatted = itemDetails.length > 0
+                  ? itemDetails.map(it => `${it.name} (${it.qty} ${it.uom} @ Rs. ${Number(it.price).toLocaleString()})`).join(' | ')
+                  : extractItemNames(row).join(' | ');
+                const rowAmount = Number(isReturn ? (row.return_amount || row.total_amount || 0) : (row.total_amount || 0));
+                const rowFreight = isReturn ? 0 : (Number(row.additional_charges || 0) + Number(row.transport_charges || 0));
+
+                exportData.push({
+                  sno: tIdx + 1,
+                  processingDate: row.sale_date || row.return_date || String(row.created_at || '').split('T')[0],
+                  docRef: isReturn ? (row.return_no || `RTN-${String(row.id).padStart(4, '0')}`) : (row.invoice_no || `INV-${String(row.id).padStart(4, '0')}`),
+                  salesman: row.salesman || 'Direct',
+                  products: productsFormatted,
+                  paymentTerm: isReturn ? 'Return Credit' : (row.payment_term || 'Credit'),
+                  freightCharges: rowFreight,
+                  totalAmount: isReturn ? -rowAmount : rowAmount
+                });
+              });
+            }
+
+            exportData.push({
+              _isSubtotal: true,
+              sno: '',
+              processingDate: '',
+              docRef: '',
+              salesman: `Subtotal (${cust.customer_name}):`,
+              products: `Net Vol: ${custNetUnits.toLocaleString()} Units`,
+              paymentTerm: `Gross: Rs. ${custGross.toLocaleString()} | Ret: -Rs. ${custReturn.toLocaleString()}`,
+              freightCharges: 0,
+              totalAmount: custNet
             });
           });
         }
       } else if (rType === 'loyalty') {
         columns = [
-          { header: 'Customer Name', key: 'customer_name', width: 28 },
+          { header: 'S#', key: 'sno', width: 6, alignment: { horizontal: 'center' } },
           { header: 'Date', key: 'date', width: 14, alignment: { horizontal: 'center' } },
           { header: 'Invoice Ref #', key: 'invoice_no', width: 18 },
           { header: 'Sales Officer', key: 'salesman', width: 18 },
@@ -1753,18 +1915,53 @@ const SaleReportPrint = () => {
 
         exportData = [];
         reportRows.forEach((cust: any) => {
-          (cust.transactions || []).forEach((tx: any) => {
+          const bannerText = `👤 ${cust.customer_name.toUpperCase()}  |  Closing Balance: Rs. ${Number(cust.balance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+
+          exportData.push({
+            _isHeader: true,
+            _bannerText: bannerText
+          });
+
+          const txList = cust.transactions || [];
+          if (txList.length === 0) {
             exportData.push({
-              customer_name: cust.customer_name,
-              date: tx.date,
-              invoice_no: tx.invoice_no,
-              salesman: tx.salesman,
-              narration: tx.narration,
-              billed_amount: Number(tx.billed_amount || 0),
-              paid_amount: Number(tx.paid_amount || 0),
-              balance: Number(tx.balance || 0),
-              status: tx.status || 'Paid'
+              sno: '-',
+              date: '-',
+              invoice_no: '-',
+              salesman: '-',
+              narration: 'No Transactions',
+              billed_amount: 0,
+              paid_amount: 0,
+              balance: Number(cust.balance || 0),
+              status: '-'
             });
+          } else {
+            txList.forEach((tx: any, tIdx: number) => {
+              exportData.push({
+                sno: tIdx + 1,
+                date: tx.date,
+                invoice_no: tx.invoice_no,
+                salesman: tx.salesman,
+                narration: tx.narration,
+                billed_amount: Number(tx.billed_amount || 0),
+                paid_amount: Number(tx.paid_amount || 0),
+                balance: Number(tx.balance || 0),
+                status: tx.status || 'Paid'
+              });
+            });
+          }
+
+          exportData.push({
+            _isSubtotal: true,
+            sno: '',
+            date: '',
+            invoice_no: '',
+            salesman: '',
+            narration: `Total (${cust.customer_name}):`,
+            billed_amount: Number(cust.total_billed || 0),
+            paid_amount: Number(cust.total_paid || 0),
+            balance: Number(cust.balance || 0),
+            status: ''
           });
         });
       } else if (rType === 'sale') {
@@ -1773,10 +1970,13 @@ const SaleReportPrint = () => {
             { header: 'S#', key: 'sno', width: 8, alignment: { horizontal: 'center' } },
             { header: 'Sales Officer / Salesman Name', key: 'salesman', width: 28 },
             { header: 'Invoices Booked', key: 'invoices_count', width: 16, numFmt: '#,##0', alignment: { horizontal: 'right' } },
+            { header: 'Returns Booked', key: 'returns_count', width: 16, numFmt: '#,##0', alignment: { horizontal: 'right' } },
             { header: 'Unique Clients', key: 'unique_customers_count', width: 16, numFmt: '#,##0', alignment: { horizontal: 'right' } },
             { header: 'Cash Sales (PKR)', key: 'cash_sales', width: 20, numFmt: '#,##0.00', alignment: { horizontal: 'right' } },
             { header: 'Credit Sales (PKR)', key: 'credit_sales', width: 20, numFmt: '#,##0.00', alignment: { horizontal: 'right' } },
-            { header: 'Total Revenue (PKR)', key: 'total_sales', width: 24, numFmt: '#,##0.00', alignment: { horizontal: 'right' } },
+            { header: 'Gross Sales (PKR)', key: 'gross_sales', width: 22, numFmt: '#,##0.00', alignment: { horizontal: 'right' } },
+            { header: 'Returns (Dr) (PKR)', key: 'return_amount', width: 22, numFmt: '#,##0.00', alignment: { horizontal: 'right' } },
+            { header: 'Net Realized Revenue (PKR)', key: 'net_sales', width: 24, numFmt: '#,##0.00', alignment: { horizontal: 'right' } },
             { header: 'Contribution (%)', key: 'contribution_pct', width: 16, numFmt: '0.00"%"', alignment: { horizontal: 'right' } }
           ];
 
@@ -1784,38 +1984,126 @@ const SaleReportPrint = () => {
             sno: i + 1,
             salesman: sm.salesman,
             invoices_count: sm.invoices_count,
+            returns_count: sm.returns_count,
             unique_customers_count: sm.unique_customers_count,
             cash_sales: sm.cash_sales,
             credit_sales: sm.credit_sales,
-            total_sales: sm.total_sales,
+            gross_sales: sm.gross_sales,
+            return_amount: sm.return_amount,
+            net_sales: sm.net_sales,
             contribution_pct: sm.contribution_pct
           }));
         } else {
           columns = [
-            { header: 'Salesman', key: 'salesman', width: 22 },
+            { header: 'S#', key: 'sno', width: 6, alignment: { horizontal: 'center' } },
             { header: 'Processing Date', key: 'processingDate', width: 16, alignment: { horizontal: 'center' } },
-            { header: 'Invoice #', key: 'docRef', width: 18 },
+            { header: 'Doc / Ref #', key: 'docRef', width: 18 },
             { header: 'Customer Name', key: 'customerName', width: 28 },
             { header: 'Products / Items', key: 'products', width: 42 },
-            { header: 'Payment Term', key: 'paymentTerm', width: 16, alignment: { horizontal: 'center' } },
+            { header: 'Payment Term / Doc Type', key: 'paymentTerm', width: 20, alignment: { horizontal: 'center' } },
             { header: 'Carrier Fleet', key: 'transport', width: 18 },
             { header: 'Net Amount (PKR)', key: 'totalAmount', width: 22, numFmt: '#,##0.00', alignment: { horizontal: 'right' } }
           ];
 
           exportData = [];
           reportRows.forEach((sm: any) => {
-            (sm.transactions || []).forEach((row: any) => {
-              const itemNames = extractItemNames(row);
+            const smGross = Number(sm.gross_sales || 0);
+            const smReturn = Number(sm.return_amount || 0);
+            const smNet = Number(sm.net_sales || 0);
+            const smCash = Number(sm.cash_sales || 0);
+            const smCredit = Number(sm.credit_sales || 0);
+
+            const bannerText = `👔 ${sm.salesman.toUpperCase()}  |  Invoices: ${sm.invoices_count}  |  Returns: ${sm.returns_count}  |  Unique Clients: ${sm.unique_customers_count}  |  Gross: Rs. ${smGross.toLocaleString(undefined, { minimumFractionDigits: 2 })}  |  Returns: - Rs. ${smReturn.toLocaleString(undefined, { minimumFractionDigits: 2 })}  |  Net Realized: Rs. ${smNet.toLocaleString(undefined, { minimumFractionDigits: 2 })}  |  Share: ${Number(sm.contribution_pct || 0).toFixed(1)}%`;
+
+            exportData.push({
+              _isHeader: true,
+              _bannerText: bannerText
+            });
+
+            const invList = sm.transactions || [];
+            const retList = sm.return_transactions || [];
+
+            // ── SECTION 1: SALES INVOICES ──
+            if (invList.length > 0) {
               exportData.push({
-                salesman: sm.salesman,
-                processingDate: row.sale_date || String(row.created_at || '').split('T')[0],
-                docRef: row.invoice_no || `INV-${String(row.id).padStart(4, '0')}`,
-                customerName: row.customer_name || 'Counter Retail Buyer',
-                products: itemNames.join(' | '),
-                paymentTerm: row.payment_term || 'Credit',
-                transport: row.transport_name || 'Self Pick',
-                totalAmount: Number(row.total_amount || 0)
+                _isSubHeader: true,
+                _bannerText: `📑 SALES INVOICES (${invList.length})  |  Cash: Rs. ${smCash.toLocaleString()}  |  Credit: Rs. ${smCredit.toLocaleString()}  |  Gross Invoiced: Rs. ${smGross.toLocaleString()}`
               });
+
+              invList.forEach((row: any, tIdx: number) => {
+                const itemNames = extractItemNames(row);
+                exportData.push({
+                  sno: tIdx + 1,
+                  processingDate: row.sale_date || String(row.created_at || '').split('T')[0],
+                  docRef: row.invoice_no || `INV-${String(row.id).padStart(4, '0')}`,
+                  customerName: row.customer_name || 'Counter Retail Buyer',
+                  products: itemNames.join(' | '),
+                  paymentTerm: row.payment_term || 'Credit',
+                  transport: row.transport_name || 'Self Pick',
+                  totalAmount: Number(row.total_amount || 0)
+                });
+              });
+
+              exportData.push({
+                _isSubtotal: true,
+                sno: '',
+                processingDate: '',
+                docRef: '',
+                customerName: `Total Sales Invoices (${sm.salesman}):`,
+                products: `Cash: Rs. ${smCash.toLocaleString()} | Credit: Rs. ${smCredit.toLocaleString()}`,
+                paymentTerm: '',
+                transport: '',
+                totalAmount: smGross
+              });
+            }
+
+            // ── SECTION 2: SALES RETURNS ──
+            if (retList.length > 0) {
+              exportData.push({
+                _isSubHeader: true,
+                _bannerText: `🔄 SALES RETURNS & CREDIT ADJUSTMENTS (${retList.length})  |  Total Return Deductions: - Rs. ${smReturn.toLocaleString()}`
+              });
+
+              retList.forEach((row: any, rIdx: number) => {
+                const itemNames = extractItemNames(row);
+                const retAmount = Number(row.return_amount || row.total_amount || 0);
+
+                exportData.push({
+                  sno: rIdx + 1,
+                  processingDate: row.return_date || String(row.created_at || '').split('T')[0],
+                  docRef: row.return_no || `RTN-${String(row.id).padStart(4, '0')}`,
+                  customerName: row.customer_name || 'Counter Retail Buyer',
+                  products: itemNames.length > 0 ? itemNames.join(' | ') : (row.reason || 'Stock Return'),
+                  paymentTerm: 'Return Credit',
+                  transport: row.transport_name || 'Warehouse Return',
+                  totalAmount: -retAmount
+                });
+              });
+
+              exportData.push({
+                _isSubtotal: true,
+                sno: '',
+                processingDate: '',
+                docRef: '',
+                customerName: `Total Sales Returns (${sm.salesman}):`,
+                products: `Returns Count: ${retList.length}`,
+                paymentTerm: '',
+                transport: '',
+                totalAmount: -smReturn
+              });
+            }
+
+            // ── FINAL SALESMAN NET RECONCILIATION ──
+            exportData.push({
+              _isSubtotal: true,
+              sno: '',
+              processingDate: '',
+              docRef: '',
+              customerName: `NET REALIZED COMMERCIAL REVENUE (${sm.salesman}):`,
+              products: `Gross: Rs. ${smGross.toLocaleString()}  -  Returns: Rs. ${smReturn.toLocaleString()}`,
+              paymentTerm: '',
+              transport: '',
+              totalAmount: smNet
             });
           });
         }
@@ -1840,7 +2128,7 @@ const SaleReportPrint = () => {
           }));
         } else {
           columns = [
-            { header: 'Customer Name', key: 'customer_name', width: 26 },
+            { header: 'S#', key: 'sno', width: 6, alignment: { horizontal: 'center' } },
             { header: 'Return Date', key: 'return_date', width: 14, alignment: { horizontal: 'center' } },
             { header: 'Return Ref #', key: 'return_no', width: 18 },
             { header: 'Original Inv Ref #', key: 'original_invoice_no', width: 18 },
@@ -1853,30 +2141,65 @@ const SaleReportPrint = () => {
 
           exportData = [];
           reportRows.forEach((cust: any) => {
-            (cust.transactions || []).forEach((row: any) => {
-              const itemDetails = extractItemDetails(row);
-              const itemsFormatted = itemDetails.length > 0
-                ? itemDetails.map(it => `${it.name} (${it.qty} ${it.uom} @ Rs. ${Number(it.price).toLocaleString()})`).join(' | ')
-                : extractItemNames(row).join(' | ');
+            const bannerText = `👤 ${cust.customer_name.toUpperCase()}  |  Returns: ${cust.returns_count}  |  Total Returned Units: ${Number(cust.total_returned_qty || 0).toLocaleString()}  |  Total Credit Adjusted: Rs. ${Number(cust.total_return_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
 
+            exportData.push({
+              _isHeader: true,
+              _bannerText: bannerText
+            });
+
+            const txList = cust.transactions || [];
+            if (txList.length === 0) {
               exportData.push({
-                customer_name: cust.customer_name,
-                return_date: row.return_date || String(row.created_at || '').split('T')[0],
-                return_no: row.return_no || `RTN-${String(row.id).padStart(4, '0')}`,
-                original_invoice_no: row.original_invoice_no || '-',
-                salesman: row.salesman || 'Direct',
-                items: itemsFormatted,
-                warehouse: row.dispatch_warehouse || row.location || 'Main Warehouse',
-                reason: row.reason || row.remarks || 'Stock Return',
-                return_amount: Number(row.return_amount || row.total_amount || 0)
+                sno: '-',
+                return_date: '-',
+                return_no: '-',
+                original_invoice_no: '-',
+                salesman: '-',
+                items: 'No Returns',
+                warehouse: '-',
+                reason: '-',
+                return_amount: 0
               });
+            } else {
+              txList.forEach((row: any, tIdx: number) => {
+                const itemDetails = extractItemDetails(row);
+                const itemsFormatted = itemDetails.length > 0
+                  ? itemDetails.map(it => `${it.name} (${it.qty} ${it.uom} @ Rs. ${Number(it.price).toLocaleString()})`).join(' | ')
+                  : extractItemNames(row).join(' | ');
+
+                exportData.push({
+                  sno: tIdx + 1,
+                  return_date: row.return_date || String(row.created_at || '').split('T')[0],
+                  return_no: row.return_no || `RTN-${String(row.id).padStart(4, '0')}`,
+                  original_invoice_no: row.original_invoice_no || '-',
+                  salesman: row.salesman || 'Direct',
+                  items: itemsFormatted,
+                  warehouse: row.dispatch_warehouse || row.location || 'Main Warehouse',
+                  reason: row.reason || row.remarks || 'Stock Return',
+                  return_amount: Number(row.return_amount || row.total_amount || 0)
+                });
+              });
+            }
+
+            exportData.push({
+              _isSubtotal: true,
+              sno: '',
+              return_date: '',
+              return_no: '',
+              original_invoice_no: '',
+              salesman: `Subtotal (${cust.customer_name}):`,
+              items: `Total Units: ${Number(cust.total_returned_qty || 0).toLocaleString()}`,
+              warehouse: '',
+              reason: '',
+              return_amount: Number(cust.total_return_amount || 0)
             });
           });
         }
       } else {
         columns = [
           { header: 'Processing Date', key: 'processingDate', width: 16, type: 'date' as const },
-          { header: 'Document Ref #', key: 'docRef', width: 18 },
+          { header: 'Invoice No', key: 'docRef', width: 18 },
           { header: 'Product', key: 'products', width: 45 },
           { header: 'Customer', key: 'customerName', width: 28 },
           { header: 'Gross Matrix Amount (Rs.)', key: 'totalAmount', width: 22, type: 'currency' as const }
@@ -1999,7 +2322,7 @@ const SaleReportPrint = () => {
     if (rType === 'return') {
       return reportRows.reduce((acc, r) => acc + Number(r.returns_count || 0), 0);
     }
-    if (rType === 'customer-sales') {
+    if (rType === 'customer-sales' || rType === 'sale') {
       return reportRows.reduce((acc, c) => acc + Number(c.returns_count || 0), 0);
     }
     return 0;
@@ -2012,8 +2335,8 @@ const SaleReportPrint = () => {
     if (rType === 'return') {
       return reportRows.reduce((acc, r) => acc + Number(r.total_return_amount || 0), 0);
     }
-    if (rType === 'customer-sales') {
-      return reportRows.reduce((acc, c) => acc + Number(c.return_amount || 0), 0);
+    if (rType === 'customer-sales' || rType === 'sale') {
+      return reportRows.reduce((acc, c) => acc + Number(c.return_amount || c.returned_amount || 0), 0);
     }
     return 0;
   }, [reportRows, rType]);
@@ -2022,7 +2345,7 @@ const SaleReportPrint = () => {
     if (rType === 'category-sales') {
       return reportRows.reduce((acc, c) => acc + Number(c.gross_sales || 0), 0);
     }
-    if (rType === 'customer-sales') {
+    if (rType === 'customer-sales' || rType === 'sale') {
       return reportRows.reduce((acc, c) => acc + Number(c.gross_sales || c.total_sales || 0), 0);
     }
     return totalGrossAmount;
@@ -2340,17 +2663,17 @@ const SaleReportPrint = () => {
                 <p className="text-sm font-black text-slate-900 font-mono mt-0.5">{reportRows.length} Officers</p>
               </div>
               <div className="bg-white p-2.5 rounded-lg border border-slate-200 text-center shadow-2xs">
-                <p className="text-[10px] font-bold text-slate-500 uppercase">Invoices Booked</p>
-                <p className="text-sm font-black text-indigo-700 font-mono mt-0.5">{totalInvoicesCount} Invoices</p>
+                <p className="text-[10px] font-bold text-slate-500 uppercase">Invoices & Returns</p>
+                <p className="text-sm font-black text-indigo-700 font-mono mt-0.5">{totalInvoicesCount} Inv | {totalReturnsCount} Rtn</p>
               </div>
               <div className="bg-white p-2.5 rounded-lg border border-slate-200 text-center shadow-2xs">
-                <p className="text-[10px] font-bold text-slate-500 uppercase">Cash vs Credit Split</p>
+                <p className="text-[10px] font-bold text-slate-500 uppercase">Gross vs Returns (Dr)</p>
                 <p className="text-[11px] font-black font-mono mt-0.5">
-                  <span className="text-emerald-600">Rs. {cashAmount.toLocaleString()}</span> / <span className="text-blue-600">Rs. {creditAmount.toLocaleString()}</span>
+                  <span className="text-emerald-600">Rs. {totalCustomerGrossSales.toLocaleString()}</span> / <span className="text-rose-600">-Rs. {totalReturnAmount.toLocaleString()}</span>
                 </p>
               </div>
               <div className="bg-white p-2.5 rounded-lg border border-slate-200 text-center shadow-2xs">
-                <p className="text-[10px] font-bold text-slate-500 uppercase">Total Commercial Gross</p>
+                <p className="text-[10px] font-bold text-slate-500 uppercase">Net Realized Revenue</p>
                 <p className="text-sm font-black text-purple-700 font-mono mt-0.5">Rs. {totalGrossAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
               </div>
             </>
@@ -3405,18 +3728,20 @@ const SaleReportPrint = () => {
                   <tr className="bg-gray-100 border-b border-black font-black uppercase text-black font-mono text-[10px]">
                     <th className="p-1.5 border border-black text-center w-10">S#</th>
                     <th className="p-1.5 border border-black">Sales Officer / Salesman Name</th>
-                    <th className="p-1.5 border border-black text-center">Invoices Booked</th>
+                    <th className="p-1.5 border border-black text-center">Invoices / Returns</th>
                     <th className="p-1.5 border border-black text-center">Unique Clients</th>
                     <th className="p-1.5 border border-black text-right">Cash Sales (PKR)</th>
                     <th className="p-1.5 border border-black text-right">Credit Sales (PKR)</th>
-                    <th className="p-1.5 border border-black text-right">Total Revenue (PKR)</th>
+                    <th className="p-1.5 border border-black text-right">Gross Sales (PKR)</th>
+                    <th className="p-1.5 border border-black text-right text-rose-700">Returns (Dr) (PKR)</th>
+                    <th className="p-1.5 border border-black text-right text-purple-900">Net Realized Revenue (PKR)</th>
                     <th className="p-1.5 border border-black text-center w-24">% Contribution</th>
                   </tr>
                 </thead>
                 <tbody>
                   {displayedRows.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="text-center py-10 font-bold italic border border-black text-gray-400 bg-gray-50/50">
+                      <td colSpan={10} className="text-center py-10 font-bold italic border border-black text-gray-400 bg-gray-50/50">
                         No commercial sales records discovered matching chosen selection criteria.
                       </td>
                     </tr>
@@ -3427,7 +3752,9 @@ const SaleReportPrint = () => {
                         <tr key={idx} className="border-b border-black hover:bg-gray-50 font-semibold font-mono text-xs">
                           <td className="p-1.5 border border-black text-center text-gray-600">{realIndex}</td>
                           <td className="p-1.5 border border-black font-sans font-bold text-black">{sm.salesman}</td>
-                          <td className="p-1.5 border border-black text-center font-bold text-indigo-700">{sm.invoices_count}</td>
+                          <td className="p-1.5 border border-black text-center font-bold text-indigo-700">
+                            {sm.invoices_count} / {sm.returns_count}
+                          </td>
                           <td className="p-1.5 border border-black text-center text-gray-700 font-bold">{sm.unique_customers_count}</td>
                           <td className="p-1.5 border border-black text-right text-emerald-700 font-bold">
                             Rs. {Number(sm.cash_sales || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
@@ -3435,8 +3762,14 @@ const SaleReportPrint = () => {
                           <td className="p-1.5 border border-black text-right text-blue-700 font-bold">
                             Rs. {Number(sm.credit_sales || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                           </td>
+                          <td className="p-1.5 border border-black text-right text-gray-900 font-bold">
+                            Rs. {Number(sm.gross_sales || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          </td>
+                          <td className="p-1.5 border border-black text-right text-rose-700 font-bold">
+                            - Rs. {Number(sm.return_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          </td>
                           <td className="p-1.5 border border-black text-right text-purple-800 font-black">
-                            Rs. {Number(sm.total_sales || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            Rs. {Number(sm.net_sales || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                           </td>
                           <td className="p-1.5 border border-black text-center text-slate-800 font-bold">
                             {Number(sm.contribution_pct || 0).toFixed(1)}%
@@ -3454,7 +3787,7 @@ const SaleReportPrint = () => {
                         Page {currentPage} Subtotal ({displayedRows.length} Sales Officers):
                       </td>
                       <td className="p-2 border border-black text-center text-indigo-900 font-bold">
-                        {displayedRows.reduce((sum, r) => sum + Number(r.invoices_count || 0), 0)}
+                        {displayedRows.reduce((sum, r) => sum + Number(r.invoices_count || 0), 0)} / {displayedRows.reduce((sum, r) => sum + Number(r.returns_count || 0), 0)}
                       </td>
                       <td className="p-2 border border-black text-center text-gray-700 font-bold">
                         {displayedRows.reduce((sum, r) => sum + Number(r.unique_customers_count || 0), 0)}
@@ -3465,8 +3798,14 @@ const SaleReportPrint = () => {
                       <td className="p-2 border border-black text-right text-blue-800 font-bold whitespace-nowrap">
                         Rs. {displayedRows.reduce((sum, r) => sum + Number(r.credit_sales || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                       </td>
+                      <td className="p-2 border border-black text-right text-gray-900 font-bold whitespace-nowrap">
+                        Rs. {displayedRows.reduce((sum, r) => sum + Number(r.gross_sales || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </td>
+                      <td className="p-2 border border-black text-right text-rose-700 font-bold whitespace-nowrap">
+                        - Rs. {displayedRows.reduce((sum, r) => sum + Number(r.return_amount || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </td>
                       <td className="p-2 border border-black text-right text-purple-900 font-black whitespace-nowrap">
-                        Rs. {displayedRows.reduce((sum, r) => sum + Number(r.total_sales || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        Rs. {displayedRows.reduce((sum, r) => sum + Number(r.net_sales || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                       </td>
                       <td className="p-2 border border-black text-center text-[10px] font-bold text-amber-800">
                         {displayedRows.reduce((sum, r) => sum + Number(r.contribution_pct || 0), 0).toFixed(1)}%
@@ -3478,8 +3817,8 @@ const SaleReportPrint = () => {
                     <td colSpan={2} className="p-2 border border-black text-right uppercase tracking-wider text-gray-900">
                       Grand Total Summary (All {reportRows.length} Sales Officers):
                     </td>
-                    <td className="p-2 border border-black text-center text-indigo-900">
-                      {totalInvoicesCount}
+                    <td className="p-2 border border-black text-center text-indigo-900 font-bold">
+                      {totalInvoicesCount} / {totalReturnsCount}
                     </td>
                     <td className="p-2 border border-black text-center text-gray-800">
                       {reportRows.reduce((sum, r) => sum + Number(r.unique_customers_count || 0), 0)}
@@ -3489,6 +3828,12 @@ const SaleReportPrint = () => {
                     </td>
                     <td className="p-2 border border-black text-right text-blue-800 whitespace-nowrap">
                       Rs. {creditAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="p-2 border border-black text-right text-gray-900 font-bold whitespace-nowrap">
+                      Rs. {totalCustomerGrossSales.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="p-2 border border-black text-right text-rose-700 font-bold whitespace-nowrap">
+                      - Rs. {totalReturnAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                     </td>
                     <td className="p-2 border border-black text-right text-purple-900 text-sm font-black underline decoration-double whitespace-nowrap">
                       Rs. {totalGrossAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
@@ -3507,31 +3852,62 @@ const SaleReportPrint = () => {
                 ) : (
                   displayedRows.map((sm: any, sIdx: number) => {
                     const realSalesmanNum = isPrinting || pageSize === 'all' ? sIdx + 1 : (currentPage - 1) * (pageSize as number) + sIdx + 1;
-                    const smTotalAmount = Number(sm.total_sales || 0);
+                    const smGrossSales = Number(sm.gross_sales || 0);
+                    const smReturnAmount = Number(sm.return_amount || sm.returned_amount || 0);
+                    const smNetRevenue = Number(sm.net_sales || smGrossSales - smReturnAmount);
                     const smCashAmount = Number(sm.cash_sales || 0);
                     const smCreditAmount = Number(sm.credit_sales || 0);
 
+                    const invList = (sm.transactions || []).slice().sort((a: any, b: any) => {
+                      const dateA = a.sale_date || a.created_at || '';
+                      const dateB = b.sale_date || b.created_at || '';
+                      return dateA.localeCompare(dateB);
+                    });
+
+                    const retList = (sm.return_transactions || []).slice().sort((a: any, b: any) => {
+                      const dateA = a.return_date || a.created_at || '';
+                      const dateB = b.return_date || b.created_at || '';
+                      return dateA.localeCompare(dateB);
+                    });
+
                     return (
-                      <div key={sIdx} className="border border-black rounded-xs overflow-hidden shadow-xs">
-                        {/* 👔 Salesman Header Banner */}
-                        <div className="bg-slate-800 text-white p-2.5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 font-mono text-xs">
+                      <div key={sIdx} className="border-2 border-black rounded-xs overflow-hidden shadow-xs">
+                        {/* 👔 Salesman Master Header Banner */}
+                        <div className="bg-slate-900 text-white p-2.5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 font-mono text-xs">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="bg-emerald-500 text-black px-2 py-0.5 rounded font-black text-[10px]">#{realSalesmanNum}</span>
                             <span className="font-bold font-sans text-sm tracking-wide uppercase text-white">{sm.salesman}</span>
-                            <span className="bg-slate-700 text-slate-200 px-2 py-0.5 rounded text-[10px]">Invoices: {sm.invoices_count}</span>
-                            <span className="bg-slate-700 text-slate-200 px-2 py-0.5 rounded text-[10px]">Unique Clients: {sm.unique_customers_count}</span>
+                            <span className="bg-slate-800 text-slate-200 px-2 py-0.5 rounded text-[10px] border border-slate-700">Invoices: {sm.invoices_count}</span>
+                            <span className="bg-slate-800 text-slate-200 px-2 py-0.5 rounded text-[10px] border border-slate-700">Returns: {sm.returns_count}</span>
+                            <span className="bg-slate-800 text-slate-200 px-2 py-0.5 rounded text-[10px] border border-slate-700">Unique Clients: {sm.unique_customers_count}</span>
                             <span className="text-slate-400 text-[10px]">Share: {Number(sm.contribution_pct || 0).toFixed(1)}%</span>
                           </div>
                           <div className="text-right text-[11px] font-black font-mono flex items-center gap-3">
-                            <span className="text-emerald-400">Cash: Rs. {smCashAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            <span className="text-emerald-400">Gross: Rs. {smGrossSales.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             <span className="text-slate-500">|</span>
-                            <span className="text-blue-400">Credit: Rs. {smCreditAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            <span className="text-rose-400">Returns: - Rs. {smReturnAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             <span className="text-slate-500">|</span>
-                            <span className="text-purple-300 font-extrabold underline decoration-double">Total: Rs. {smTotalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            <span className="text-amber-300 font-extrabold underline decoration-double">Net Realized: Rs. {smNetRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                           </div>
                         </div>
 
-                        {/* Salesman Transactions Sub-table */}
+                        {/* ══════════════════════════════════════════════════ */}
+                        {/* 📑 SUB-SECTION 1: SALES INVOICES HEADER & TABLE   */}
+                        {/* ══════════════════════════════════════════════════ */}
+                        <div className="bg-slate-100 border-b border-black px-3 py-1.5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-1 text-[11px] font-mono font-bold text-slate-900">
+                          <span className="uppercase text-emerald-900 font-black flex items-center gap-1.5">
+                            <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 inline-block shadow-xs"></span>
+                            1. Sales Invoices Register ({invList.length} Invoices)
+                          </span>
+                          <div className="flex items-center gap-3 text-[10px]">
+                            <span>Cash Sales: <b className="text-emerald-700">Rs. {smCashAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</b></span>
+                            <span className="text-gray-400">|</span>
+                            <span>Credit Sales: <b className="text-blue-700">Rs. {smCreditAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</b></span>
+                            <span className="text-gray-400">|</span>
+                            <span>Gross Invoiced: <b className="text-slate-900 font-black">Rs. {smGrossSales.toLocaleString(undefined, { minimumFractionDigits: 2 })}</b></span>
+                          </div>
+                        </div>
+
                         <table className="w-full table-auto border-collapse text-[11px] font-sans text-left">
                           <thead>
                             <tr className="bg-gray-100 border-b border-black font-black uppercase text-black font-mono text-[9.5px]">
@@ -3539,66 +3915,209 @@ const SaleReportPrint = () => {
                               <th className="p-1.5 border border-black text-center w-24">Date</th>
                               <th className="p-1.5 border border-black w-28">Invoice #</th>
                               <th className="p-1.5 border border-black">Customer Name</th>
-                              <th className="p-1.5 border border-black">Products</th>
+                              <th className="p-1.5 border border-black">Products / Line Items</th>
                               <th className="p-1.5 border border-black text-center w-20">Term</th>
                               <th className="p-1.5 border border-black w-28">Carrier Fleet</th>
-                              <th className="p-1.5 border border-black text-right w-28 pr-3">Net Amount (PKR)</th>
+                              <th className="p-1.5 border border-black text-right w-28 pr-3">Gross Amount (PKR)</th>
                             </tr>
                           </thead>
                           <tbody>
-                            {(sm.transactions || []).map((row: any, tIdx: number) => {
-                              const displayDocPrefixId = row.invoice_no || `INV-${String(row.id).padStart(4, '0')}`;
-                              const processingDateDisplay = row.sale_date || String(row.created_at || '').split('T')[0];
-                              const itemNames = extractItemNames(row);
-                              const isCash = String(row.payment_term || '').toLowerCase() === 'cash';
+                            {invList.length === 0 ? (
+                              <tr>
+                                <td colSpan={8} className="p-3 text-center text-gray-400 italic font-mono border border-black">
+                                  No sales invoices booked for this salesman within chosen duration.
+                                </td>
+                              </tr>
+                            ) : (
+                              invList.map((row: any, tIdx: number) => {
+                                const displayDocPrefixId = row.invoice_no || `INV-${String(row.id).padStart(4, '0')}`;
+                                const processingDateDisplay = row.sale_date || String(row.created_at || '').split('T')[0];
+                                const itemDetails = extractItemDetails(row);
+                                const itemNames = extractItemNames(row);
+                                const isCash = String(row.payment_term || '').toLowerCase() === 'cash';
+                                const rowAmount = Number(row.total_amount || 0);
 
-                              return (
-                                <tr key={tIdx} className="border-b border-gray-300 hover:bg-gray-50 font-mono text-xs">
-                                  <td className="p-1.5 border border-black text-center text-gray-500">{tIdx + 1}</td>
-                                  <td className="p-1.5 border border-black text-center text-gray-700">{processingDateDisplay}</td>
-                                  <td className="p-1.5 border border-black font-black text-primary uppercase">{displayDocPrefixId}</td>
-                                  <td className="p-1.5 border border-black font-sans font-medium text-black">{row.customer_name || 'Counter Retail Buyer'}</td>
-                                  <td className="p-1.5 border border-black font-sans text-gray-800 text-[11px]">
-                                    {itemNames.length > 0 ? (
-                                      itemNames.map((name: string, i: number) => (
-                                        <React.Fragment key={i}>
-                                          {i > 0 && <span className="text-emerald-700 font-black text-sm px-1.5 font-mono">|</span>}
-                                          <span>{name}</span>
-                                        </React.Fragment>
-                                      ))
-                                    ) : (
-                                      <span className="text-gray-400 italic">No Items</span>
-                                    )}
+                                return (
+                                  <tr key={tIdx} className="border-b border-gray-300 hover:bg-gray-50 font-mono text-xs">
+                                    <td className="p-1.5 border border-black text-center text-gray-500 align-top">{tIdx + 1}</td>
+                                    <td className="p-1.5 border border-black text-center text-gray-700 align-top">{processingDateDisplay}</td>
+                                    <td className="p-1.5 border border-black font-black uppercase align-top text-primary">{displayDocPrefixId}</td>
+                                    <td className="p-1.5 border border-black font-sans font-medium text-black align-top">{row.customer_name || 'Counter Retail Buyer'}</td>
+                                    <td className="p-1.5 border border-black font-sans text-gray-800 text-[11px] align-top">
+                                      {itemDetails.length > 0 ? (
+                                        <div className="flex flex-col gap-1 py-0.5">
+                                          {itemDetails.map((item, idx) => (
+                                            <div key={idx} className="flex items-center text-[11px] whitespace-nowrap">
+                                              <span className="font-semibold text-black">{item.name}</span>
+                                              <span className="text-emerald-700 font-black text-sm px-1.5 font-mono">|</span>
+                                              <span className="text-emerald-900 font-mono font-bold">{item.qty} {item.uom}</span>
+                                              <span className="text-emerald-700 font-black text-sm px-1.5 font-mono">|</span>
+                                              <span className="text-gray-900 font-mono font-bold">@ Rs. {Number(item.price).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ) : itemNames.length > 0 ? (
+                                        itemNames.map((name: string, i: number) => (
+                                          <React.Fragment key={i}>
+                                            {i > 0 && <span className="text-emerald-700 font-black text-sm px-1.5 font-mono">|</span>}
+                                            <span>{name}</span>
+                                          </React.Fragment>
+                                        ))
+                                      ) : (
+                                        <span className="text-gray-400 italic">No Items</span>
+                                      )}
+                                    </td>
+                                    <td className="p-1.5 border border-black text-center align-top">
+                                      <span className={`px-1.5 py-0.5 rounded text-[9.5px] font-bold uppercase ${
+                                        isCash ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-blue-100 text-blue-800 border border-blue-300'
+                                      }`}>
+                                        {row.payment_term || 'Credit'}
+                                      </span>
+                                    </td>
+                                    <td className="p-1.5 border border-black font-sans text-purple-700 font-bold align-top">{row.transport_name || 'Self Pick'}</td>
+                                    <td className="p-1.5 border border-black text-right pr-3 font-black text-emerald-700 align-top">
+                                      Rs. {rowAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                            )}
+                          </tbody>
+                          {invList.length > 0 && (
+                            <tfoot>
+                              <tr className="bg-emerald-50/70 border-t border-black font-black font-mono text-xs">
+                                <td colSpan={5} className="p-1.5 border border-black text-right uppercase tracking-wider text-emerald-950">
+                                  Subtotal Sales Invoiced ({sm.salesman} : {invList.length} Invoices):
+                                </td>
+                                <td colSpan={2} className="p-1.5 border border-black text-right text-[10px] font-bold text-gray-700">
+                                  Cash: Rs. {smCashAmount.toLocaleString()} | Credit: Rs. {smCreditAmount.toLocaleString()}
+                                </td>
+                                <td className="p-1.5 border border-black text-right pr-3 text-emerald-900 font-black">
+                                  Rs. {smGrossSales.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                </td>
+                              </tr>
+                            </tfoot>
+                          )}
+                        </table>
+
+                        {/* ══════════════════════════════════════════════════ */}
+                        {/* 🔄 SUB-SECTION 2: SALES RETURNS HEADER & TABLE     */}
+                        {/* ══════════════════════════════════════════════════ */}
+                        {retList.length > 0 && (
+                          <>
+                            <div className="bg-rose-100 border-t-2 border-b border-black px-3 py-1.5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-1 text-[11px] font-mono font-bold text-rose-950">
+                              <span className="uppercase text-rose-900 font-black flex items-center gap-1.5">
+                                <span className="w-2.5 h-2.5 rounded-full bg-rose-600 inline-block shadow-xs"></span>
+                                2. Sales Returns & Credit Adjustments ({retList.length} Return Notes)
+                              </span>
+                              <div className="flex items-center gap-3 text-[10px]">
+                                <span>Total Return Deductions (Dr): <b className="text-rose-800 font-black">- Rs. {smReturnAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</b></span>
+                              </div>
+                            </div>
+
+                            <table className="w-full table-auto border-collapse text-[11px] font-sans text-left">
+                              <thead>
+                                <tr className="bg-rose-50/80 border-b border-black font-black uppercase text-rose-950 font-mono text-[9.5px]">
+                                  <th className="p-1.5 border border-black text-center w-10">S#</th>
+                                  <th className="p-1.5 border border-black text-center w-24">Date</th>
+                                  <th className="p-1.5 border border-black w-28">Return Ref #</th>
+                                  <th className="p-1.5 border border-black">Customer Name</th>
+                                  <th className="p-1.5 border border-black">Returned Products / Remarks</th>
+                                  <th className="p-1.5 border border-black text-center w-24">Doc Type</th>
+                                  <th className="p-1.5 border border-black w-28">Restocked Wh</th>
+                                  <th className="p-1.5 border border-black text-right w-28 pr-3 text-rose-900">Return Amount (PKR)</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {retList.map((row: any, rIdx: number) => {
+                                  const displayDocPrefixId = row.return_no || `RTN-${String(row.id).padStart(4, '0')}`;
+                                  const processingDateDisplay = row.return_date || String(row.created_at || '').split('T')[0];
+                                  const itemDetails = extractItemDetails(row);
+                                  const itemNames = extractItemNames(row);
+                                  const rowAmount = Number(row.return_amount || row.total_amount || 0);
+
+                                  return (
+                                    <tr key={rIdx} className="border-b border-gray-300 hover:bg-rose-50/40 bg-rose-50/20 font-mono text-xs">
+                                      <td className="p-1.5 border border-black text-center text-gray-500 align-top">{rIdx + 1}</td>
+                                      <td className="p-1.5 border border-black text-center text-gray-700 align-top">{processingDateDisplay}</td>
+                                      <td className="p-1.5 border border-black font-black uppercase align-top">
+                                        <div className="flex items-center gap-1 flex-wrap">
+                                          <span className="text-rose-700">{displayDocPrefixId}</span>
+                                          <span className="bg-rose-100 text-rose-800 text-[9px] px-1 py-0.2 rounded font-bold border border-rose-300">RETURN</span>
+                                        </div>
+                                      </td>
+                                      <td className="p-1.5 border border-black font-sans font-medium text-black align-top">{row.customer_name || 'Counter Retail Buyer'}</td>
+                                      <td className="p-1.5 border border-black font-sans text-gray-800 text-[11px] align-top">
+                                        {itemDetails.length > 0 ? (
+                                          <div className="flex flex-col gap-1 py-0.5">
+                                            {itemDetails.map((item, idx) => (
+                                              <div key={idx} className="flex items-center text-[11px] whitespace-nowrap">
+                                                <span className="font-semibold text-black">{item.name}</span>
+                                                <span className="text-rose-600 font-black text-sm px-1.5 font-mono">|</span>
+                                                <span className="text-rose-800 font-mono font-bold">{item.qty} {item.uom}</span>
+                                                <span className="text-rose-600 font-black text-sm px-1.5 font-mono">|</span>
+                                                <span className="text-gray-900 font-mono font-bold">@ Rs. {Number(item.price).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                              </div>
+                                            ))}
+                                          </div>
+                                        ) : itemNames.length > 0 ? (
+                                          itemNames.map((name: string, i: number) => (
+                                            <React.Fragment key={i}>
+                                              {i > 0 && <span className="text-rose-700 font-black text-sm px-1.5 font-mono">|</span>}
+                                              <span>{name}</span>
+                                            </React.Fragment>
+                                          ))
+                                        ) : (
+                                          <span className="text-gray-600 italic">{row.reason || row.remarks || 'Stock Return'}</span>
+                                        )}
+                                      </td>
+                                      <td className="p-1.5 border border-black text-center align-top">
+                                        <span className="px-1.5 py-0.5 rounded text-[9.5px] font-bold uppercase bg-rose-100 text-rose-800 border border-rose-300">
+                                          Return Credit
+                                        </span>
+                                      </td>
+                                      <td className="p-1.5 border border-black font-sans text-gray-700 font-bold align-top">{row.dispatch_warehouse || row.transport_name || 'Warehouse Return'}</td>
+                                      <td className="p-1.5 border border-black text-right pr-3 font-black text-rose-700 align-top">
+                                        - Rs. {rowAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                              <tfoot>
+                                <tr className="bg-rose-50/90 border-t border-black font-black font-mono text-xs">
+                                  <td colSpan={5} className="p-1.5 border border-black text-right uppercase tracking-wider text-rose-950">
+                                    Subtotal Sales Returns ({sm.salesman} : {retList.length} Notes):
                                   </td>
-                                  <td className="p-1.5 border border-black text-center">
-                                    <span className={`px-1.5 py-0.5 rounded text-[9.5px] font-bold uppercase ${
-                                      isCash ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' : 'bg-blue-100 text-blue-800 border border-blue-300'
-                                    }`}>
-                                      {row.payment_term || 'Credit'}
-                                    </span>
+                                  <td colSpan={2} className="p-1.5 border border-black text-right text-[10px] font-bold text-rose-900">
+                                    Total Return Adjustments:
                                   </td>
-                                  <td className="p-1.5 border border-black font-sans text-purple-700 font-bold">{row.transport_name || 'Self Pick'}</td>
-                                  <td className="p-1.5 border border-black text-right pr-3 font-black text-emerald-700">
-                                    Rs. {Number(row.total_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                  <td className="p-1.5 border border-black text-right pr-3 text-rose-900 font-black">
+                                    - Rs. {smReturnAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                   </td>
                                 </tr>
-                              );
-                            })}
-                          </tbody>
-                          <tfoot>
-                            <tr className="bg-gray-50 border-t border-black font-black font-mono text-xs">
-                              <td colSpan={5} className="p-1.5 border border-black text-right uppercase tracking-wider text-gray-600">
-                                Subtotal ({sm.salesman} : {sm.invoices_count} Invoices):
-                              </td>
-                              <td colSpan={2} className="p-1.5 border border-black text-right text-[10px] font-bold text-gray-700">
-                                Cash: Rs. {smCashAmount.toLocaleString()} | Credit: Rs. {smCreditAmount.toLocaleString()}
-                              </td>
-                              <td className="p-1.5 border border-black text-right pr-3 text-purple-900 font-black">
-                                Rs. {smTotalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                              </td>
-                            </tr>
-                          </tfoot>
-                        </table>
+                              </tfoot>
+                            </table>
+                          </>
+                        )}
+
+                        {/* ══════════════════════════════════════════════════ */}
+                        {/* 🎯 FINAL SALESMAN NET RECONCILIATION BAR           */}
+                        {/* ══════════════════════════════════════════════════ */}
+                        <div className="bg-slate-900 text-white p-2.5 border-t-2 border-black flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs font-mono font-bold">
+                          <span className="uppercase text-slate-300 tracking-wider">
+                            Net Realized Performance for <b className="text-emerald-400 font-sans">{sm.salesman}</b>:
+                          </span>
+                          <div className="flex items-center gap-3 text-xs flex-wrap">
+                            <span className="text-emerald-300">Gross: Rs. {smGrossSales.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            <span className="text-slate-500">-</span>
+                            <span className="text-rose-300">Returns: Rs. {smReturnAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            <span className="text-slate-500">=</span>
+                            <span className="text-amber-300 font-black text-sm underline decoration-double">
+                              Net Commercial Revenue: Rs. {smNetRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </span>
+                          </div>
+                        </div>
                       </div>
                     );
                   })
@@ -3613,10 +4132,10 @@ const SaleReportPrint = () => {
                           Page {currentPage} Subtotal ({displayedRows.length} Sales Officers On This Page):
                         </span>
                         <div className="flex items-center gap-4 text-xs">
-                          <span className="text-indigo-900">Invoices: {displayedRows.reduce((s: number, r: any) => s + Number(r.invoices_count || 0), 0)}</span>
-                          <span className="text-emerald-800">Cash: Rs. {displayedRows.reduce((s: number, r: any) => s + Number(r.cash_sales || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                          <span className="text-blue-800">Credit: Rs. {displayedRows.reduce((s: number, r: any) => s + Number(r.credit_sales || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                          <span className="text-purple-900 font-black">Page Total: Rs. {displayedRows.reduce((s: number, r: any) => s + Number(r.total_sales || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                          <span className="text-indigo-900">Inv: {displayedRows.reduce((s: number, r: any) => s + Number(r.invoices_count || 0), 0)} | Rtn: {displayedRows.reduce((s: number, r: any) => s + Number(r.returns_count || 0), 0)}</span>
+                          <span className="text-emerald-800">Gross: Rs. {displayedRows.reduce((s: number, r: any) => s + Number(r.gross_sales || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                          <span className="text-rose-700">Ret: - Rs. {displayedRows.reduce((s: number, r: any) => s + Number(r.return_amount || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                          <span className="text-purple-900 font-black">Net: Rs. {displayedRows.reduce((s: number, r: any) => s + Number(r.net_sales || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                         </div>
                       </div>
                     )}
@@ -3626,11 +4145,11 @@ const SaleReportPrint = () => {
                         Grand Total Commercial Sales Summary (All {reportRows.length} Sales Officers):
                       </span>
                       <div className="flex items-center gap-4 text-xs">
-                        <span className="text-indigo-900">Total Invoices: {totalInvoicesCount}</span>
-                        <span className="text-emerald-700">Cash: Rs. {cashAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                        <span className="text-blue-700">Credit: Rs. {creditAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                        <span className="text-indigo-900">Invoices: {totalInvoicesCount} | Returns: {totalReturnsCount}</span>
+                        <span className="text-gray-900">Gross: Rs. {totalCustomerGrossSales.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                        <span className="text-rose-700">Returns: - Rs. {totalReturnAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                         <span className="text-purple-800 text-sm underline decoration-double">
-                          Grand Revenue: Rs. {totalGrossAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          Grand Net Revenue: Rs. {totalGrossAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                         </span>
                       </div>
                     </div>

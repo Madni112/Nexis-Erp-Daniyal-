@@ -100,6 +100,7 @@ function AddInvoiceReceipt() {
         const normalizedCust = (custData || []).map((c: any) => ({
           ...c,
           customer_name: c.customerName || c.customername || c.customer_name || c.name || 'Unnamed Customer',
+          customer_code: c.customer_code || c.customerCode || '',
           contact_name: c.company || c.contact_person || c.contact_name || '',
           phone: c.primaryPhone || c.phone || c.cell_no || '',
           city: c.city || ''
@@ -361,6 +362,7 @@ function AddInvoiceReceipt() {
   // Filtered lists for autocomplete
   const filteredCustomers = customersList.filter(c =>
     (c.customer_name || '').toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
+    (c.customer_code || '').toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
     (c.contact_name || c.contact_person || '').toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
     (c.cell_no || c.phone_no || c.phone || '').toLowerCase().includes(customerSearchQuery.toLowerCase()) ||
     (c.city || '').toLowerCase().includes(customerSearchQuery.toLowerCase())
@@ -754,7 +756,14 @@ function AddInvoiceReceipt() {
                             }`}
                           >
                             <div className="flex flex-col gap-0.5">
-                              <span className="text-xs font-bold">{cust.customer_name}</span>
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                {cust.customer_code && (
+                                  <span className="font-mono text-[10px] font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 px-1 py-0.5 rounded">
+                                    {cust.customer_code}
+                                  </span>
+                                )}
+                                <span className="text-xs font-bold">{cust.customer_name}</span>
+                              </div>
                               {(cust.contact_name || cust.contact_person || cust.cell_no || cust.phone) && (
                                 <span className="text-[10px] text-slate-400">
                                   {cust.contact_name || cust.contact_person} {cust.cell_no || cust.phone ? `• ${cust.cell_no || cust.phone}` : ''}

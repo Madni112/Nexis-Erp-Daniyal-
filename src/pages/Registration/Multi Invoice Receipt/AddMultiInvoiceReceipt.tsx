@@ -44,7 +44,7 @@ const AddMultiInvoiceReceipt = () => {
         const fetchCoreMetadata = async () => {
             try {
                 setInitialLoading(true);
-                const { data: custData } = await supabase.from('customers').select('id, customerName, primaryPhone');
+                const { data: custData } = await supabase.from('customers').select('id, customerName, primaryPhone, customer_code, customerCode');
                 const { data: bankData } = await supabase.from('banks').select('id, bankName, accountTitle');
                 const { data: coaData } = await supabase.from('chart_of_accounts').select('account_code, account_title, control_code, category_code');
                 if (custData) setCustomers(custData);
@@ -348,7 +348,8 @@ const AddMultiInvoiceReceipt = () => {
                                             if (!query) return true;
                                             const name = (c.customerName || '').toLowerCase();
                                             const phone = (c.primaryPhone || '').toLowerCase();
-                                            return name.includes(query) || phone.includes(query);
+                                            const code = (c.customer_code || c.customerCode || '').toLowerCase();
+                                            return name.includes(query) || phone.includes(query) || code.includes(query);
                                         });
 
                                         return (
@@ -391,7 +392,7 @@ const AddMultiInvoiceReceipt = () => {
                                                             handleCustomerChange(matched.customerName, setFieldValue);
                                                         }
                                                     }}
-                                                    placeholder="Search debtor customer name..."
+                                                    placeholder="Search customer name or code..."
                                                     className={`w-full rounded border p-2 bg-transparent outline-none text-xs font-black text-black dark:text-white ${errors.customerName && touched.customerName ? 'border-red-500 bg-red-50/10' : 'border-stroke dark:border-strokedark focus:border-primary'}`}
                                                 />
 
@@ -400,6 +401,7 @@ const AddMultiInvoiceReceipt = () => {
                                                     <div className="absolute left-0 top-full mt-1.5 z-[99999] w-full min-w-[280px] max-h-[260px] overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#1A222C] shadow-2xl divide-y divide-slate-100 dark:divide-slate-800 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-600">
                                                         {filteredCustomers.map((c: any, cIdx: number) => {
                                                             const isHighlighted = cIdx === highlightedCustIdx;
+                                                            const code = c.customer_code || c.customerCode;
                                                             return (
                                                                 <div
                                                                     key={c.id}
@@ -416,9 +418,16 @@ const AddMultiInvoiceReceipt = () => {
                                                                     }`}
                                                                 >
                                                                     <div className="flex flex-col gap-0.5 text-left">
-                                                                        <span className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400">
-                                                                            {c.customerName}
-                                                                        </span>
+                                                                        <div className="flex items-center gap-1.5 flex-wrap">
+                                                                            {code && (
+                                                                                <span className="font-mono text-[10px] font-bold text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 px-1 py-0.5 rounded">
+                                                                                    {code}
+                                                                                </span>
+                                                                            )}
+                                                                            <span className="text-xs font-bold text-slate-900 dark:text-white group-hover:text-emerald-600 dark:group-hover:text-emerald-400">
+                                                                                {c.customerName}
+                                                                            </span>
+                                                                        </div>
                                                                         {c.primaryPhone && (
                                                                             <span className="text-[10px] text-slate-400 font-mono">
                                                                                 📞 {c.primaryPhone}

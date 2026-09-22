@@ -41,7 +41,8 @@ export const fetchFinancialMetrics = async (): Promise<FinancialSummary> => {
       vouchersRes,
       banksRes,
       productsRes,
-      customerReceiptsRes
+      customerReceiptsRes,
+      openStocksRes
     ] = await Promise.allSettled([
       supabase.from('sales_invoices').select('*'),
       supabase.from('supplier_purchases').select('*'),
@@ -52,7 +53,8 @@ export const fetchFinancialMetrics = async (): Promise<FinancialSummary> => {
       supabase.from('financial_vouchers').select('*'),
       supabase.from('banks').select('*'),
       supabase.from('products').select('*'),
-      supabase.from('customer_recoveries').select('*')
+      supabase.from('customer_recoveries').select('*'),
+      supabase.from('opening_stocks').select('*')
     ]);
 
     const invoicesList = (salesInvoicesRes.status === 'fulfilled' && Array.isArray(salesInvoicesRes.value.data)) ? salesInvoicesRes.value.data : [];
@@ -66,6 +68,7 @@ export const fetchFinancialMetrics = async (): Promise<FinancialSummary> => {
 
     const productsList = (productsRes.status === 'fulfilled' && Array.isArray(productsRes.value.data)) ? productsRes.value.data : [];
     const customerRecList = (customerReceiptsRes.status === 'fulfilled' && Array.isArray(customerReceiptsRes.value.data)) ? customerReceiptsRes.value.data : [];
+    const openStocksList = (openStocksRes.status === 'fulfilled' && Array.isArray(openStocksRes.value.data)) ? openStocksRes.value.data : [];
 
     const todayStr = new Date().toISOString().split('T')[0];
     const currentYear = new Date().getFullYear();
@@ -140,33 +143,54 @@ export const fetchFinancialMetrics = async (): Promise<FinancialSummary> => {
     let cashInflow = 0;
     let cashOutflow = 0;
 
-    // Cash Sales Invoices
+    // 1. Upfront Cash Received on Sales Invoices
+    const paidInvoicesMap = new Map<string, { total: number; cashPaid: number }>();
     invoicesList.forEach((inv: any) => {
       const paid = Number(inv.cash_amount_paid || inv.amount_paid || 0);
+      const tot = Number(inv.total_amount || 0);
+      const invId = String(inv.id).trim().toLowerCase();
+      paidInvoicesMap.set(invId, { total: tot, cashPaid: paid });
+      paidInvoicesMap.set(`inv-${invId}`, { total: tot, cashPaid: paid });
+
       if (inv.settlement_mode === 'Cash' || inv.payment_mode === 'Cash') {
-        cashInflow += paid || Number(inv.total_amount || 0);
+        cashInflow += paid || tot;
       } else if (paid > 0) {
         cashInflow += paid;
       }
     });
 
-    // Customer Cash Receipts / Recoveries
-    customerRecList.forEach((rec: any) => {
-      if (rec.deposit_mode === 'Cash' || rec.payment_mode === 'Cash' || !rec.deposit_mode) {
-        cashInflow += Number(rec.net_collected_amount || rec.amount_paid || rec.amount || 0);
-      }
-    });
-
-    // Financial Vouchers (Cash Receipts)
+    // 2. Financial Vouchers (Subsequent Customer Receipts / General Cash Inflows)
     vouchersList.forEach((v: any) => {
       const amt = Number(v.total_amount || v.amount || 0);
-      const mode = String(v.mode_of_payment || v.voucher_type || '');
+      const mode = String(v.mode_of_payment || v.payment_mode || v.voucher_type || '');
       const isReceipt = String(v.voucher_type || '').toLowerCase().includes('receipt');
       const isPayment = String(v.voucher_type || '').toLowerCase().includes('payment');
 
       if (!mode.toLowerCase().includes('bank')) {
-        if (isReceipt) cashInflow += amt;
-        if (isPayment) cashOutflow += amt;
+        if (isReceipt) {
+          const cleanRef = String(v.original_invoice_no || '').replace('INV-', '').trim().toLowerCase();
+          const targetInv = cleanRef ? paidInvoicesMap.get(cleanRef) : null;
+          // If voucher is linked to an invoice that was ALREADY 100% paid upfront in cash, do not double-add
+          if (targetInv && targetInv.cashPaid >= targetInv.total) {
+            return;
+          }
+          cashInflow += amt;
+        }
+        if (isPayment) {
+          cashOutflow += amt;
+        }
+      }
+    });
+
+    // 3. Customer Cash Recoveries (Unlinked)
+    customerRecList.forEach((rec: any) => {
+      if (rec.deposit_mode === 'Cash' || rec.payment_mode === 'Cash' || !rec.deposit_mode) {
+        const invRef = String(rec.invoice_id || rec.invoice_no || '').replace('INV-', '').trim().toLowerCase();
+        const targetInv = invRef ? paidInvoicesMap.get(invRef) : null;
+        if (targetInv && targetInv.cashPaid >= targetInv.total) {
+          return;
+        }
+        cashInflow += Number(rec.net_collected_amount || rec.amount_paid || rec.amount || 0);
       }
     });
 
@@ -318,12 +342,13 @@ export const fetchFinancialMetrics = async (): Promise<FinancialSummary> => {
     // Map product prices for accurate inventory valuation
     const priceMap: Record<string, number> = {};
     productsList.forEach((p: any) => {
-      priceMap[p.product_name] = Number(p.retail_price || p.purchase_price || p.mrp || 0);
+      priceMap[p.product_name || p.name] = Number(p.retail_price || p.purchase_price || p.mrp || 0);
     });
 
-    inventoryList.forEach((invItem: any) => {
-      const qty = Number(invItem.quantity || 0);
-      const unitPrice = priceMap[invItem.product_name] || Number(invItem.unit_cost || 0);
+    openStocksList.forEach((invItem: any) => {
+      const qty = Number(invItem.quantity || invItem.qty || 0);
+      const pName = invItem.product_name || invItem.itemName || '';
+      const unitPrice = priceMap[pName] || Number(invItem.unit_cost || invItem.purchase_price || 0);
       inventoryAssetValue += (qty * unitPrice);
     });
 

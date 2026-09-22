@@ -294,20 +294,32 @@ const AddPurchases = () => {
                 if (linkedGrnId) {
                   const { data: existingGrnItems } = await supabase
                     .from('grn_items')
-                    .select('product_name, accepted_qty')
+                    .select('product_name, warehouse_name, accepted_qty')
                     .eq('grn_id', linkedGrnId);
 
                   if (existingGrnItems && existingGrnItems.length > 0) {
-                    for (const grnItem of existingGrnItems) {
-                      const acceptedQty = Number(grnItem.accepted_qty || 0);
-                      if (acceptedQty <= 0) continue; // not yet verified, skip
-                      const matchingNewItem = values.items.find((i: any) =>
-                        String(i.itemName || '').toLowerCase() === String(grnItem.product_name || '').toLowerCase()
-                      );
-                      const newQty = Number(matchingNewItem?.qty || 0);
-                      if (!matchingNewItem || newQty < acceptedQty) {
+                    // Group accepted quantities by product
+                    const acceptedByProduct: Record<string, number> = {};
+                    existingGrnItems.forEach((g: any) => {
+                      const pKey = String(g.product_name || '').trim().toLowerCase();
+                      const acc = Number(g.accepted_qty || 0);
+                      if (acc > 0) {
+                        acceptedByProduct[pKey] = (acceptedByProduct[pKey] || 0) + acc;
+                      }
+                    });
+
+                    // Compare against total new quantities in values.items
+                    for (const [pKey, acceptedTotal] of Object.entries(acceptedByProduct)) {
+                      if (acceptedTotal <= 0) continue;
+                      const newTotalForProduct = values.items
+                        .filter((i: any) => String(i.itemName || '').trim().toLowerCase() === pKey)
+                        .reduce((sum: number, i: any) => sum + Number(i.qty || 0), 0);
+
+                      // Tolerance of 0.0001 for floating-point rounding
+                      if (newTotalForProduct < (acceptedTotal - 0.0001)) {
+                        const originalProdName = existingGrnItems.find((g: any) => String(g.product_name || '').trim().toLowerCase() === pKey)?.product_name || pKey;
                         toast.error(
-                          `Cannot reduce below approved qty!\n\nProduct: "${grnItem.product_name}"\nAlready Approved in GRN: ${acceptedQty}\nYour New Qty: ${newQty}\n\nMinimum allowed qty is ${acceptedQty}.`,
+                          `Cannot reduce below approved qty!\n\nProduct: "${originalProdName}"\nAlready Approved in GRN: ${acceptedTotal}\nYour New Total Qty: ${newTotalForProduct}\n\nMinimum allowed total qty is ${acceptedTotal}.`,
                           { duration: 6000 }
                         );
                         setLoading(false);

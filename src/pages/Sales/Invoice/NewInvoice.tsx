@@ -414,6 +414,11 @@ const NewInvoice = () => {
       }
 
       const totalPaidCombined = paidCash + paidBank;
+      if (totalPaidCombined > calculatedGrandTotal + 0.01) {
+        toast.error(`Payment amount (Rs. ${totalPaidCombined.toLocaleString(undefined, { minimumFractionDigits: 2 })}) cannot exceed total bill amount (Rs. ${calculatedGrandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })})!`);
+        setLoading(false);
+        return;
+      }
       const runningBalanceTerm = totalPaidCombined >= calculatedGrandTotal ? 'Cash' : 'Credit';
 
       const databasePayload = {
@@ -828,7 +833,14 @@ const NewInvoice = () => {
             ) : (
               <select value={selectedRecordedCustomer} onChange={(e) => setSelectedRecordedCustomer(e.target.value)} className="w-full p-3 border rounded-lg bg-transparent dark:border-strokedark">
                 <option value="">-- Search Customer --</option>
-                {customersList.map(c => <option key={c.id} value={c.customerName}>{c.customerName}</option>)}
+                {customersList.map(c => {
+                  const code = c.customer_code || c.customerCode;
+                  return (
+                    <option key={c.id} value={c.customerName}>
+                      {code ? `[${code}] ${c.customerName}` : c.customerName}
+                    </option>
+                  );
+                })}
               </select>
             )}
 
@@ -908,32 +920,11 @@ const NewInvoice = () => {
                       type="date" 
                       name="saleDate" 
                       value={values.saleDate} 
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        // If user typed only day number (e.g., "06")
-                        if (val && val.length <= 2 && !isNaN(Number(val))) {
-                          const day = Number(val);
-                          const now = new Date();
-                          const constructed = new Date(now.getFullYear(), now.getMonth(), day);
-                          const iso = constructed.toISOString().split('T')[0];
-                          const base = serverToday ? new Date(serverToday) : new Date();
-                          const today = new Date(base);
-                          today.setHours(0,0,0,0);
-                          const minDate = new Date(today);
-                          minDate.setDate(today.getDate() - 2);
-                          if (constructed >= minDate && constructed <= today) {
-                            setFieldValue('saleDate', iso);
-                            console.log('Date accepted');
-                          } else {
-                            toast.error('Invalid date');
-                          }
-                        } else {
-                          setFieldValue('saleDate', val);
-                        }
-                      }}
+                      onChange={handleChange}
                       min={new Date(new Date().setDate(new Date().getDate() - 2)).toISOString().split('T')[0]}
                       max={new Date().toISOString().split('T')[0]}
-                      className={`w-full rounded border p-2 text-sm bg-transparent font-bold outline-none text-black dark:text-white ${hasAttempted && errors.saleDate ? 'border-red-500 bg-red-50/10' : 'border-stroke dark:border-strokedark focus:border-primary'}`} />
+                      className={`w-full rounded border p-2 text-sm bg-transparent font-bold outline-none text-black dark:text-white ${hasAttempted && errors.saleDate ? 'border-red-500 bg-red-50/10' : 'border-stroke dark:border-strokedark focus:border-primary'}`} 
+                    />
                   </div>
 
                   <div>
@@ -1889,51 +1880,83 @@ const NewInvoice = () => {
                       </div>
                     )}
 
-                    <div className={values.settlementMode === 'Split' ? 'grid grid-cols-1 sm:grid-cols-2 gap-4' : 'w-full'}>
-                      {(values.settlementMode === 'Cash' || values.settlementMode === 'Split') && (
-                        <div>
-                          <span className="font-bold text-danger block mb-1">Cash Payment Amount (PKR): *</span>
-                          <input
-                            type="number"
-                            min="0"
-                            onKeyDown={blockInvalidChar}
-                            onWheel={(e: any) => e.target.blur()}
-                            name="cashAmountPaid"
-                            value={values.cashAmountPaid === 0 ? '' : values.cashAmountPaid}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              const num = val === '' ? 0 : Math.max(0, Number(val) || 0);
-                              setFieldValue('cashAmountPaid', num);
-                            }}
-                            placeholder="0"
-                            className={`w-full rounded border p-2 bg-transparent text-right font-black text-danger text-sm outline-none text-black dark:text-white ${hasAttempted && errors.cashAmountPaid ? 'border-red-500 bg-red-50/10' : 'border-stroke dark:border-strokedark focus:border-primary'}`}
-                          />
-                          {hasAttempted && errors.cashAmountPaid && <p className="text-red-500 text-[10px] font-bold mt-1">{errors.cashAmountPaid}</p>}
-                        </div>
-                      )}
+                    {(() => {
+                      const totalPaidNow = values.settlementMode === 'Cash'
+                        ? Number(values.cashAmountPaid || 0)
+                        : (values.settlementMode === 'Bank' ? Number(values.bankAmountPaid || 0) : (Number(values.cashAmountPaid || 0) + Number(values.bankAmountPaid || 0)));
+                      const isOverpaid = totalPaidNow > currentSubtotalValue + 0.01;
 
-                      {(values.settlementMode === 'Bank' || values.settlementMode === 'Split') && (
-                        <div>
-                          <span className="font-bold text-primary block mb-1">Bank Payment Amount (PKR): *</span>
-                          <input
-                            type="number"
-                            min="0"
-                            onKeyDown={blockInvalidChar}
-                            onWheel={(e: any) => e.target.blur()}
-                            name="bankAmountPaid"
-                            value={values.bankAmountPaid === 0 ? '' : values.bankAmountPaid}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              const num = val === '' ? 0 : Math.max(0, Number(val) || 0);
-                              setFieldValue('bankAmountPaid', num);
-                            }}
-                            placeholder="0"
-                            className={`w-full rounded border p-2 bg-transparent text-right font-black text-primary text-sm outline-none text-black dark:text-white ${hasAttempted && errors.bankAmountPaid ? 'border-red-500 bg-red-50/10' : 'border-stroke dark:border-strokedark focus:border-primary'}`}
-                          />
-                          {hasAttempted && errors.bankAmountPaid && <p className="text-red-500 text-[10px] font-bold mt-1">{errors.bankAmountPaid}</p>}
+                      return (
+                        <div className="w-full space-y-2">
+                          <div className={values.settlementMode === 'Split' ? 'grid grid-cols-1 sm:grid-cols-2 gap-4' : 'w-full'}>
+                            {(values.settlementMode === 'Cash' || values.settlementMode === 'Split') && (
+                              <div>
+                                <span className={`font-bold block mb-1 ${isOverpaid ? 'text-red-600 dark:text-red-400' : 'text-danger'}`}>
+                                  Cash Payment Amount (PKR): *
+                                </span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  onKeyDown={blockInvalidChar}
+                                  onWheel={(e: any) => e.target.blur()}
+                                  name="cashAmountPaid"
+                                  value={values.cashAmountPaid === 0 ? '' : values.cashAmountPaid}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    const num = val === '' ? 0 : Math.max(0, Number(val) || 0);
+                                    setFieldValue('cashAmountPaid', num);
+                                  }}
+                                  placeholder="0"
+                                  className={`w-full rounded border p-2 bg-transparent text-right font-black text-sm outline-none ${
+                                    isOverpaid 
+                                      ? 'border-2 border-red-500 bg-red-50/50 dark:bg-red-950/30 text-red-600 dark:text-red-400 ring-2 ring-red-400' 
+                                      : (hasAttempted && errors.cashAmountPaid ? 'border-red-500 bg-red-50/10 text-danger' : 'border-stroke dark:border-strokedark focus:border-primary text-black dark:text-white')
+                                  }`}
+                                />
+                                {hasAttempted && errors.cashAmountPaid && <p className="text-red-500 text-[10px] font-bold mt-1">{errors.cashAmountPaid}</p>}
+                              </div>
+                            )}
+
+                            {(values.settlementMode === 'Bank' || values.settlementMode === 'Split') && (
+                              <div>
+                                <span className={`font-bold block mb-1 ${isOverpaid ? 'text-red-600 dark:text-red-400' : 'text-primary'}`}>
+                                  Bank Payment Amount (PKR): *
+                                </span>
+                                <input
+                                  type="number"
+                                  min="0"
+                                  onKeyDown={blockInvalidChar}
+                                  onWheel={(e: any) => e.target.blur()}
+                                  name="bankAmountPaid"
+                                  value={values.bankAmountPaid === 0 ? '' : values.bankAmountPaid}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    const num = val === '' ? 0 : Math.max(0, Number(val) || 0);
+                                    setFieldValue('bankAmountPaid', num);
+                                  }}
+                                  placeholder="0"
+                                  className={`w-full rounded border p-2 bg-transparent text-right font-black text-sm outline-none ${
+                                    isOverpaid 
+                                      ? 'border-2 border-red-500 bg-red-50/50 dark:bg-red-950/30 text-red-600 dark:text-red-400 ring-2 ring-red-400' 
+                                      : (hasAttempted && errors.bankAmountPaid ? 'border-red-500 bg-red-50/10 text-primary' : 'border-stroke dark:border-strokedark focus:border-primary text-black dark:text-white')
+                                  }`}
+                                />
+                                {hasAttempted && errors.bankAmountPaid && <p className="text-red-500 text-[10px] font-bold mt-1">{errors.bankAmountPaid}</p>}
+                              </div>
+                            )}
+                          </div>
+
+                          {isOverpaid && (
+                            <div className="p-2.5 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-300 dark:border-red-800 text-red-700 dark:text-red-300 text-xs font-bold flex items-center gap-2 animate-pulse">
+                              <span className="text-base">⚠️</span>
+                              <span>
+                                <strong>Payment Exceeds Total Bill:</strong> Entered Rs. {totalPaidNow.toLocaleString(undefined, { minimumFractionDigits: 2 })} on a bill of Rs. {currentSubtotalValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}. Please correct the amount before logging.
+                              </span>
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
+                      );
+                    })()}
                   </div>
 
                   {/* FINANCIAL AUDIT SUMMARY CARD */}
@@ -2005,29 +2028,52 @@ const NewInvoice = () => {
                     Cancel
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSubmitAction('print');
-                      submitForm();
-                    }}
-                    disabled={loading}
-                    className="rounded-xl bg-teal-600 hover:bg-teal-700 py-3 px-6 font-bold text-white transition disabled:opacity-50 shadow-md text-xs cursor-pointer flex items-center gap-2"
-                  >
-                    <FiPrinter size={15} /> <span>Save & Print</span>
-                  </button>
+                  {(() => {
+                    const totalPaidNow = values.settlementMode === 'Cash'
+                      ? Number(values.cashAmountPaid || 0)
+                      : (values.settlementMode === 'Bank' ? Number(values.bankAmountPaid || 0) : (Number(values.cashAmountPaid || 0) + Number(values.bankAmountPaid || 0)));
+                    const isOverpaid = totalPaidNow > currentSubtotalValue + 0.01;
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setSubmitAction('save');
-                      submitForm();
-                    }}
-                    disabled={loading}
-                    className="rounded-xl bg-emerald-600 hover:bg-emerald-700 py-3 px-8 font-bold text-white transition disabled:opacity-50 shadow-md text-xs cursor-pointer flex items-center gap-2"
-                  >
-                    {loading ? <Spinner color="border-white" size="w-4 h-4" /> : <><FiCheck size={15} /> <span>{editData ? 'Apply Updates' : 'Log Invoice'}</span></>}
-                  </button>
+                    return (
+                      <>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (isOverpaid) {
+                              toast.error(`Payment (Rs. ${totalPaidNow.toLocaleString()}) cannot exceed bill total (Rs. ${currentSubtotalValue.toLocaleString()})!`);
+                              return;
+                            }
+                            setSubmitAction('print');
+                            submitForm();
+                          }}
+                          disabled={loading || isOverpaid}
+                          className={`rounded-xl py-3 px-6 font-bold text-white transition shadow-md text-xs cursor-pointer flex items-center gap-2 ${
+                            isOverpaid ? 'bg-gray-400 cursor-not-allowed opacity-50' : 'bg-teal-600 hover:bg-teal-700'
+                          }`}
+                        >
+                          <FiPrinter size={15} /> <span>Save & Print</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (isOverpaid) {
+                              toast.error(`Payment (Rs. ${totalPaidNow.toLocaleString()}) cannot exceed bill total (Rs. ${currentSubtotalValue.toLocaleString()})!`);
+                              return;
+                            }
+                            setSubmitAction('save');
+                            submitForm();
+                          }}
+                          disabled={loading || isOverpaid}
+                          className={`rounded-xl py-3 px-8 font-bold text-white transition shadow-md text-xs cursor-pointer flex items-center gap-2 ${
+                            isOverpaid ? 'bg-gray-400 cursor-not-allowed opacity-50' : 'bg-emerald-600 hover:bg-emerald-700'
+                          }`}
+                        >
+                          {loading ? <Spinner color="border-white" size="w-4 h-4" /> : <><FiCheck size={15} /> <span>{editData ? 'Apply Updates' : 'Log Invoice'}</span></>}
+                        </button>
+                      </>
+                    );
+                  })()}
                 </div>
               </Form>
             );
