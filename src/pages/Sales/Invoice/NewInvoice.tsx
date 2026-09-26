@@ -208,7 +208,7 @@ const NewInvoice = () => {
       return true;
     }),
     shippingAddress: Yup.string().nullable(),
-    saleDate: Yup.string().required('Required Field').test('valid-date', 'Date must be within last 2 days', function(value) {
+    saleDate: Yup.string().required('Required Field').test('valid-date', 'Date must be within last 3 days', function(value) {
       if (!value) return false;
       const selected = new Date(value);
       selected.setHours(0,0,0,0);
@@ -216,7 +216,7 @@ const NewInvoice = () => {
       const today = new Date(base);
       today.setHours(0,0,0,0);
       const minDate = new Date(today);
-      minDate.setDate(today.getDate() - 2);
+      minDate.setDate(today.getDate() - 3);
       return selected >= minDate && selected <= today;
     }),
     taxScenario: Yup.string().required('Required Field'),
@@ -921,7 +921,7 @@ const NewInvoice = () => {
                       name="saleDate" 
                       value={values.saleDate} 
                       onChange={handleChange}
-                      min={new Date(new Date().setDate(new Date().getDate() - 2)).toISOString().split('T')[0]}
+                      min={new Date(new Date().setDate(new Date().getDate() - 3)).toISOString().split('T')[0]}
                       max={new Date().toISOString().split('T')[0]}
                       className={`w-full rounded border p-2 text-sm bg-transparent font-bold outline-none text-black dark:text-white ${hasAttempted && errors.saleDate ? 'border-red-500 bg-red-50/10' : 'border-stroke dark:border-strokedark focus:border-primary'}`} 
                     />
