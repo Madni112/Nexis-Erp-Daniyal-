@@ -23,6 +23,7 @@ import {
   MdFileDownload,
   MdEditNote,
   MdSync,
+  MdTune,
 } from 'react-icons/md';
 
 export type DuplicateStatus = 'ready' | 'duplicate_in_file' | 'duplicate_in_db' | 'invalid';
@@ -96,24 +97,72 @@ const BulkProductUpload = () => {
         const workbook = XLSX.read(bstr, { type: 'binary' });
         const sheetName = workbook.SheetNames[0];
         const sheet = workbook.Sheets[sheetName];
-        const parsedData: any[] = XLSX.utils.sheet_to_json(sheet);
+        // Read sheet as raw 2D grid of rows
+        const rawGrid: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
 
-        if (!parsedData || parsedData.length === 0) {
+        if (!rawGrid || rawGrid.length === 0) {
           toast.error('The selected file has no data rows.');
           setAnalyzing(false);
           return;
         }
 
-        // Normalize keys to UPPERCASE & TRIM
-        const normalizedData = parsedData.map((row: any) => {
-          const normalizedRow: any = {};
-          for (const key in row) {
-            if (Object.prototype.hasOwnProperty.call(row, key)) {
-              normalizedRow[key.trim().toUpperCase()] = row[key];
-            }
+        // Smart Header Auto-Detection (Scans first 10 rows for known column keywords)
+        const headerKeywords = [
+          'CODE',
+          'ITEM',
+          'DESCRIPTION',
+          'PRODUCT',
+          'NAME',
+          'CATEGORY',
+          'PRICE',
+          'SALES',
+          'PURCHASE',
+          'BRAND',
+          'UOM',
+          'MINIMUM',
+        ];
+
+        let headerRowIdx = 0;
+        let highestMatches = 0;
+
+        for (let r = 0; r < Math.min(rawGrid.length, 10); r++) {
+          const row = rawGrid[r] || [];
+          const matchCount = row.filter((cell: any) => {
+            const cellStr = String(cell || '').trim().toUpperCase();
+            return headerKeywords.some((kw) => cellStr.includes(kw));
+          }).length;
+
+          if (matchCount > highestMatches && matchCount >= 2) {
+            highestMatches = matchCount;
+            headerRowIdx = r;
           }
-          return normalizedRow;
+        }
+
+        const headerRow = (rawGrid[headerRowIdx] || []).map((h: any) =>
+          String(h || '').trim().toUpperCase()
+        );
+        const dataGrid = rawGrid.slice(headerRowIdx + 1);
+
+        // Normalize data rows to objects, filtering out completely blank rows
+        const normalizedData: any[] = [];
+        dataGrid.forEach((row) => {
+          const hasData = row.some((cell: any) => String(cell || '').trim() !== '');
+          if (!hasData) return;
+
+          const rowObj: any = {};
+          headerRow.forEach((colName, idx) => {
+            if (colName) {
+              rowObj[colName] = row[idx];
+            }
+          });
+          normalizedData.push(rowObj);
         });
+
+        if (normalizedData.length === 0) {
+          toast.error('No product data rows found under the header row.');
+          setAnalyzing(false);
+          return;
+        }
 
         // 1. Fetch current database catalog for comparison
         const { data: dbProducts, error: dbError } = await supabase
@@ -199,17 +248,17 @@ const BulkProductUpload = () => {
             fileSeenCodes.set(codeKey, rowIndex);
           }
 
-          const pPrice = Number(row['PURCHASE PRICE'] || row['PURCHASE_PRICE'] || row['COST'] || 0);
-          const rPrice = Number(row['SALES PRICE'] || row['RETAIL PRICE'] || row['RETAIL_PRICE'] || row['PRICE'] || 0);
+          const pPrice = Number(row['PURCHASE PRICE'] || row['PURCHASE_PRICE'] || row['PURCHASE'] || row['COST'] || 0);
+          const rPrice = Number(row['SALES PRICE'] || row['SALE PRICE'] || row['RETAIL PRICE'] || row['RETAIL_PRICE'] || row['PRICE'] || 0);
 
           return {
             id: `row-${rowIndex}-${cleanCode || cleanName || Math.random()}`,
             rowIndex,
             code: cleanCode,
             productName: cleanName,
-            category: String(row['CATEGORY'] || '').trim(),
+            category: String(row['CATEGORY'] || row['LEAF CATEGORY'] || row['LEAF_CATEGORY'] || '').trim(),
             subCategory: String(row['SUB CATEGORY'] || row['SUB CAT'] || row['SUB_CATEGORY'] || '').trim(),
-            parentCat: String(row['PARENT CAT'] || row['SUB SUB CATEGORY'] || row['PARENT_CAT'] || '').trim(),
+            parentCat: String(row['PARENT CAT'] || row['PARENT CATEGORY'] || row['PARENT_CAT'] || row['PARENT_CATEGORY'] || row['SUB SUB CATEGORY'] || '').trim(),
             brand: String(row['BRAND'] || row['BIN'] || '').trim(),
             purchasePrice: isNaN(pPrice) ? 0 : pPrice,
             retailPrice: isNaN(rPrice) ? 0 : rPrice,
@@ -305,6 +354,39 @@ const BulkProductUpload = () => {
     setProcessedRows(prev => prev.filter(r => r.id !== id));
   };
 
+  // Remove all duplicates (both file and DB)
+  const removeAllDuplicates = () => {
+    const dupsCount = processedRows.filter(r => r.status === 'duplicate_in_file' || r.status === 'duplicate_in_db').length;
+    if (dupsCount === 0) {
+      toast('No duplicate rows to remove.');
+      return;
+    }
+    setProcessedRows(prev => prev.filter(r => r.status === 'ready' || r.status === 'invalid'));
+    toast.success(`Removed ${dupsCount} duplicate rows from the list.`);
+  };
+
+  // Remove DB / Software duplicates only
+  const removeDbDuplicates = () => {
+    const count = processedRows.filter(r => r.status === 'duplicate_in_db').length;
+    if (count === 0) {
+      toast('No software duplicates to remove.');
+      return;
+    }
+    setProcessedRows(prev => prev.filter(r => r.status !== 'duplicate_in_db'));
+    toast.success(`Removed ${count} software duplicates from the list.`);
+  };
+
+  // Remove in-file duplicates only
+  const removeFileDuplicates = () => {
+    const count = processedRows.filter(r => r.status === 'duplicate_in_file').length;
+    if (count === 0) {
+      toast('No in-file duplicates to remove.');
+      return;
+    }
+    setProcessedRows(prev => prev.filter(r => r.status !== 'duplicate_in_file'));
+    toast.success(`Removed ${count} in-file duplicates from the list.`);
+  };
+
   // Export duplicates or current filtered list as Excel
   const handleExportFiltered = (type: 'ALL' | 'DUPLICATES' = 'DUPLICATES') => {
     const rowsToExport =
@@ -380,7 +462,7 @@ const BulkProductUpload = () => {
           pieces_per_box: 1,
           pcs_per_box: 1,
           pieces_per_packing: 1,
-          item_type: 'Standard',
+          item_type: 'goods',
           profit: Math.max(0, r.retailPrice - r.purchasePrice),
         }));
 
@@ -627,7 +709,7 @@ const BulkProductUpload = () => {
             >
               <div className="flex items-center justify-between">
                 <span className="text-[10px] text-blue-700 dark:text-blue-400 font-bold uppercase tracking-wider">
-                  Already in System
+                  Duplicates in Software
                 </span>
                 <span className="text-base">🔵</span>
               </div>
@@ -691,16 +773,27 @@ const BulkProductUpload = () => {
               </div>
 
               {/* Action Buttons */}
-              <div className="flex items-center gap-2 shrink-0">
+              <div className="flex items-center flex-wrap gap-2 shrink-0">
                 {(metrics.fileDup > 0 || metrics.dbDup > 0) && (
-                  <button
-                    type="button"
-                    onClick={() => handleExportFiltered('DUPLICATES')}
-                    className="px-3 py-2 text-xs font-bold rounded-xl border border-stroke dark:border-strokedark bg-white dark:bg-boxdark hover:bg-slate-50 dark:hover:bg-meta-4 text-slate-700 dark:text-slate-200 transition flex items-center gap-1.5 cursor-pointer"
-                    title="Export duplicate rows to Excel"
-                  >
-                    <MdFileDownload className="text-sm text-amber-600" /> Export Duplicates
-                  </button>
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => handleExportFiltered('DUPLICATES')}
+                      className="px-3 py-2 text-xs font-bold rounded-xl border border-stroke dark:border-strokedark bg-white dark:bg-boxdark hover:bg-slate-50 dark:hover:bg-meta-4 text-slate-700 dark:text-slate-200 transition flex items-center gap-1.5 cursor-pointer"
+                      title="Export duplicate rows to Excel"
+                    >
+                      <MdFileDownload className="text-sm text-amber-600" /> Export Duplicates
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={removeAllDuplicates}
+                      className="px-3 py-2 text-xs font-bold rounded-xl border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/40 hover:bg-red-100 dark:hover:bg-red-900/60 text-red-700 dark:text-red-300 transition flex items-center gap-1.5 cursor-pointer"
+                      title="Remove all duplicate rows from this upload list"
+                    >
+                      <MdDeleteOutline className="text-sm" /> Remove All Duplicates ({metrics.fileDup + metrics.dbDup})
+                    </button>
+                  </>
                 )}
 
                 <button
@@ -747,7 +840,7 @@ const BulkProductUpload = () => {
                   { id: 'ALL', label: 'All Rows', count: metrics.total },
                   { id: 'READY', label: 'Ready to Add', count: metrics.ready, badge: '🟢' },
                   { id: 'FILE_DUP', label: 'Duplicates in File', count: metrics.fileDup, badge: '🟡' },
-                  { id: 'DB_DUP', label: 'Already in DB', count: metrics.dbDup, badge: '🔵' },
+                  { id: 'DB_DUP', label: 'Duplicates in Software', count: metrics.dbDup, badge: '🔵' },
                   metrics.invalid > 0
                     ? { id: 'INVALID', label: 'Missing Info', count: metrics.invalid, badge: '🔴' }
                     : null,
@@ -815,6 +908,26 @@ const BulkProductUpload = () => {
                 >
                   Deselect
                 </button>
+
+                {activeFilterTab === 'DB_DUP' && metrics.dbDup > 0 && (
+                  <button
+                    type="button"
+                    onClick={removeDbDuplicates}
+                    className="px-2.5 py-1.5 rounded-lg border border-red-200 dark:border-red-900/50 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 hover:bg-red-100 text-[11px] font-bold transition flex items-center gap-1 cursor-pointer"
+                  >
+                    <MdDeleteOutline /> Remove Software Duplicates ({metrics.dbDup})
+                  </button>
+                )}
+
+                {activeFilterTab === 'FILE_DUP' && metrics.fileDup > 0 && (
+                  <button
+                    type="button"
+                    onClick={removeFileDuplicates}
+                    className="px-2.5 py-1.5 rounded-lg border border-amber-200 dark:border-amber-900/50 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 hover:bg-amber-100 text-[11px] font-bold transition flex items-center gap-1 cursor-pointer"
+                  >
+                    <MdDeleteOutline /> Remove File Duplicates ({metrics.fileDup})
+                  </button>
+                )}
               </div>
             </div>
 
@@ -841,6 +954,8 @@ const BulkProductUpload = () => {
                     <th className="py-3 px-3">Duplicate Status</th>
                     <th className="py-3 px-3">Product Code / SKU</th>
                     <th className="py-3 px-4">Product Description / Name</th>
+                    <th className="py-3 px-3">Parent Category</th>
+                    <th className="py-3 px-3">Sub Category</th>
                     <th className="py-3 px-3">Category</th>
                     <th className="py-3 px-3">Brand / Bin</th>
                     <th className="py-3 px-3 text-right">Purchase Price</th>
@@ -852,7 +967,7 @@ const BulkProductUpload = () => {
                 <tbody className="divide-y divide-stroke dark:divide-strokedark">
                   {paginatedRows.length === 0 ? (
                     <tr>
-                      <td colSpan={11} className="py-8 text-center text-slate-400 text-xs">
+                      <td colSpan={13} className="py-8 text-center text-slate-400 text-xs">
                         No rows found matching current filter or search criteria.
                       </td>
                     </tr>
@@ -936,8 +1051,18 @@ const BulkProductUpload = () => {
                             {row.productName || <span className="text-red-400 italic">No name provided</span>}
                           </td>
 
+                          {/* Parent Category */}
+                          <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300 max-w-[130px] truncate" title={row.parentCat}>
+                            {row.parentCat || '—'}
+                          </td>
+
+                          {/* Sub Category */}
+                          <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300 max-w-[130px] truncate" title={row.subCategory}>
+                            {row.subCategory || '—'}
+                          </td>
+
                           {/* Category */}
-                          <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300 max-w-[140px] truncate" title={row.category}>
+                          <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300 max-w-[130px] truncate" title={row.category}>
                             {row.category || '—'}
                           </td>
 
@@ -948,12 +1073,12 @@ const BulkProductUpload = () => {
 
                           {/* Purchase Price */}
                           <td className="py-2.5 px-3 text-right font-mono text-slate-700 dark:text-slate-300">
-                            Rs. {row.purchasePrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            Rs. {(Number(row.purchasePrice) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </td>
 
                           {/* Sales Price */}
                           <td className="py-2.5 px-3 text-right font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                            Rs. {row.retailPrice.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                            Rs. {(Number(row.retailPrice) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </td>
 
                           {/* UOM */}

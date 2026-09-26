@@ -117,12 +117,17 @@ const PurchaseReportPrint = () => {
 
       const lines: string[] = [];
       if (hasTile) {
-        if (totalBoxes > 0 && totalLoosePcs > 0) {
-          lines.push(`${totalBoxes} Box${totalBoxes > 1 ? 'es' : ''} + ${totalLoosePcs} Pcs`);
-        } else if (totalBoxes > 0) {
-          lines.push(`${totalBoxes} Box${totalBoxes > 1 ? 'es' : ''}`);
-        } else if (totalLoosePcs > 0) {
-          lines.push(`${totalLoosePcs} Pcs`);
+        const defaultPack = 5;
+        const extraBoxes = Math.floor(totalLoosePcs / defaultPack);
+        const remLoose = totalLoosePcs % defaultPack;
+        const finalBoxes = totalBoxes + extraBoxes;
+
+        if (finalBoxes > 0 && remLoose > 0) {
+          lines.push(`${finalBoxes} Box${finalBoxes > 1 ? 'es' : ''} + ${remLoose} Pcs`);
+        } else if (finalBoxes > 0) {
+          lines.push(`${finalBoxes} Box${finalBoxes > 1 ? 'es' : ''}`);
+        } else if (remLoose > 0) {
+          lines.push(`${remLoose} Pcs`);
         }
       }
 
@@ -233,15 +238,44 @@ const PurchaseReportPrint = () => {
       try {
         setLoading(true);
 
-        const [prodRes, purRes, retRes] = await Promise.all([
+        const [prodRes, purRes, retRes, catRes] = await Promise.all([
           supabase.from('products').select('*'),
           supabase.from('supplier_purchases').select('*').order('id', { ascending: true }),
-          supabase.from('purchase_returns').select('*').order('id', { ascending: true })
+          supabase.from('purchase_returns').select('*').order('id', { ascending: true }),
+          supabase.from('inventory_categories').select('id, name, parent_id')
         ]);
 
         const allProducts = prodRes.data || [];
         const allPurchases = purRes.data || [];
         const allReturns = retRes.data || [];
+        const allCategories = catRes.data || [];
+
+        // Build category lookup and ancestor map
+        const catById = new Map<number, any>();
+        const catByName = new Map<string, any>();
+        allCategories.forEach((c: any) => {
+          if (c.id) catById.set(Number(c.id), c);
+          if (c.name) catByName.set(String(c.name).trim().toLowerCase(), c);
+        });
+
+        const getCategoryAncestors = (catName: string): string[] => {
+          const names: string[] = [];
+          let cur = catByName.get(String(catName || '').trim().toLowerCase());
+          let depth = 0;
+          while (cur && depth < 10) {
+            names.push(String(cur.name || '').trim().toLowerCase());
+            if (cur.parent_id) {
+              cur = catById.get(Number(cur.parent_id));
+            } else {
+              break;
+            }
+            depth++;
+          }
+          if (catName && !names.includes(String(catName).trim().toLowerCase())) {
+            names.push(String(catName).trim().toLowerCase());
+          }
+          return names;
+        };
 
         // Product lookup map
         const productLookup: Record<string, any> = {};
@@ -254,19 +288,127 @@ const PurchaseReportPrint = () => {
 
         const getProductMeta = (pName: string) => {
           const pKey = (pName || '').trim().toLowerCase();
-          const matched = productLookup[pKey];
-          const pCat = matched?.category || 'General';
-          const sCat = matched?.sub_category || 'General';
-          const lCat = matched?.sub_sub_category || matched?.category || 'General';
+          const matched = productLookup[pKey] || {};
+
+          let pCat = matched.sub_sub_category || matched.parent_category || '';
+          let sCat = matched.sub_category || '';
+          let lCat = matched.category || '';
+
+          // Dynamically verify and align 3-tier hierarchy from master category tables if needed
+          if (!pCat || (catByName.has(pCat.toLowerCase()) && catByName.get(pCat.toLowerCase())?.parent_id !== null)) {
+            if (lCat && catByName.get(lCat.toLowerCase())?.parent_id === null) {
+              pCat = matched.category;
+              lCat = matched.sub_sub_category || matched.sub_category || 'General';
+            } else if (matched.category && catByName.has(matched.category.toLowerCase())) {
+              const leafObj = catByName.get(matched.category.toLowerCase());
+              if (leafObj?.parent_id) {
+                const subObj = catById.get(Number(leafObj.parent_id));
+                if (subObj) {
+                  sCat = subObj.name;
+                  if (subObj.parent_id) {
+                    const parentObj = catById.get(Number(subObj.parent_id));
+                    if (parentObj) pCat = parentObj.name;
+                  } else {
+                    pCat = subObj.name;
+                  }
+                }
+              } else if (leafObj) {
+                pCat = leafObj.name;
+              }
+            }
+          }
+
+          pCat = pCat || 'General';
+          sCat = sCat || 'General';
+          lCat = lCat || pCat;
+
           const sku = matched?.sku || matched?.item_sr_no || '-';
-          const isTile = Boolean(String(pCat).toLowerCase().includes('tile') || String(sCat).toLowerCase().includes('tile'));
+          const isTile = Boolean(
+            String(pCat).toLowerCase().includes('tile') || 
+            String(sCat).toLowerCase().includes('tile') || 
+            String(lCat).toLowerCase().includes('tile') ||
+            Number(matched?.pieces_per_box || matched?.pcs_per_box || 0) > 1
+          );
           const uom = matched?.uom || (isTile ? 'BOX' : 'Nos');
-          const brand = matched?.brand || '-';
+          const brand = matched?.brand || matched?.bin || '-';
           return { parentCategory: pCat, subCategory: sCat, category: lCat, sku, uom, brand };
         };
 
         const startTimestamp = filters.dateFrom ? new Date(filters.dateFrom + 'T00:00:00').getTime() : 0;
         const endTimestamp = filters.dateTo ? new Date(filters.dateTo + 'T23:59:59.999').getTime() : Infinity;
+
+        const normalizeFilterList = (val: any): string[] => {
+          if (!val) return [];
+          const arr = Array.isArray(val) ? val : [val];
+          return arr
+            .map((x: any) => String(x || '').trim().toLowerCase())
+            .filter((x: string) => x && x !== 'all' && !x.startsWith('all '));
+        };
+
+        const vendorList = normalizeFilterList(filters.supplier || filters.vendor);
+        const locList = normalizeFilterList(filters.location);
+        const parentCatList = normalizeFilterList(filters.parentCategory || filters.category);
+        const subCatList = normalizeFilterList(filters.subCategory);
+        const subSubCatList = normalizeFilterList(filters.subSubCategory || filters.category);
+        const prodList = normalizeFilterList(filters.product);
+        const brandList = normalizeFilterList(filters.brand || filters.bin);
+        const uomList = normalizeFilterList(filters.uom);
+        const pMode = String(filters.purchaseType || filters.saleType || '').trim().toLowerCase();
+
+        const doesItemMatchCriteria = (it: any, purchaseHeader?: any) => {
+          if (!it) return false;
+          const pName = String(it.itemName || it.product_name || it.name || '').trim();
+          const pKey = pName.toLowerCase();
+          const { parentCategory: pCat, subCategory: sCat, category: lCat, brand, uom } = getProductMeta(pName);
+          const itemWh = String(it.warehouse || it.target_warehouse || purchaseHeader?.target_warehouse || purchaseHeader?.warehouse || '').trim().toLowerCase();
+
+          // Compile all category tags and ancestors for this product
+          const allCatTags = new Set<string>();
+          if (pCat) {
+            getCategoryAncestors(pCat).forEach(c => allCatTags.add(c));
+          }
+          if (sCat) {
+            getCategoryAncestors(sCat).forEach(c => allCatTags.add(c));
+          }
+          if (lCat) {
+            getCategoryAncestors(lCat).forEach(c => allCatTags.add(c));
+          }
+          if (pCat.toLowerCase().includes('tile') || sCat.toLowerCase().includes('tile') || lCat.toLowerCase().includes('tile')) {
+            allCatTags.add('tile');
+            allCatTags.add('tiles');
+          }
+
+          if (locList.length > 0) {
+            if (!itemWh || !locList.includes(itemWh)) return false;
+          }
+          if (prodList.length > 0) {
+            if (!prodList.includes(pKey)) return false;
+          }
+          if (parentCatList.length > 0) {
+            const matchesParent = parentCatList.some(pc => allCatTags.has(pc) || pc.includes(pCat.toLowerCase()) || pCat.toLowerCase().includes(pc));
+            if (!matchesParent) return false;
+          }
+          if (subCatList.length > 0) {
+            const matchesSub = subCatList.some(sc => allCatTags.has(sc) || sc.includes(sCat.toLowerCase()) || sCat.toLowerCase().includes(sc));
+            if (!matchesSub) return false;
+          }
+          if (subSubCatList.length > 0) {
+            const matchesSubSub = subSubCatList.some(ssc => allCatTags.has(ssc) || ssc.includes(lCat.toLowerCase()) || lCat.toLowerCase().includes(ssc));
+            if (!matchesSubSub) return false;
+          }
+          if (brandList.length > 0) {
+            const matchesBrand = brandList.some(b => 
+              brand.toLowerCase().includes(b) || 
+              b.includes(brand.toLowerCase()) || 
+              pKey.includes(b)
+            );
+            if (!matchesBrand) return false;
+          }
+          if (uomList.length > 0) {
+            if (!uomList.includes(uom.toLowerCase())) return false;
+          }
+          return true;
+        };
 
         // Common purchase filter logic
         const filterPurchaseRecord = (p: any) => {
@@ -274,29 +416,37 @@ const PurchaseReportPrint = () => {
           const t = rawDate ? new Date(String(rawDate).includes('T') ? String(rawDate) : String(rawDate) + 'T12:00:00').getTime() : 0;
           if (t < startTimestamp || t > endTimestamp) return false;
 
-          const selectedVendors = filters.supplier || filters.vendor;
-          if (selectedVendors && selectedVendors.length > 0) {
-            const list = Array.isArray(selectedVendors) ? selectedVendors : [selectedVendors];
-            const cleanList = list.filter(v => v && v !== 'All' && v !== 'All Suppliers' && v !== 'All Vendors');
-            if (cleanList.length > 0) {
-              const pSup = p.supplier_name || p.vendor_name;
-              if (!cleanList.includes(pSup)) return false;
-            }
+          // Vendor filter
+          if (vendorList.length > 0) {
+            const pSup = String(p.supplier_name || p.vendor_name || '').trim().toLowerCase();
+            if (!vendorList.includes(pSup)) return false;
           }
 
-          if (filters.location && filters.location.length > 0) {
-            const list = Array.isArray(filters.location) ? filters.location : [filters.location];
-            const cleanList = list.filter(l => l && l !== 'All' && l !== 'All Facilities' && l !== 'All Warehouses');
-            if (cleanList.length > 0) {
-              const pLoc = p.target_warehouse || p.warehouse;
-              if (!cleanList.includes(pLoc)) return false;
-            }
+          // Payment mode filter
+          if (pMode && pMode !== 'all') {
+            const rawTerm = String(p.payment_term || '').toLowerCase();
+            const isCash = rawTerm.includes('cash');
+            if (pMode === 'cash' && !isCash) return false;
+            if (pMode === 'credit' && isCash) return false;
           }
 
-          if (filters.purchaseType && filters.purchaseType !== 'All') {
-            const isCash = String(p.payment_term || '').toLowerCase() === 'cash';
-            if (filters.purchaseType === 'Cash' && !isCash) return false;
-            if (filters.purchaseType === 'Credit' && isCash) return false;
+          const items = parseItems(p.items);
+
+          // Location filter check
+          if (locList.length > 0) {
+            const headerLoc = String(p.target_warehouse || p.warehouse || '').trim().toLowerCase();
+            const matchesHeader = headerLoc && locList.includes(headerLoc);
+            const matchesItem = items.some((it: any) => {
+              const itemLoc = String(it.warehouse || it.target_warehouse || '').trim().toLowerCase();
+              return itemLoc && locList.includes(itemLoc);
+            });
+            if (!matchesHeader && !matchesItem) return false;
+          }
+
+          // Line item criteria check
+          const hasLineItemFilters = prodList.length > 0 || parentCatList.length > 0 || subCatList.length > 0 || subSubCatList.length > 0 || brandList.length > 0 || uomList.length > 0;
+          if (hasLineItemFilters) {
+            if (!items.some((it: any) => doesItemMatchCriteria(it, p))) return false;
           }
 
           return true;
@@ -308,17 +458,25 @@ const PurchaseReportPrint = () => {
           const t = rawDate ? new Date(String(rawDate).includes('T') ? String(rawDate) : String(rawDate) + 'T12:00:00').getTime() : 0;
           if (t < startTimestamp || t > endTimestamp) return false;
 
-          const selectedVendors = filters.supplier || filters.vendor;
-          if (selectedVendors && selectedVendors.length > 0 && !selectedVendors.includes('All')) {
-            const list = Array.isArray(selectedVendors) ? selectedVendors : [selectedVendors];
-            const rSup = r.supplier_name || r.vendor_name;
-            if (!list.includes(rSup)) return false;
+          if (vendorList.length > 0) {
+            const rSup = String(r.supplier_name || r.vendor_name || '').trim().toLowerCase();
+            if (!vendorList.includes(rSup)) return false;
           }
 
-          if (filters.location && filters.location.length > 0 && !filters.location.includes('All')) {
-            const list = Array.isArray(filters.location) ? filters.location : [filters.location];
-            const rLoc = r.source_warehouse || r.warehouse;
-            if (!list.includes(rLoc)) return false;
+          const items = parseItems(r.returned_items || r.items);
+          if (locList.length > 0) {
+            const headerLoc = String(r.source_warehouse || r.warehouse || '').trim().toLowerCase();
+            const matchesHeader = headerLoc && locList.includes(headerLoc);
+            const matchesItem = items.some((it: any) => {
+              const itemLoc = String(it.warehouse || it.source_warehouse || '').trim().toLowerCase();
+              return itemLoc && locList.includes(itemLoc);
+            });
+            if (!matchesHeader && !matchesItem) return false;
+          }
+
+          const hasLineItemFilters = prodList.length > 0 || parentCatList.length > 0 || subCatList.length > 0 || subSubCatList.length > 0 || brandList.length > 0 || uomList.length > 0;
+          if (hasLineItemFilters) {
+            if (!items.some((it: any) => doesItemMatchCriteria(it, r))) return false;
           }
 
           return true;
@@ -402,14 +560,24 @@ const PurchaseReportPrint = () => {
 
               const { parentCategory: pCat, subCategory: sCat, category: lCat, sku, uom, brand } = getProductMeta(pName);
 
-              if (filters.parentCategory && filters.parentCategory.length > 0 && !filters.parentCategory.includes('All')) {
-                if (!filters.parentCategory.includes(pCat)) return;
+              if (parentCatList.length > 0) {
+                const matches = parentCatList.some(fc => pCat.toLowerCase() === fc || pCat.toLowerCase().includes(fc) || fc.includes(pCat.toLowerCase()));
+                if (!matches) return;
               }
-              if (filters.subCategory && filters.subCategory.length > 0 && !filters.subCategory.includes('All')) {
-                if (!filters.subCategory.includes(sCat)) return;
+              if (subCatList.length > 0) {
+                const matches = subCatList.some(sc => sCat.toLowerCase() === sc || sCat.toLowerCase().includes(sc) || sc.includes(sCat.toLowerCase()));
+                if (!matches) return;
               }
-              if (filters.subSubCategory && filters.subSubCategory.length > 0 && !filters.subSubCategory.includes('All')) {
-                if (!filters.subSubCategory.includes(lCat)) return;
+              if (subSubCatList.length > 0) {
+                const matches = subSubCatList.some(ssc => lCat.toLowerCase() === ssc || lCat.toLowerCase().includes(ssc) || ssc.includes(lCat.toLowerCase()));
+                if (!matches) return;
+              }
+              if (brandList.length > 0) {
+                const matches = brandList.some(b => brand.toLowerCase().includes(b) || b.includes(brand.toLowerCase()) || pName.toLowerCase().includes(b));
+                if (!matches) return;
+              }
+              if (uomList.length > 0) {
+                if (!uomList.includes(uom.toLowerCase())) return;
               }
 
               const { parentNode, subNode, leafNode } = getOrCreateNodes(pCat, sCat, lCat);
@@ -458,11 +626,32 @@ const PurchaseReportPrint = () => {
               const pName = (it.itemName || it.product_name || it.name || '').trim();
               if (!pName) return;
 
-              if (filters.product && filters.product.length > 0 && !filters.product.includes('All')) {
-                if (!filters.product.includes(pName)) return;
+              if (prodList.length > 0) {
+                if (!prodList.includes(pName.toLowerCase())) return;
               }
 
-              const { parentCategory: pCat, subCategory: sCat, category: lCat } = getProductMeta(pName);
+              const { parentCategory: pCat, subCategory: sCat, category: lCat, brand, uom } = getProductMeta(pName);
+
+              if (parentCatList.length > 0) {
+                const matches = parentCatList.some(fc => pCat.toLowerCase() === fc || pCat.toLowerCase().includes(fc) || fc.includes(pCat.toLowerCase()));
+                if (!matches) return;
+              }
+              if (subCatList.length > 0) {
+                const matches = subCatList.some(sc => sCat.toLowerCase() === sc || sCat.toLowerCase().includes(sc) || sc.includes(sCat.toLowerCase()));
+                if (!matches) return;
+              }
+              if (subSubCatList.length > 0) {
+                const matches = subSubCatList.some(ssc => lCat.toLowerCase() === ssc || lCat.toLowerCase().includes(ssc) || ssc.includes(lCat.toLowerCase()));
+                if (!matches) return;
+              }
+              if (brandList.length > 0) {
+                const matches = brandList.some(b => brand.toLowerCase().includes(b) || b.includes(brand.toLowerCase()) || pName.toLowerCase().includes(b));
+                if (!matches) return;
+              }
+              if (uomList.length > 0) {
+                if (!uomList.includes(uom.toLowerCase())) return;
+              }
+
               const { parentNode, subNode, leafNode } = getOrCreateNodes(pCat, sCat, lCat);
               const qty = Number(it.qty || it.quantity || 1);
               const rate = Number(it.purchase_price ?? it.cost_price ?? it.unit_price ?? it.rate ?? 0);
@@ -587,10 +776,16 @@ const PurchaseReportPrint = () => {
                 if (!filters.product.includes(pName)) return;
               }
 
-              const { parentCategory: pCat, subCategory: sCat, sku, uom, brand } = getProductMeta(pName);
+              const { parentCategory: pCat, subCategory: sCat, category: lCat, sku, uom, brand } = getProductMeta(pName);
 
               if (filters.parentCategory && filters.parentCategory.length > 0 && !filters.parentCategory.includes('All')) {
                 if (!filters.parentCategory.includes(pCat)) return;
+              }
+              if (filters.subCategory && filters.subCategory.length > 0 && !filters.subCategory.includes('All')) {
+                if (!filters.subCategory.includes(sCat)) return;
+              }
+              if (filters.subSubCategory && filters.subSubCategory.length > 0 && !filters.subSubCategory.includes('All')) {
+                if (!filters.subSubCategory.includes(lCat)) return;
               }
               if (filters.bin && filters.bin.length > 0 && !filters.bin.includes('All')) {
                 if (!filters.bin.includes(brand)) return;
@@ -607,6 +802,7 @@ const PurchaseReportPrint = () => {
                   sku: it.sku || sku,
                   parent_category: pCat,
                   sub_category: sCat,
+                  category: lCat,
                   brand: it.brand || brand,
                   uom: it.uom || uom,
                   total_purchased_qty: 0,
@@ -676,7 +872,7 @@ const PurchaseReportPrint = () => {
 
             const lineItems = items.map((it: any, iIdx: number) => {
               const pName = (it.itemName || it.product_name || it.name || `Item ${iIdx + 1}`).trim();
-              const { parentCategory, brand, uom, sku } = getProductMeta(pName);
+              const { parentCategory, subCategory, category, brand, uom, sku } = getProductMeta(pName);
               const qty = Number(it.qty || it.quantity || 1);
               const rate = Number(it.purchase_price ?? it.cost_price ?? it.unit_price ?? it.rate ?? it.price ?? 0);
               const lineTotal = Number(it.total || it.amount || it.subtotal || (qty * rate) || 0);
@@ -685,7 +881,9 @@ const PurchaseReportPrint = () => {
                 sno: iIdx + 1,
                 product_name: pName,
                 sku: it.sku || sku,
-                category: parentCategory,
+                parent_category: parentCategory,
+                sub_category: subCategory,
+                category: category,
                 brand: it.brand || brand,
                 uom: it.uom || uom,
                 qty,
@@ -718,7 +916,26 @@ const PurchaseReportPrint = () => {
         // 4. REPORT: PURCHASE RETURNS & DEBIT LEDGER
         // ══════════════════════════════════════════════════════════════
         else if (rType === 'return') {
-          const pool = allReturns.filter(filterReturnRecord);
+          let pool = allReturns.filter(filterReturnRecord);
+          const hasLineItemFilters = prodList.length > 0 || parentCatList.length > 0 || subCatList.length > 0 || subSubCatList.length > 0 || brandList.length > 0 || uomList.length > 0 || locList.length > 0;
+          if (hasLineItemFilters) {
+            pool = pool.map(r => {
+              const allItems = parseItems(r.returned_items || r.items);
+              const matchingItems = allItems.filter(it => doesItemMatchCriteria(it, r));
+              const filteredTotal = matchingItems.reduce((sum: number, it: any) => {
+                const qty = Number(it.qty || it.quantity || 1);
+                const rate = Number(it.purchase_price ?? it.cost_price ?? it.unit_price ?? it.rate ?? it.price ?? 0);
+                return sum + Number(it.total || it.amount || it.subtotal || (qty * rate) || 0);
+              }, 0);
+              return {
+                ...r,
+                returned_items: matchingItems,
+                items: matchingItems,
+                total_amount: filteredTotal,
+                original_total_amount: r.total_amount
+              };
+            }).filter(r => r.items.length > 0);
+          }
           setReportRows(pool);
         }
 
@@ -727,24 +944,24 @@ const PurchaseReportPrint = () => {
         // ══════════════════════════════════════════════════════════════
         else {
           let pool = allPurchases.filter(filterPurchaseRecord);
-
-          if (filters.parentCategory && filters.parentCategory.length > 0 && !filters.parentCategory.includes('All')) {
-            pool = pool.filter(p => {
-              const items = parseItems(p.items);
-              return items.some(it => {
-                const { parentCategory } = getProductMeta(it.itemName || it.product_name || it.name || '');
-                return filters.parentCategory.includes(parentCategory);
-              });
-            });
+          const hasLineItemFilters = prodList.length > 0 || parentCatList.length > 0 || subCatList.length > 0 || subSubCatList.length > 0 || brandList.length > 0 || uomList.length > 0 || locList.length > 0;
+          if (hasLineItemFilters) {
+            pool = pool.map(p => {
+              const allItems = parseItems(p.items);
+              const matchingItems = allItems.filter(it => doesItemMatchCriteria(it, p));
+              const filteredTotal = matchingItems.reduce((sum: number, it: any) => {
+                const qty = Number(it.qty || it.quantity || 1);
+                const rate = Number(it.purchase_price ?? it.cost_price ?? it.unit_price ?? it.rate ?? it.price ?? 0);
+                return sum + Number(it.total || it.amount || it.subtotal || (qty * rate) || 0);
+              }, 0);
+              return {
+                ...p,
+                items: matchingItems,
+                total_amount: filteredTotal,
+                original_total_amount: p.total_amount
+              };
+            }).filter(p => p.items.length > 0);
           }
-
-          if (filters.product && filters.product.length > 0 && !filters.product.includes('All')) {
-            pool = pool.filter(p => {
-              const items = parseItems(p.items);
-              return items.some(it => filters.product.includes(it.itemName || it.product_name || it.name || ''));
-            });
-          }
-
           setReportRows(pool);
         }
       } catch (err: any) {
@@ -812,8 +1029,10 @@ const PurchaseReportPrint = () => {
           { header: 'S#', key: 'idx', width: 8, alignment: { horizontal: 'center' } },
           { header: 'Product Name', key: 'productName', width: 35 },
           { header: 'SKU', key: 'sku', width: 18 },
-          { header: 'Parent Category', key: 'category', width: 22 },
           { header: 'Brand', key: 'brand', width: 18 },
+          { header: 'Parent Category', key: 'parentCategory', width: 22 },
+          { header: 'Sub Category', key: 'subCategory', width: 22 },
+          { header: 'Leaf Category', key: 'category', width: 22 },
           { header: 'UOM', key: 'uom', width: 12, alignment: { horizontal: 'center' } },
           { header: 'Total Purchased Qty', key: 'totalQty', width: 20, numFmt: '#,##0', alignment: { horizontal: 'right' } },
           { header: 'Min Rate (PKR)', key: 'minRate', width: 18, numFmt: '#,##0.00', alignment: { horizontal: 'right' } },
@@ -828,8 +1047,10 @@ const PurchaseReportPrint = () => {
           idx: idx + 1,
           productName: r.product_name,
           sku: r.sku,
-          category: r.parent_category,
           brand: r.brand,
+          parentCategory: r.parent_category,
+          subCategory: r.sub_category,
+          category: r.category,
           uom: r.uom,
           totalQty: r.total_purchased_qty,
           minRate: r.min_unit_rate,
@@ -840,9 +1061,9 @@ const PurchaseReportPrint = () => {
           lastDate: r.latest_purchase_date
         }));
       } else if (rType === 'purchase-invoice-detail') {
-        filename = `Purchase_Invoice_Detail_${new Date().toISOString().split('T')[0]}`;
+        filename = `Purchase_Detail_${new Date().toISOString().split('T')[0]}`;
         columns = [
-          { header: 'Invoice No', key: 'invoiceNo', width: 20 },
+          { header: 'Purchase No', key: 'invoiceNo', width: 20 },
           { header: 'Supplier Name', key: 'supplierName', width: 30 },
           { header: 'Date', key: 'date', width: 16, alignment: { horizontal: 'center' } },
           { header: 'Warehouse', key: 'warehouse', width: 20 },
@@ -875,13 +1096,13 @@ const PurchaseReportPrint = () => {
       } else {
         columns = [
           { header: 'S#', key: 'idx', width: 8, alignment: { horizontal: 'center' } },
-          { header: 'Invoice No', key: 'docRef', width: 20 },
           { header: 'Processing Date', key: 'processingDate', width: 16, alignment: { horizontal: 'center' } },
+          { header: rType === 'return' ? 'Return No' : 'Purchase No', key: 'docRef', width: 20 },
           { header: 'Supplier / Vendor Name', key: 'vendorName', width: 32 },
           { header: 'Purchased Line Items / Products', key: 'productDetails', width: 50 },
           { header: 'Total Consignment Qty', key: 'totalQty', width: 22, alignment: { horizontal: 'center' } },
           { header: 'Payment Term', key: 'status', width: 18, alignment: { horizontal: 'center' } },
-          { header: 'Gross Invoice Amount (PKR)', key: 'totalAmount', width: 24, numFmt: '#,##0.00', alignment: { horizontal: 'right' } }
+          { header: rType === 'return' ? 'Gross Return Amount (PKR)' : 'Gross Purchase Amount (PKR)', key: 'totalAmount', width: 24, numFmt: '#,##0.00', alignment: { horizontal: 'right' } }
         ];
 
         exportData = reportRows.map((row, idx) => {
@@ -1103,6 +1324,53 @@ const PurchaseReportPrint = () => {
           )}
         </div>
 
+        {/* ── APPLIED MULTI-PARAMETER CONSTRAINTS (FOR PARAMETER BUILDER) ── */}
+        {rType === 'purchase-query' && (
+          <div className="bg-slate-50 border border-slate-300 rounded p-3 font-mono text-[10.5px] print:border-black space-y-1.5 shadow-2xs">
+            <div className="flex items-center justify-between">
+              <span className="font-extrabold text-slate-800 uppercase tracking-wider text-[10px] flex items-center gap-1.5">
+                🔍 APPLIED QUERY CONSTRAINTS &amp; SELECTION CRITERIA:
+              </span>
+              <span className="text-[9.5px] text-slate-500 font-bold">
+                {reportRows.length} Matching Consignment(s) Found
+              </span>
+            </div>
+            <div className="flex flex-wrap gap-2 text-slate-700">
+              <span className="bg-white px-2 py-0.5 rounded border border-slate-300">
+                <b>Vendor:</b> {filters.supplier?.length > 0 && !filters.supplier.includes('All') ? (Array.isArray(filters.supplier) ? filters.supplier.join(', ') : filters.supplier) : filters.vendor?.length > 0 && !filters.vendor.includes('All') ? (Array.isArray(filters.vendor) ? filters.vendor.join(', ') : filters.vendor) : 'All Vendors'}
+              </span>
+              <span className="bg-white px-2 py-0.5 rounded border border-slate-300">
+                <b>Warehouse:</b> {filters.location?.length > 0 && !filters.location.includes('All') ? (Array.isArray(filters.location) ? filters.location.join(', ') : filters.location) : 'All Facilities'}
+              </span>
+              {filters.parentCategory && filters.parentCategory.length > 0 && !filters.parentCategory.includes('All') && (
+                <span className="bg-emerald-50 text-emerald-900 border border-emerald-300 px-2 py-0.5 rounded font-bold">
+                  <b>Category:</b> {Array.isArray(filters.parentCategory) ? filters.parentCategory.join(', ') : filters.parentCategory}
+                </span>
+              )}
+              {filters.subCategory && filters.subCategory.length > 0 && !filters.subCategory.includes('All') && (
+                <span className="bg-emerald-50 text-emerald-900 border border-emerald-300 px-2 py-0.5 rounded font-bold">
+                  <b>Sub-Category:</b> {Array.isArray(filters.subCategory) ? filters.subCategory.join(', ') : filters.subCategory}
+                </span>
+              )}
+              {filters.product && filters.product.length > 0 && !filters.product.includes('All') && (
+                <span className="bg-emerald-50 text-emerald-900 border border-emerald-300 px-2 py-0.5 rounded font-bold">
+                  <b>Queried Product:</b> {Array.isArray(filters.product) ? filters.product.join(', ') : filters.product}
+                </span>
+              )}
+              {(filters.brand || filters.bin) && ((filters.brand?.length > 0 && !filters.brand.includes('All')) || (filters.bin?.length > 0 && !filters.bin.includes('All'))) && (
+                <span className="bg-blue-50 text-blue-900 border border-blue-300 px-2 py-0.5 rounded font-bold">
+                  <b>Brand:</b> {Array.isArray(filters.brand || filters.bin) ? (filters.brand || filters.bin).join(', ') : (filters.brand || filters.bin)}
+                </span>
+              )}
+              {(filters.purchaseType || filters.saleType) && (filters.purchaseType !== 'All' && filters.saleType !== 'All') && (
+                <span className="bg-purple-50 text-purple-900 border border-purple-300 px-2 py-0.5 rounded font-bold">
+                  <b>Payment Term:</b> {filters.purchaseType || filters.saleType}
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* ── PAGINATION ── */}
         <ReportPagination
           totalItems={reportRows.length}
@@ -1304,23 +1572,27 @@ const PurchaseReportPrint = () => {
             <table className="w-full table-auto border border-collapse border-black text-[11px] font-sans text-left print:w-full">
               <thead className="bg-gray-100 border-b border-black font-black uppercase text-black font-mono text-[10px]">
                 <tr>
-                  <th className="p-1.5 border border-black text-center w-12">S#</th>
-                  <th className="p-1.5 border border-black">Target Product Description / SKU</th>
-                  <th className="p-1.5 border border-black w-28">Parent Category</th>
-                  <th className="p-1.5 border border-black w-24">Brand</th>
-                  <th className="p-1.5 border border-black text-center w-16">UOM</th>
-                  <th className="p-1.5 border border-black text-right w-24">Inward Qty</th>
-                  <th className="p-1.5 border border-black text-right w-28">Min Rate (PKR)</th>
-                  <th className="p-1.5 border border-black text-right w-28">Max Rate (PKR)</th>
-                  <th className="p-1.5 border border-black text-right w-28">Avg Rate (PKR)</th>
-                  <th className="p-1.5 border border-black text-right pr-3 w-36">Total Spend (PKR)</th>
-                  <th className="p-1.5 border border-black text-center w-20 print-hidden-element print:hidden">Audit Trace</th>
+                  <th rowSpan={2} className="p-1.5 border border-black text-center w-12">S#</th>
+                  <th rowSpan={2} className="p-1.5 border border-black">Target Product Description / SKU</th>
+                  <th rowSpan={2} className="p-1.5 border border-black w-24">Brand</th>
+                  <th colSpan={3} className="p-1 border border-black text-center bg-gray-200">Category Classification</th>
+                  <th rowSpan={2} className="p-1.5 border border-black text-center w-16">UOM</th>
+                  <th rowSpan={2} className="p-1.5 border border-black text-right w-24">Inward Qty</th>
+                  <th rowSpan={2} className="p-1.5 border border-black text-right w-28">Min Rate (PKR)</th>
+                  <th rowSpan={2} className="p-1.5 border border-black text-right w-28">Max Rate (PKR)</th>
+                  <th rowSpan={2} className="p-1.5 border border-black text-right w-28">Avg Rate (PKR)</th>
+                  <th rowSpan={2} className="p-1.5 border border-black text-right pr-3 w-36">Total Spend (PKR)</th>
+                </tr>
+                <tr className="bg-gray-100 border-b border-black font-black uppercase text-black font-mono text-[9px]">
+                  <th className="p-1 border border-black text-left">Parent</th>
+                  <th className="p-1 border border-black text-left">Sub</th>
+                  <th className="p-1 border border-black text-left">Leaf</th>
                 </tr>
               </thead>
               <tbody>
                 {paginatedRows.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="text-center py-10 font-bold italic border border-black text-gray-400 bg-gray-50">
+                    <td colSpan={12} className="text-center py-10 font-bold italic border border-black text-gray-400 bg-gray-50">
                       No product purchase history records found.
                     </td>
                   </tr>
@@ -1336,29 +1608,22 @@ const PurchaseReportPrint = () => {
                             {prod.product_name}
                             {prod.sku && prod.sku !== '-' && <span className="ml-2 text-[10px] text-slate-500 font-mono">[{prod.sku}]</span>}
                           </td>
-                          <td className="p-1.5 border border-black font-sans text-slate-700">{prod.parent_category}</td>
-                          <td className="p-1.5 border border-black font-sans text-slate-600">{prod.brand}</td>
+                          <td className="p-1.5 border border-black font-sans text-slate-600">{prod.brand || '-'}</td>
+                          <td className="p-1.5 border border-black font-sans text-slate-700">{prod.parent_category || '-'}</td>
+                          <td className="p-1.5 border border-black font-sans text-slate-700">{prod.sub_category || '-'}</td>
+                          <td className="p-1.5 border border-black font-sans text-slate-700">{prod.category || '-'}</td>
                           <td className="p-1.5 border border-black text-center uppercase text-slate-500">{prod.uom}</td>
                           <td className="p-1.5 border border-black text-right font-bold text-slate-900">{Number(prod.total_purchased_qty).toLocaleString()}</td>
                           <td className="p-1.5 border border-black text-right text-slate-700">Rs. {Number(prod.min_unit_rate).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                           <td className="p-1.5 border border-black text-right text-slate-700">Rs. {Number(prod.max_unit_rate).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                           <td className="p-1.5 border border-black text-right font-bold text-slate-800">Rs. {Number(prod.avg_unit_rate).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                           <td className="p-1.5 border border-black text-right pr-3 font-black text-emerald-800">Rs. {Number(prod.total_procurement_cost).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                          <td className="p-1.5 border border-black text-center print-hidden-element print:hidden">
-                            <button
-                              type="button"
-                              onClick={() => toggleRowExpanded(prod.product_name)}
-                              className="text-[10px] font-bold px-2 py-0.5 rounded border border-slate-300 bg-white hover:bg-slate-100 cursor-pointer shadow-2xs"
-                            >
-                              {isExpanded ? 'Hide' : 'Trace'}
-                            </button>
-                          </td>
                         </tr>
 
                         {/* Expandable batch transaction history */}
                         {isExpanded && (
                           <tr className="bg-slate-50 border-b-2 border-black">
-                            <td colSpan={11} className="p-3 border border-black">
+                            <td colSpan={12} className="p-3 border border-black">
                               <div className="text-[11px] font-black uppercase text-slate-800 mb-2 font-mono flex justify-between">
                                 <span>Batch Inward Procurement Audit for {prod.product_name}</span>
                                 <span>{prod.transactions.length} Inward Batch(es) Logged</span>
@@ -1368,8 +1633,8 @@ const PurchaseReportPrint = () => {
                                 <thead className="bg-slate-100 border-b border-slate-300 font-mono text-[9.5px] uppercase text-slate-700">
                                   <tr>
                                     <th className="p-1 border border-slate-300 text-center w-10">S#</th>
-                                    <th className="p-1 border border-slate-300 w-28">Invoice No</th>
                                     <th className="p-1 border border-slate-300 w-24 text-center">Date</th>
+                                    <th className="p-1 border border-slate-300 w-28">Purchase No</th>
                                     <th className="p-1 border border-slate-300">Supplier / Vendor</th>
                                     <th className="p-1 border border-slate-300 w-32">Warehouse</th>
                                     <th className="p-1 border border-slate-300 text-right w-20">Batch Qty</th>
@@ -1382,8 +1647,8 @@ const PurchaseReportPrint = () => {
                                   {prod.transactions.map((tx: any, tIdx: number) => (
                                     <tr key={tIdx} className="border-b border-slate-200 hover:bg-slate-50 font-mono">
                                       <td className="p-1 border border-slate-300 text-center text-slate-400">{tIdx + 1}</td>
-                                      <td className="p-1 border border-slate-300 font-bold text-primary">{tx.purchase_no}</td>
                                       <td className="p-1 border border-slate-300 text-center text-slate-600">{tx.date}</td>
+                                      <td className="p-1 border border-slate-300 font-bold text-primary">{tx.purchase_no}</td>
                                       <td className="p-1 border border-slate-300 font-sans font-semibold text-slate-800">{tx.supplier_name}</td>
                                       <td className="p-1 border border-slate-300 font-sans text-slate-600">{tx.warehouse}</td>
                                       <td className="p-1 border border-slate-300 text-right font-bold text-slate-900">{tx.qty.toLocaleString()} {tx.uom}</td>
@@ -1404,7 +1669,7 @@ const PurchaseReportPrint = () => {
               </tbody>
               <tfoot>
                 <tr className="bg-gray-100 border-t-2 border-black font-black font-mono text-xs">
-                  <td colSpan={5} className="p-2 border border-black text-right uppercase">
+                  <td colSpan={7} className="p-2 border border-black text-right uppercase">
                     Grand Total ({reportRows.length} Products):
                   </td>
                   <td className="p-2 border border-black text-right font-black">
@@ -1425,59 +1690,108 @@ const PurchaseReportPrint = () => {
         {/* VIEW 3: PURCHASE INVOICE ITEMIZED DETAIL REPORT */}
         {/* ══════════════════════════════════════════════════════════════ */}
         {rType === 'purchase-invoice-detail' && (
-          <div className="w-full space-y-4">
-            {paginatedRows.length === 0 ? (
-              <div className="text-center py-10 font-bold italic border border-black text-gray-400 bg-gray-50">
-                No purchase invoices found matching active report parameters.
-              </div>
-            ) : (
-              paginatedRows.map((inv, idx) => {
-                const invKey = inv.id || inv.purchase_no;
-                const isExpanded = activeViewMode === 'detailed' || expandedRowKeys.has(invKey);
+          activeViewMode === 'summary' ? (
+            <div className="w-full overflow-x-auto">
+              <table className="w-full table-auto border border-collapse border-black text-[11px] font-sans antialiased text-left print:w-full">
+                <thead>
+                  <tr className="bg-gray-100 border-b border-black font-black uppercase text-black font-mono text-[10px]">
+                    <th className="p-1.5 border border-black text-center w-10">S#</th>
+                    <th className="p-1.5 border border-black text-center w-24">Date</th>
+                    <th className="p-1.5 border border-black w-32 font-mono">Purchase No</th>
+                    <th className="p-1.5 border border-black">Supplier / Vendor</th>
+                    <th className="p-1.5 border border-black w-28">Warehouse</th>
+                    <th className="p-1.5 border border-black text-center w-24">Items Count</th>
+                    <th className="p-1.5 border border-black text-right w-28">Total Units</th>
+                    <th className="p-1.5 border border-black text-right pr-3 w-36">Total Amount (PKR)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedRows.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="text-center py-10 font-bold italic border border-black text-gray-400 bg-gray-50">
+                        No purchase invoices found matching active report parameters.
+                      </td>
+                    </tr>
+                  ) : (
+                    paginatedRows.map((inv, idx) => (
+                      <tr key={inv.id || inv.purchase_no} className="border-b border-black font-mono text-xs hover:bg-gray-50">
+                        <td className="p-1.5 border border-black text-center text-gray-400">{startIndex + idx + 1}</td>
+                        <td className="p-1.5 border border-black text-center text-slate-700">{inv.purchase_date}</td>
+                        <td className="p-1.5 border border-black font-bold uppercase text-slate-900">{inv.purchase_no}</td>
+                        <td className="p-1.5 border border-black font-sans font-bold text-slate-800">{inv.supplier_name}</td>
+                        <td className="p-1.5 border border-black font-sans text-slate-600">{inv.warehouse}</td>
+                        <td className="p-1.5 border border-black text-center font-bold text-slate-700">{inv.line_items?.length || 0}</td>
+                        <td className="p-1.5 border border-black text-right font-bold text-slate-900">{Number(inv.total_units || 0).toLocaleString()}</td>
+                        <td className="p-1.5 border border-black text-right pr-3 font-black text-emerald-800">
+                          Rs. {Number(inv.total_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+                <tfoot className="bg-gray-200 border-t-2 border-black font-black text-xs font-mono">
+                  <tr>
+                    <td colSpan={6} className="p-2 border border-black text-right uppercase">Total Procurement Spend:</td>
+                    <td className="p-2 border border-black text-right">
+                      {reportRows.reduce((s, r) => s + Number(r.total_units || 0), 0).toLocaleString()}
+                    </td>
+                    <td className="p-2 border border-black text-right pr-3 text-emerald-900 font-black">
+                      Rs. {reportRows.reduce((s, r) => s + Number(r.total_amount || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          ) : (
+            <div className="w-full space-y-4">
+              {paginatedRows.length === 0 ? (
+                <div className="text-center py-10 font-bold italic border border-black text-gray-400 bg-gray-50">
+                  No purchase invoices found matching active report parameters.
+                </div>
+              ) : (
+                paginatedRows.map((inv, idx) => {
+                  const invKey = inv.id || inv.purchase_no;
 
-                return (
-                  <div key={invKey} className="border-2 border-black rounded overflow-hidden shadow-xs print:break-inside-avoid">
-                    {/* Invoice Header Banner */}
-                    <div className="bg-slate-100 p-2.5 border-b border-black flex justify-between items-center font-mono">
-                      <div className="flex items-center gap-3">
-                        <span className="text-xs font-bold bg-primary text-white px-2 py-0.5 rounded">
-                          #{startIndex + idx + 1}
-                        </span>
-                        <span className="text-xs font-black uppercase text-slate-900 tracking-wide">
-                          {inv.purchase_no}
-                        </span>
-                        <span className="text-xs font-sans font-bold text-slate-700">
-                          • {inv.supplier_name}
-                        </span>
+                  return (
+                    <div key={invKey} className="border-2 border-black rounded overflow-hidden shadow-xs print:break-inside-avoid">
+                      {/* Invoice Header Banner */}
+                      <div className="bg-slate-100 p-2.5 border-b border-black flex justify-between items-center font-mono">
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs font-bold bg-primary text-white px-2 py-0.5 rounded">
+                            #{startIndex + idx + 1}
+                          </span>
+                          <span className="text-xs font-black uppercase text-slate-900 tracking-wide">
+                            {inv.purchase_no}
+                          </span>
+                          <span className="text-xs font-sans font-bold text-slate-700">
+                            • {inv.supplier_name}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-4 text-xs">
+                          <span className="text-slate-600 font-sans">Warehouse: <b>{inv.warehouse}</b></span>
+                          <span className="text-slate-600">Date: <b>{inv.purchase_date}</b></span>
+                          <span className="font-black text-emerald-800 text-sm">Total: Rs. {Number(inv.total_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-4 text-xs">
-                        <span className="text-slate-600 font-sans">Warehouse: <b>{inv.warehouse}</b></span>
-                        <span className="text-slate-600">Date: <b>{inv.purchase_date}</b></span>
-                        <span className="font-black text-emerald-800 text-sm">Total: Rs. {Number(inv.total_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
-                        <button
-                          type="button"
-                          onClick={() => toggleRowExpanded(invKey)}
-                          className="text-[10px] font-bold px-2 py-0.5 rounded border border-slate-300 bg-white hover:bg-slate-200 cursor-pointer print-hidden-element print:hidden"
-                        >
-                          {isExpanded ? 'Collapse' : 'Itemize'}
-                        </button>
-                      </div>
-                    </div>
 
-                    {/* Line Items Table */}
-                    {isExpanded && (
+                      {/* Line Items Table */}
                       <div className="p-3 bg-white">
                         <table className="w-full table-auto border border-collapse border-slate-300 text-[10.5px] font-sans text-left">
                           <thead className="bg-slate-100 border-b border-slate-300 font-mono text-[9.5px] uppercase text-slate-700">
                             <tr>
-                              <th className="p-1 border border-slate-300 text-center w-10">S#</th>
-                              <th className="p-1 border border-slate-300">Merchandise Item / SKU Description</th>
-                              <th className="p-1 border border-slate-300 w-28">Category</th>
-                              <th className="p-1 border border-slate-300 w-24">Brand</th>
-                              <th className="p-1 border border-slate-300 text-center w-16">UOM</th>
-                              <th className="p-1 border border-slate-300 text-right w-20">Inward Qty</th>
-                              <th className="p-1 border border-slate-300 text-right w-28">Unit Cost (PKR)</th>
-                              <th className="p-1 border border-slate-300 text-right pr-2 w-36">Line Total (PKR)</th>
+                              <th rowSpan={2} className="p-1 border border-slate-300 text-center w-10">S#</th>
+                              <th rowSpan={2} className="p-1 border border-slate-300">Merchandise Item / SKU Description</th>
+                              <th rowSpan={2} className="p-1 border border-slate-300 w-24">Brand</th>
+                              <th colSpan={3} className="p-1 border border-slate-300 text-center bg-slate-200">Category Classification</th>
+                              <th rowSpan={2} className="p-1 border border-slate-300 text-center w-16">UOM</th>
+                              <th rowSpan={2} className="p-1 border border-slate-300 text-right w-20">Inward Qty</th>
+                              <th rowSpan={2} className="p-1 border border-slate-300 text-right w-28">Unit Cost (PKR)</th>
+                              <th rowSpan={2} className="p-1 border border-slate-300 text-right pr-2 w-36">Line Total (PKR)</th>
+                            </tr>
+                            <tr className="bg-slate-100 border-b border-slate-300 font-mono text-[8.5px] uppercase text-slate-700">
+                              <th className="p-1 border border-slate-300 text-left">Parent</th>
+                              <th className="p-1 border border-slate-300 text-left">Sub</th>
+                              <th className="p-1 border border-slate-300 text-left">Leaf</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -1485,8 +1799,10 @@ const PurchaseReportPrint = () => {
                               <tr key={it.sno} className="border-b border-slate-200 hover:bg-slate-50 font-mono">
                                 <td className="p-1 border border-slate-300 text-center text-slate-400">{it.sno}</td>
                                 <td className="p-1 border border-slate-300 font-sans font-medium text-slate-900">{it.product_name}</td>
-                                <td className="p-1 border border-slate-300 font-sans text-slate-600">{it.category}</td>
-                                <td className="p-1 border border-slate-300 font-sans text-slate-600">{it.brand}</td>
+                                <td className="p-1 border border-slate-300 font-sans text-slate-600">{it.brand || '-'}</td>
+                                <td className="p-1 border border-slate-300 font-sans text-slate-600">{it.parent_category || '-'}</td>
+                                <td className="p-1 border border-slate-300 font-sans text-slate-600">{it.sub_category || '-'}</td>
+                                <td className="p-1 border border-slate-300 font-sans text-slate-600">{it.category || '-'}</td>
                                 <td className="p-1 border border-slate-300 text-center uppercase text-slate-500">{it.uom}</td>
                                 <td className="p-1 border border-slate-300 text-right font-bold text-slate-900">{Number(it.qty).toLocaleString()}</td>
                                 <td className="p-1 border border-slate-300 text-right text-slate-700">Rs. {Number(it.rate).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
@@ -1496,7 +1812,7 @@ const PurchaseReportPrint = () => {
                           </tbody>
                           <tfoot className="bg-slate-50 font-mono font-bold text-xs border-t border-slate-300">
                             <tr>
-                              <td colSpan={5} className="p-1.5 border border-slate-300 text-right uppercase text-slate-700">
+                              <td colSpan={7} className="p-1.5 border border-slate-300 text-right uppercase text-slate-700">
                                 Bill Subtotal ({inv.line_items.length} Items):
                               </td>
                               <td className="p-1.5 border border-slate-300 text-right text-slate-900 font-black">
@@ -1510,12 +1826,12 @@ const PurchaseReportPrint = () => {
                           </tfoot>
                         </table>
                       </div>
-                    )}
-                  </div>
-                );
-              })
-            )}
-          </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          )
         )}
 
         {/* ══════════════════════════════════════════════════════════════ */}
@@ -1527,13 +1843,13 @@ const PurchaseReportPrint = () => {
               <thead>
                 <tr className="bg-gray-100 border-b border-black font-black uppercase text-black font-mono text-[10px]">
                   <th className="p-1.5 border border-black text-center w-10">S#</th>
-                  <th className="p-1.5 border border-black w-24">Invoice No</th>
                   <th className="p-1.5 border border-black text-center w-24">Date</th>
+                  <th className="p-1.5 border border-black w-24">{rType === 'return' ? 'Return No' : 'Purchase No'}</th>
                   <th className="p-1.5 border border-black w-40">Supplier / Vendor</th>
-                  <th className="p-1.5 border border-black">Purchased Product Details / Line Items</th>
+                  <th className="p-1.5 border border-black">{rType === 'return' ? 'Returned Merchandise / Line Items' : 'Purchased Product Details / Line Items'}</th>
                   <th className="p-1.5 border border-black text-right w-32">Total Qty</th>
-                  <th className="p-1.5 border border-black text-center w-24">Payment Term</th>
-                  <th className="p-1.5 border border-black text-right pr-3 w-36">Gross Amount</th>
+                  <th className="p-1.5 border border-black text-center w-24">{rType === 'return' ? 'Adjustment Term' : 'Payment Term'}</th>
+                  <th className="p-1.5 border border-black text-right pr-3 w-36">{rType === 'return' ? 'Debit Amount' : 'Gross Amount'}</th>
                 </tr>
               </thead>
               <tbody>
@@ -1553,8 +1869,8 @@ const PurchaseReportPrint = () => {
                     return (
                       <tr key={row.id || idx} className="border-b border-black hover:bg-gray-50 font-semibold font-mono text-xs">
                         <td className="p-1.5 border border-black text-center text-gray-400">{startIndex + idx + 1}</td>
-                        <td className="p-1.5 border border-black text-primary font-black uppercase whitespace-nowrap">{displayDocRef}</td>
                         <td className="p-1.5 border border-black text-center text-gray-600 whitespace-nowrap text-[10.5px]">{displayProcessingDate}</td>
+                        <td className="p-1.5 border border-black text-primary font-black uppercase whitespace-nowrap">{displayDocRef}</td>
                         <td className="p-1.5 border border-black text-black font-sans font-bold">{displayAccountTitle}</td>
                         <td className="p-1.5 border border-black font-sans">
                           {items.length === 0 ? (
@@ -1568,11 +1884,14 @@ const PurchaseReportPrint = () => {
                                 const itemWh = it.warehouse || it.target_warehouse || row.target_warehouse;
 
                                 return (
-                                  <div key={iIdx} className="flex items-center justify-between gap-3 text-[10.5px] border-b border-slate-100 last:border-0 pb-0.5 last:pb-0 font-mono">
-                                    <span className="font-sans font-semibold text-slate-900 truncate">
+                                  <div
+                                    key={iIdx}
+                                    className="flex items-center justify-between gap-3 text-[10.5px] border-b border-slate-100 last:border-0 pb-0.5 last:pb-0 font-mono"
+                                  >
+                                    <span className="font-sans font-semibold text-slate-900 truncate flex items-center gap-1">
                                       {pName}
                                       {itemWh && (
-                                        <span className="ml-1.5 text-[9.5px] text-teal-800 font-bold bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200">
+                                        <span className="ml-1 text-[9.5px] text-teal-800 font-bold bg-teal-50 px-1.5 py-0.5 rounded border border-teal-200">
                                           [{itemWh}]
                                         </span>
                                       )}

@@ -3,8 +3,9 @@ import { MdFirstPage, MdLastPage, MdChevronLeft, MdChevronRight } from 'react-ic
 
 interface ReportPaginationProps {
   currentPage: number;
-  totalItems: number;
-  pageSize: number;
+  totalItems?: number;
+  totalCount?: number;
+  pageSize: number | string;
   onPageChange: (page: number) => void;
   onPageSizeChange?: (size: number) => void;
   pageSizeOptions?: number[];
@@ -14,17 +15,21 @@ interface ReportPaginationProps {
 export const ReportPagination: React.FC<ReportPaginationProps> = ({
   currentPage,
   totalItems,
+  totalCount,
   pageSize,
   onPageChange,
   onPageSizeChange,
   pageSizeOptions = [15, 25, 50, 100],
   itemLabel = 'records'
 }) => {
-  if (totalItems === 0) return null;
+  const actualTotal = Number(totalItems !== undefined ? totalItems : (totalCount !== undefined ? totalCount : 0));
+  if (actualTotal === 0) return null;
 
-  const totalPages = Math.ceil(totalItems / pageSize) || 1;
-  const startIdx = (currentPage - 1) * pageSize + 1;
-  const endIdx = Math.min(currentPage * pageSize, totalItems);
+  const numericPageSize = pageSize === 'all' || pageSize === 'All' ? actualTotal : (Number(pageSize) || 25);
+  const totalPages = Math.max(1, Math.ceil(actualTotal / numericPageSize));
+  const validCurrentPage = Math.min(Math.max(1, Number(currentPage) || 1), totalPages);
+  const startIdx = (validCurrentPage - 1) * numericPageSize + 1;
+  const endIdx = Math.min(validCurrentPage * numericPageSize, actualTotal);
 
   // Generate visible page numbers (max 5 around current page)
   const getPageNumbers = () => {

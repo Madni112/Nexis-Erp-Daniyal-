@@ -192,7 +192,7 @@ export const SearchableMultiSelect: React.FC<SearchableMultiSelectProps> = ({
                 );
               })
             ) : (
-              <div className="p-3 text-center text-[11px] text-gray-400 italic">No matching {placeholder.toLowerCase()}s</div>
+              <div className="p-3 text-center text-[11px] text-gray-400 italic">No matching {placeholder.replace(/^all\s+/i, '').toLowerCase()} found</div>
             )}
           </div>
         </div>

@@ -31,7 +31,12 @@ import {
   MdClose,
   MdCardGiftcard,
   MdReceiptLong,
-  MdCategory
+  MdCategory,
+  MdTimeline,
+  MdHistory,
+  MdCompareArrows,
+  MdPriceCheck,
+  MdFormatListBulleted
 } from 'react-icons/md';
 import { toast } from 'react-hot-toast';
 
@@ -121,7 +126,7 @@ const REPORT_REGISTRY: Record<string, ReportConfig> = {
     icon: MdReceipt,
     targetPrintPath: '/Reports/Sales-Report/Print',
     printType: 'invoice',
-    fields: ['invoice', 'customer', 'location']
+    fields: ['invoice', 'customer', 'location', 'parentCategory', 'subCategory', 'subSubCategory', 'brand', 'product']
   },
   'commercial-sale-ledger': {
     id: 'commercial-sale-ledger',
@@ -143,7 +148,7 @@ const REPORT_REGISTRY: Record<string, ReportConfig> = {
     icon: MdAssessment,
     targetPrintPath: '/Reports/Sales-Report/Print',
     printType: 'sales-query',
-    fields: ['customer', 'salesman', 'transport', 'parentCategory', 'subCategory', 'subSubCategory', 'product', 'brand', 'uom', 'location', 'saleType', 'saleMethod']
+    fields: ['customer', 'salesman', 'transport', 'parentCategory', 'subCategory', 'subSubCategory', 'product', 'brand', 'location', 'saleType', 'saleMethod']
   },
   'sales-return-ledger': {
     id: 'sales-return-ledger',
@@ -153,7 +158,7 @@ const REPORT_REGISTRY: Record<string, ReportConfig> = {
     icon: MdLayers,
     targetPrintPath: '/Reports/Sales-Report/Print',
     printType: 'return',
-    fields: ['customer', 'salesman', 'transport', 'product', 'location']
+    fields: ['customer', 'salesman', 'transport', 'location', 'parentCategory', 'subCategory', 'subSubCategory', 'brand', 'product']
   },
   'customer-sales-breakdown': {
     id: 'customer-sales-breakdown',
@@ -204,7 +209,7 @@ const REPORT_REGISTRY: Record<string, ReportConfig> = {
     icon: MdCategory,
     targetPrintPath: '/Reports/Purchase-Report/Print',
     printType: 'category-purchases',
-    fields: ['parentCategory', 'subCategory', 'subSubCategory', 'product', 'supplier', 'location']
+    fields: ['parentCategory', 'subCategory', 'subSubCategory', 'product', 'brand', 'supplier']
   },
   'product-purchase-history': {
     id: 'product-purchase-history',
@@ -230,7 +235,7 @@ const REPORT_REGISTRY: Record<string, ReportConfig> = {
     icon: MdReceiptLong,
     targetPrintPath: '/Reports/Purchase-Report/Print',
     printType: 'purchase-invoice-detail',
-    fields: ['invoice', 'supplier', 'location', 'product', 'brand', 'parentCategory']
+    fields: ['invoice', 'supplier', 'location', 'parentCategory', 'subCategory', 'subSubCategory', 'brand', 'product']
   },
   'purchase-query-center': {
     id: 'purchase-query-center',
@@ -240,7 +245,7 @@ const REPORT_REGISTRY: Record<string, ReportConfig> = {
     icon: MdBarChart,
     targetPrintPath: '/Reports/Purchase-Report/Print',
     printType: 'purchase-query',
-    fields: ['supplier', 'location', 'parentCategory', 'product', 'brand']
+    fields: ['supplier', 'location', 'parentCategory', 'subCategory', 'subSubCategory', 'brand', 'product']
   },
   'vendor-return-ledger': {
     id: 'vendor-return-ledger',
@@ -250,10 +255,23 @@ const REPORT_REGISTRY: Record<string, ReportConfig> = {
     icon: MdCorporateFare,
     targetPrintPath: '/Reports/Purchase-Report/Print',
     printType: 'return',
-    fields: ['supplier', 'location', 'product']
+    fields: ['supplier', 'location', 'parentCategory', 'subCategory', 'subSubCategory', 'brand', 'product']
   },
 
   // ── INVENTORY & STOCK ──
+  'stock-activity-ledger': {
+    id: 'stock-activity-ledger',
+    title: 'Stock Activity & Movement Ledger',
+    categoryName: 'Inventory & Warehouses',
+    subtitle: 'Chronological inventory trail auditing opening balances, inward procurement receipts, sales issues, net movements, and closing stock.',
+    badge: 'AUDITED',
+    badgeType: 'audited',
+    icon: MdTimeline,
+    targetPrintPath: '/Reports/Stock-Report/Print',
+    printType: 'stock',
+    tab: 1,
+    fields: ['location', 'parentCategory', 'subCategory', 'subSubCategory', 'brand', 'product']
+  },
   'current-stock-balance': {
     id: 'current-stock-balance',
     title: 'Stock Balances & Valuation Registry',
@@ -264,29 +282,109 @@ const REPORT_REGISTRY: Record<string, ReportConfig> = {
     icon: MdInventory,
     targetPrintPath: '/Reports/Stock-Report/Print',
     printType: 'stock',
-    tab: 1,
-    fields: ['location', 'parentCategory', 'product', 'brand', 'uom']
+    tab: 2,
+    hideDateFilter: true,
+    fields: ['location', 'parentCategory', 'subCategory', 'subSubCategory', 'brand', 'product']
+  },
+  'as-of-date-stock-status': {
+    id: 'as-of-date-stock-status',
+    title: 'As-Of-Date Stock Status Report',
+    categoryName: 'Inventory & Warehouses',
+    subtitle: 'Historical inventory snapshot and asset quantities evaluated as of any past cutoff date.',
+    badge: 'NEW',
+    badgeType: 'new',
+    createdAt: '2026-09-22',
+    icon: MdHistory,
+    targetPrintPath: '/Reports/Stock-Report/Print',
+    printType: 'stock',
+    tab: 3,
+    singleDateFilter: true,
+    fields: ['location', 'parentCategory', 'subCategory', 'subSubCategory', 'brand', 'product']
+  },
+  'inter-warehouse-transfers': {
+    id: 'inter-warehouse-transfers',
+    title: 'Inter-Warehouse Transfer Statement',
+    categoryName: 'Inventory & Warehouses',
+    subtitle: 'Internal stock movements and transfer audits between Shop Counter, Main Warehouse, and Godowns.',
+    badge: 'NEW',
+    badgeType: 'new',
+    createdAt: '2026-09-22',
+    icon: MdCompareArrows,
+    targetPrintPath: '/Reports/Stock-Report/Print',
+    printType: 'stock',
+    tab: 4,
+    fields: ['location', 'parentCategory', 'subCategory', 'subSubCategory', 'brand', 'product', 'salesman']
+  },
+  'detailed-pricing-stock': {
+    id: 'detailed-pricing-stock',
+    title: 'Detailed Stock Pricing & Asset Valuation',
+    categoryName: 'Inventory & Warehouses',
+    subtitle: 'Line-level inventory valuation with purchase costs, retail selling prices, and net asset capital.',
+    badge: 'NEW',
+    badgeType: 'new',
+    createdAt: '2026-09-22',
+    icon: MdPriceCheck,
+    targetPrintPath: '/Reports/Stock-Report/Print',
+    printType: 'stock',
+    tab: 5,
+    hideDateFilter: true,
+    fields: ['location', 'parentCategory', 'subCategory', 'subSubCategory', 'brand', 'product']
+  },
+  'product-spec-stock': {
+    id: 'product-spec-stock',
+    title: 'Product Catalog & Specification Stock Report',
+    categoryName: 'Inventory & Warehouses',
+    subtitle: 'Technical specifications, brand codes, UOM groupings, and current physical stock balances.',
+    badge: 'NEW',
+    badgeType: 'new',
+    createdAt: '2026-09-22',
+    icon: MdFormatListBulleted,
+    targetPrintPath: '/Reports/Stock-Report/Print',
+    printType: 'stock',
+    tab: 6,
+    hideDateFilter: true,
+    fields: ['location', 'parentCategory', 'subCategory', 'subSubCategory', 'brand', 'product']
+  },
+  'category-wise-stock': {
+    id: 'category-wise-stock',
+    title: 'Category-Wise Stock Valuation Ledger',
+    categoryName: 'Inventory & Warehouses',
+    subtitle: 'Structured 3-tier category valuation (Parent Category, Sub-Category, Category) and value tier filters.',
+    badge: 'NEW',
+    badgeType: 'new',
+    createdAt: '2026-09-22',
+    icon: MdCategory,
+    targetPrintPath: '/Reports/Stock-Report/Print',
+    printType: 'stock',
+    tab: 7,
+    hideDateFilter: true,
+    fields: ['parentCategory', 'subCategory', 'subSubCategory', 'brand', 'product']
+  },
+  'warehouse-location-report': {
+    id: 'warehouse-location-report',
+    title: 'Warehouse Bin & Location Stock Breakdown',
+    categoryName: 'Inventory & Warehouses',
+    subtitle: 'Product distribution audit broken down across Shop Counter vs Main Warehouse vs Godowns.',
+    badge: 'AUDITED',
+    badgeType: 'audited',
+    icon: MdStorefront,
+    targetPrintPath: '/Reports/Stock-Report/Print',
+    printType: 'stock',
+    tab: 8,
+    singleDateFilter: true,
+    fields: ['location', 'brand', 'product']
   },
   'holding-stock-report': {
     id: 'holding-stock-report',
     title: 'Holding Stock & Gatepass Queue',
     categoryName: 'Inventory & Warehouses',
     subtitle: 'Reserved quantities allocated on approved delivery challans pending physical dispatch.',
+    badge: 'AUDITED',
+    badgeType: 'audited',
     icon: MdPauseCircleFilled,
     targetPrintPath: '/Reports/Holding-Report/Print',
     printType: 'holding',
     fields: ['location', 'customer']
-  },
-  'warehouse-location-report': {
-    id: 'warehouse-location-report',
-    title: 'Warehouse Bin & Location Ledger',
-    categoryName: 'Inventory & Warehouses',
-    subtitle: 'Product distribution audit broken down across Shop Counter vs Main Warehouse.',
-    icon: MdStorefront,
-    targetPrintPath: '/Reports/Stock-Report/Print',
-    printType: 'stock',
-    tab: 1,
-    fields: ['location', 'parentCategory', 'brand']
   },
 
   // ── ACCOUNTS & FINANCIALS ──
@@ -490,7 +588,11 @@ const DedicatedReportFilter: React.FC = () => {
     taxScenario: 'All',
     accountType: 'All',
     voucherType: [],
-    sortBy: activeConfig.hideDateFilter ? 'amount_desc' : (activeConfig.singleDateFilter ? 'date_asc' : 'date_desc'),
+    sortBy: activeConfig.categoryName === 'Inventory & Warehouses'
+      ? 'name_asc'
+      : (activeConfig.categoryName === 'Accounts & Financials' || activeConfig.printType === 'loyalty')
+        ? 'amount_desc'
+        : (activeConfig.singleDateFilter ? 'date_asc' : 'date_desc'),
     dateFrom: activeConfig.singleDateFilter ? todayStr : firstOfMonthStr,
     dateTo: todayStr,
     showZeroSales: false,
@@ -563,7 +665,7 @@ const DedicatedReportFilter: React.FC = () => {
           uomRes
         ] = await Promise.allSettled([
           supabase.from('customers').select('id, customerName, registrationType, customer_code, customerCode'),
-          supabase.from('suppliers').select('id, supplier_name'),
+          supabase.from('vendors').select('id, vendor_name, name'),
           supabase.from('salesmen').select('id, name'),
           supabase.from('logistics_transportation').select('id, name'),
           supabase.from('inventory_categories').select('id, name, parent_id'),
@@ -608,11 +710,86 @@ const DedicatedReportFilter: React.FC = () => {
     const standard = ['Retail / General', 'Contractor / Builder', 'Wholesaler / Dealer', 'Registered Corporate'];
     return Array.from(new Set([...standard, ...fromCust]));
   }, [customers]);
-  const supplierOptions = useMemo(() => suppliers.map((s) => s.supplier_name).filter(Boolean), [suppliers]);
+  const supplierOptions = useMemo(() => suppliers.map((s) => s.vendor_name || s.name).filter(Boolean), [suppliers]);
   const salesmanOptions = useMemo(() => salesmen.map((s) => s.name).filter(Boolean), [salesmen]);
   const transportOptions = useMemo(() => transports.map((t) => t.name).filter(Boolean), [transports]);
   const parentCategories = useMemo(() => categories.filter((c) => c.parent_id === null), [categories]);
   const parentCategoryOptions = useMemo(() => parentCategories.map((c) => c.name).filter(Boolean), [parentCategories]);
+
+  // Selected parent category IDs based on current parentCategory filter
+  const selectedParentNames = useMemo(() => {
+    const raw = criteria.parentCategory;
+    if (!raw) return [];
+    const arr = Array.isArray(raw) ? raw : [raw];
+    return arr.map((x: any) => String(x).trim().toLowerCase()).filter((x: string) => x && x !== 'all');
+  }, [criteria.parentCategory]);
+
+  const activeParentCategories = useMemo(() => {
+    if (selectedParentNames.length === 0) return parentCategories;
+    return parentCategories.filter((p) => selectedParentNames.includes(String(p.name).trim().toLowerCase()));
+  }, [parentCategories, selectedParentNames]);
+
+  const activeParentIdSet = useMemo(() => {
+    return new Set(activeParentCategories.map((p) => p.id));
+  }, [activeParentCategories]);
+
+  // Sub-categories matching the selected parent category / categories (or all level-2 sub-categories if none selected)
+  const subCategories = useMemo(() => {
+    return categories.filter((c) => c.parent_id && activeParentIdSet.has(c.parent_id));
+  }, [categories, activeParentIdSet]);
+
+  const subCategoryOptions = useMemo(() => {
+    return Array.from(new Set(subCategories.map((c) => c.name).filter(Boolean)));
+  }, [subCategories]);
+
+  // Selected sub-category IDs based on current subCategory filter
+  const selectedSubCategoryNames = useMemo(() => {
+    const raw = criteria.subCategory;
+    if (!raw) return [];
+    const arr = Array.isArray(raw) ? raw : [raw];
+    return arr.map((x: any) => String(x).trim().toLowerCase()).filter((x: string) => x && x !== 'all');
+  }, [criteria.subCategory]);
+
+  const activeSubCategories = useMemo(() => {
+    if (selectedSubCategoryNames.length === 0) return subCategories;
+    return subCategories.filter((s) => selectedSubCategoryNames.includes(String(s.name).trim().toLowerCase()));
+  }, [subCategories, selectedSubCategoryNames]);
+
+  const activeSubIdSet = useMemo(() => {
+    return new Set(activeSubCategories.map((s) => s.id));
+  }, [activeSubCategories]);
+
+  // Leaf / Sub-sub-categories matching the selected sub-categories (or all leaf categories under active sub-categories)
+  const subSubCategories = useMemo(() => {
+    return categories.filter((c) => c.parent_id && activeSubIdSet.has(c.parent_id));
+  }, [categories, activeSubIdSet]);
+
+  const subSubCategoryOptions = useMemo(() => {
+    return Array.from(new Set(subSubCategories.map((c) => c.name).filter(Boolean)));
+  }, [subSubCategories]);
+
+  // Auto-prune subCategory selections that are no longer valid when parentCategory changes
+  useEffect(() => {
+    if (Array.isArray(criteria.subCategory) && criteria.subCategory.length > 0 && selectedParentNames.length > 0) {
+      const validSubs = new Set(subCategoryOptions.map((s) => String(s).toLowerCase()));
+      const pruned = criteria.subCategory.filter((s: string) => validSubs.has(String(s).toLowerCase()));
+      if (pruned.length !== criteria.subCategory.length) {
+        setCriteria((prev: any) => ({ ...prev, subCategory: pruned }));
+      }
+    }
+  }, [subCategoryOptions, selectedParentNames.length]);
+
+  // Auto-prune subSubCategory selections that are no longer valid when subCategory/parentCategory changes
+  useEffect(() => {
+    if (Array.isArray(criteria.subSubCategory) && criteria.subSubCategory.length > 0 && (selectedSubCategoryNames.length > 0 || selectedParentNames.length > 0)) {
+      const validLeafs = new Set(subSubCategoryOptions.map((s) => String(s).toLowerCase()));
+      const pruned = criteria.subSubCategory.filter((s: string) => validLeafs.has(String(s).toLowerCase()));
+      if (pruned.length !== criteria.subSubCategory.length) {
+        setCriteria((prev: any) => ({ ...prev, subSubCategory: pruned }));
+      }
+    }
+  }, [subSubCategoryOptions, selectedSubCategoryNames.length, selectedParentNames.length]);
+
   const uomOptions = useMemo(() => uoms.map((u) => u.name).filter(Boolean), [uoms]);
   const binOptions = useMemo(() => bins.map((b) => b.name).filter(Boolean), [bins]);
   const productOptions = useMemo(() => products.map((p) => p.product_name).filter(Boolean), [products]);
@@ -643,9 +820,15 @@ const DedicatedReportFilter: React.FC = () => {
 
     const filterPayload = {
       ...criteria,
+      asOfDate: criteria.asOfDate || (activeConfig.singleDateFilter ? (criteria.dateTo || criteria.dateFrom || todayStr) : (criteria.dateTo || todayStr)),
       dateFrom: effectiveDateFrom,
       dateTo: effectiveDateTo,
-      vendor: criteria.supplier
+      vendor: criteria.supplier,
+      brand: criteria.bin,
+      parentCategory: criteria.parentCategory,
+      subCategory: criteria.subCategory,
+      subSubCategory: criteria.subSubCategory,
+      category: criteria.parentCategory
     };
     navigate(dest, {
       state: {
@@ -859,7 +1042,7 @@ const DedicatedReportFilter: React.FC = () => {
           {f.includes('customerCategory') && (
             <div>
               <SearchableMultiSelect
-                label="Filter by Customer Category / Type:"
+                label="Customer Category:"
                 placeholder="All Categories"
                 options={customerCategoryOptions}
                 value={criteria.customerCategory}
@@ -872,7 +1055,7 @@ const DedicatedReportFilter: React.FC = () => {
           {f.includes('customer') && (
             <div>
               <SearchableMultiSelect
-                label="Filter by Market Customer(s):"
+                label="Customer:"
                 placeholder="All Customers"
                 options={customerOptions}
                 value={criteria.customer}
@@ -885,7 +1068,7 @@ const DedicatedReportFilter: React.FC = () => {
           {f.includes('supplier') && (
             <div>
               <SearchableMultiSelect
-                label="Filter by Supplier / Vendor:"
+                label="Supplier:"
                 placeholder="All Suppliers"
                 options={supplierOptions}
                 value={criteria.supplier}
@@ -898,7 +1081,7 @@ const DedicatedReportFilter: React.FC = () => {
           {f.includes('salesman') && (
             <div>
               <SearchableMultiSelect
-                label="Assigned Salesman:"
+                label="Salesman:"
                 placeholder="All Salesmen"
                 options={salesmanOptions}
                 value={criteria.salesman}
@@ -911,7 +1094,7 @@ const DedicatedReportFilter: React.FC = () => {
           {f.includes('transport') && (
             <div>
               <SearchableMultiSelect
-                label="Carrier Fleet / Transport:"
+                label="Transport / Carrier:"
                 placeholder="All Transports"
                 options={transportOptions}
                 value={criteria.transport}
@@ -924,7 +1107,7 @@ const DedicatedReportFilter: React.FC = () => {
           {f.includes('location') && (
             <div>
               <SearchableMultiSelect
-                label="Dispatching Warehouse / Facility:"
+                label={activeConfig.categoryName.includes('Purchase') ? 'Receiving Warehouse:' : 'Warehouse / Location:'}
                 placeholder="All Facilities"
                 options={locationOptions}
                 value={criteria.location}
@@ -933,11 +1116,11 @@ const DedicatedReportFilter: React.FC = () => {
             </div>
           )}
 
-          {/* Category Field */}
+          {/* Parent Category Field */}
           {f.includes('parentCategory') && (
             <div>
               <SearchableMultiSelect
-                label="Product Inventory Category:"
+                label="Parent Category:"
                 placeholder="All Categories"
                 options={parentCategoryOptions}
                 value={criteria.parentCategory}
@@ -946,11 +1129,37 @@ const DedicatedReportFilter: React.FC = () => {
             </div>
           )}
 
+          {/* Sub-Category Field */}
+          {f.includes('subCategory') && (
+            <div>
+              <SearchableMultiSelect
+                label="Sub-Category:"
+                placeholder="All Sub-Categories"
+                options={subCategoryOptions}
+                value={criteria.subCategory}
+                onChange={(val) => handleInputChange('subCategory', val)}
+              />
+            </div>
+          )}
+
+          {/* Leaf / Sub-Sub Category Field */}
+          {f.includes('subSubCategory') && (
+            <div>
+              <SearchableMultiSelect
+                label="Leaf Category:"
+                placeholder="All Leaf Categories"
+                options={subSubCategoryOptions}
+                value={criteria.subSubCategory}
+                onChange={(val) => handleInputChange('subSubCategory', val)}
+              />
+            </div>
+          )}
+
           {/* Product Assets Field */}
           {f.includes('product') && (
             <div>
               <SearchableMultiSelect
-                label="Target Merchandise Item:"
+                label="Product:"
                 placeholder="All Products"
                 options={productOptions}
                 value={criteria.product}
@@ -963,7 +1172,7 @@ const DedicatedReportFilter: React.FC = () => {
           {f.includes('brand') && (
             <div>
               <SearchableMultiSelect
-                label="Surface / Finishing Brand:"
+                label="Brand:"
                 placeholder="All Brands"
                 options={binOptions}
                 value={criteria.bin}
@@ -976,7 +1185,7 @@ const DedicatedReportFilter: React.FC = () => {
           {f.includes('uom') && (
             <div>
               <SearchableMultiSelect
-                label="Unit of Measure (UOM):"
+                label="UOM:"
                 placeholder="All Units"
                 options={uomOptions}
                 value={criteria.uom}
@@ -988,7 +1197,7 @@ const DedicatedReportFilter: React.FC = () => {
           {/* Sale Type / Payment Term Field */}
           {f.includes('saleType') && (
             <div>
-              <label className="block text-slate-500 font-bold mb-1">Settlement Payment Term:</label>
+              <label className="block text-slate-500 font-bold mb-1">Payment Term:</label>
               <select
                 value={criteria.saleType}
                 onChange={(e) => handleInputChange('saleType', e.target.value)}
@@ -1004,7 +1213,7 @@ const DedicatedReportFilter: React.FC = () => {
           {/* Sale Method Field */}
           {f.includes('saleMethod') && (
             <div>
-              <label className="block text-slate-500 font-bold mb-1">Sale Method Mode:</label>
+              <label className="block text-slate-500 font-bold mb-1">Sale Method:</label>
               <select
                 value={criteria.saleMethod}
                 onChange={(e) => handleInputChange('saleMethod', e.target.value)}
@@ -1020,7 +1229,7 @@ const DedicatedReportFilter: React.FC = () => {
           {/* Tax Scenario Field */}
           {f.includes('taxScenario') && (
             <div>
-              <label className="block text-slate-500 font-bold mb-1">FBR Tax Regime Scenario:</label>
+              <label className="block text-slate-500 font-bold mb-1">Tax Regime:</label>
               <select
                 value={criteria.taxScenario}
                 onChange={(e) => handleInputChange('taxScenario', e.target.value)}
@@ -1038,7 +1247,7 @@ const DedicatedReportFilter: React.FC = () => {
           {f.includes('voucherType') && (
             <div>
               <SearchableMultiSelect
-                label="Financial Voucher Classification Type:"
+                label="Voucher Classification:"
                 placeholder="All Voucher Classifications"
                 options={voucherTypeOptions}
                 value={Array.isArray(criteria.voucherType) ? criteria.voucherType : (criteria.voucherType && criteria.voucherType !== 'All' ? [criteria.voucherType] : [])}
@@ -1051,19 +1260,28 @@ const DedicatedReportFilter: React.FC = () => {
           <div className={`md:col-span-2 border-t border-slate-100 dark:border-slate-800 pt-4 grid grid-cols-1 ${activeConfig.hideDateFilter || activeConfig.singleDateFilter ? 'md:grid-cols-2' : 'md:grid-cols-3'} gap-4`}>
             <div>
               <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
-                Sort Ledger Records By:
+                Sort By:
               </label>
               <select
                 value={criteria.sortBy}
                 onChange={(e) => handleInputChange('sortBy', e.target.value)}
                 className="w-full border border-slate-200 dark:border-slate-700 rounded-xl p-2.5 bg-slate-50 dark:bg-slate-800 text-xs font-semibold outline-none focus:ring-2 focus:ring-emerald-500/20"
               >
-                {activeConfig.hideDateFilter ? (
+                {activeConfig.categoryName === 'Inventory & Warehouses' ? (
+                  <>
+                    <option value="name_asc">Product Name (A to Z)</option>
+                    <option value="name_desc">Product Name (Z to A)</option>
+                    <option value="qty_desc">Stock Quantity (Highest First)</option>
+                    <option value="qty_asc">Stock Quantity (Lowest First)</option>
+                    <option value="amount_desc">Valuation Amount (Highest First)</option>
+                    <option value="amount_asc">Valuation Amount (Lowest First)</option>
+                  </>
+                ) : (activeConfig.categoryName === 'Accounts & Financials' || activeConfig.printType === 'loyalty' || activeConfig.hideDateFilter) ? (
                   <>
                     <option value="amount_desc">Total Outstanding (Highest First)</option>
                     <option value="amount_asc">Total Outstanding (Lowest First)</option>
-                    <option value="name_asc">Customer Name (A to Z)</option>
-                    <option value="name_desc">Customer Name (Z to A)</option>
+                    <option value="name_asc">Customer / Account Name (A to Z)</option>
+                    <option value="name_desc">Customer / Account Name (Z to A)</option>
                   </>
                 ) : activeConfig.singleDateFilter ? (
                   <>
@@ -1084,11 +1302,15 @@ const DedicatedReportFilter: React.FC = () => {
               </select>
             </div>
 
-            {/* Single Date Picker Mode (e.g. Daily Cash & Bank Daybook) */}
+            {/* Single Date Picker Mode (e.g. As Of Date or Daily Daybook) */}
             {activeConfig.singleDateFilter && (
               <div>
                 <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
-                  Daybook Audit Date:
+                  {activeConfig.categoryName === 'Inventory & Warehouses'
+                    ? 'As Of / Cutoff Date:'
+                    : activeConfig.id === 'daybook-activity-report'
+                      ? 'Daybook Audit Date:'
+                      : 'As Of Date:'}
                 </label>
                 <input
                   type="date"
@@ -1109,7 +1331,7 @@ const DedicatedReportFilter: React.FC = () => {
                 {/* Date From */}
                 <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
-                    Date Window (From):
+                    From Date:
                   </label>
                   <input
                     type="date"
@@ -1123,7 +1345,7 @@ const DedicatedReportFilter: React.FC = () => {
                 {/* Date To */}
                 <div>
                   <label className="block text-slate-700 dark:text-slate-300 font-bold mb-1">
-                    Date Window (To):
+                    To Date:
                   </label>
                   <input
                     type="date"
@@ -1239,7 +1461,7 @@ const DedicatedReportFilter: React.FC = () => {
           )}
 
           {/* Custom report flags */}
-          {(reportId === 'category-wise-sales' || reportId === 'product-sales-history' || reportId === 'trial-balance-statement') && (
+          {(reportId === 'category-wise-sales' || reportId === 'product-sales-history' || reportId === 'trial-balance-statement' || reportId === 'stock-activity-ledger') && (
             <div className="md:col-span-2 flex flex-col gap-3 pt-3 pb-1 border-t border-slate-100 dark:border-slate-800/80">
               <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
                 <span className="text-xs font-bold text-slate-700 dark:text-slate-300">Report Presentation Mode:</span>
@@ -1253,7 +1475,7 @@ const DedicatedReportFilter: React.FC = () => {
                         : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
                     }`}
                   >
-                    📊 Summary View {reportId === 'category-wise-sales' ? '(Category Breakdown)' : reportId === 'trial-balance-statement' ? '(Main Ledger Heads)' : '(1 Row / Product)'}
+                    📊 Summary View {reportId === 'stock-activity-ledger' ? '(Unified Ledger Matrix)' : reportId === 'category-wise-sales' ? '(Category Breakdown)' : reportId === 'trial-balance-statement' ? '(Main Ledger Heads)' : '(1 Row / Product)'}
                   </button>
                   <button
                     type="button"
@@ -1264,7 +1486,7 @@ const DedicatedReportFilter: React.FC = () => {
                         : 'text-slate-600 dark:text-slate-300 hover:text-slate-900'
                     }`}
                   >
-                    📑 Detailed View {reportId === 'trial-balance-statement' ? '(Sub-Ledger Breakdown)' : '(Invoice Breakdown)'}
+                    📑 Detailed View {reportId === 'stock-activity-ledger' ? '(Ranked Stock-In & Stock-Out)' : reportId === 'trial-balance-statement' ? '(Sub-Ledger Breakdown)' : '(Invoice Breakdown)'}
                   </button>
                 </div>
               </div>
@@ -1279,6 +1501,8 @@ const DedicatedReportFilter: React.FC = () => {
                   <span className="text-xs font-bold text-slate-800 dark:text-slate-100">
                     {reportId === 'category-wise-sales'
                       ? 'Show Categories With Zero Sales (Display Full Category Tree)'
+                      : reportId === 'stock-activity-ledger'
+                      ? 'Show Products With Zero Movement / Stock (Display Full Inventory Catalog)'
                       : 'Show Products With Zero Sales (Display Full Inventory Catalog)'}
                   </span>
                 </label>

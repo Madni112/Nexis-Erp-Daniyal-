@@ -26,7 +26,10 @@ import {
   MdCalendarToday,
   MdLocalFireDepartment,
   MdAttachMoney,
-  MdOutlineReceipt
+  MdOutlineReceipt,
+  MdClose,
+  MdInventory,
+  MdInfoOutline
 } from 'react-icons/md';
 import StatCard from '../../ui/StatCard';
 import ActionCard from '../../ui/ActionCard';
@@ -48,31 +51,28 @@ const AdminRoleSwitcher: React.FC<{
       <div className="flex flex-wrap items-center gap-1.5">
         <button
           onClick={() => onChangeView('executive')}
-          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-            activeView === 'executive'
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${activeView === 'executive'
               ? 'bg-blue-600 text-white shadow-sm scale-102'
               : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700/60'
-          }`}
+            }`}
         >
           👑 Executive Overview
         </button>
         <button
           onClick={() => onChangeView('salesman')}
-          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-            activeView === 'salesman'
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${activeView === 'salesman'
               ? 'bg-blue-600 text-white shadow-sm scale-102'
               : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700/60'
-          }`}
+            }`}
         >
           🛒 Salesman View
         </button>
         <button
           onClick={() => onChangeView('warehouse')}
-          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
-            activeView === 'warehouse'
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${activeView === 'warehouse'
               ? 'bg-orange-600 text-white shadow-sm scale-102'
               : 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700/60'
-          }`}
+            }`}
         >
           📦 Warehouse
         </button>
@@ -157,7 +157,7 @@ const Dashboard: React.FC<DashboardProps> = ({ initialView = 'executive' }) => {
   try {
     const cached = localStorage.getItem('zac_user_modules');
     if (cached) allowedModules = JSON.parse(cached).map((s: string) => String(s).toLowerCase().trim());
-  } catch (_) {}
+  } catch (_) { }
 
   const isAdmin = userRoleLower.includes('admin') || userRoleLower.includes('owner') || userRoleLower.includes('super admin');
   const isSalesman = !isAdmin && (userRoleLower.includes('salesman') || allowedModules.includes('/dashboard/salesman') || allowedModules.includes('salesman-dashboard'));
@@ -179,6 +179,7 @@ const Dashboard: React.FC<DashboardProps> = ({ initialView = 'executive' }) => {
   const [selectedWarehouseGuy, setSelectedWarehouseGuy] = useState<string>('All');
   const [selectedHoldingInvoice, setSelectedHoldingInvoice] = useState<string>('All');
   const [liquidityTab, setLiquidityTab] = useState<'bank' | 'cash'>('bank');
+  const [activeBreakdownModal, setActiveBreakdownModal] = useState<'cash' | 'bank' | 'receivables' | 'stock' | null>(null);
 
   // Customer Sales Graph Data
   const [customerSalesDaily, setCustomerSalesDaily] = useState<{ dates: string[]; sales: number[] }>({ dates: [], sales: [] });
@@ -707,7 +708,7 @@ const Dashboard: React.FC<DashboardProps> = ({ initialView = 'executive' }) => {
   ];
 
   const totalBankBalance = metrics.bankAccounts ? metrics.bankAccounts.reduce((acc, b) => acc + Math.max(0, b.netBalance), 0) : 0;
-  
+
   const bankDonutOptions: any = {
     chart: { type: 'donut' },
     colors: totalBankBalance > 0 ? ['#059669', '#0D9488', '#D97706', '#0284C7', '#475569'] : ['#CBD5E1'],
@@ -753,10 +754,42 @@ const Dashboard: React.FC<DashboardProps> = ({ initialView = 'executive' }) => {
 
       {/* --- FINANCIAL KPI STAT CARDS --- */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
-        <StatCard title="Cash" value={metrics.cashBalance} Icon={MdAccountBalanceWallet} bgColor="bg-gradient-to-br from-emerald-500 to-teal-600" />
-        <StatCard title="Bank Balance" value={metrics.totalBankBalance} Icon={MdAccountBalance} bgColor="bg-gradient-to-br from-teal-600 to-cyan-700" />
-        <StatCard title="Receivables" value={metrics.totalReceivables} Icon={MdReceiptLong} bgColor="bg-gradient-to-br from-amber-500 to-amber-700" />
-        <StatCard title="Assets" value={metrics.totalAssets} Icon={MdAssessment} bgColor="bg-gradient-to-br from-emerald-700 to-slate-900" />
+        <StatCard
+          title="Cash"
+          value={metrics.cashBalance}
+          Icon={MdAccountBalanceWallet}
+          bgColor="bg-gradient-to-br from-emerald-500 to-teal-600"
+          thisMonthValue={metrics.thisMonthCashInflow}
+          thisMonthLabel="This Month"
+          onClick={() => setActiveBreakdownModal('cash')}
+        />
+        <StatCard
+          title="Bank Balance"
+          value={metrics.totalBankBalance}
+          Icon={MdAccountBalance}
+          bgColor="bg-gradient-to-br from-teal-600 to-cyan-700"
+          thisMonthValue={metrics.thisMonthBankInflow}
+          thisMonthLabel="This Month"
+          onClick={() => setActiveBreakdownModal('bank')}
+        />
+        <StatCard
+          title="Receivables"
+          value={metrics.totalReceivables}
+          Icon={MdReceiptLong}
+          bgColor="bg-gradient-to-br from-amber-500 to-amber-700"
+          thisMonthValue={metrics.thisMonthReceivables}
+          thisMonthLabel="This Month"
+          onClick={() => setActiveBreakdownModal('receivables')}
+        />
+        <StatCard
+          title="Stock Assets"
+          value={metrics.inventoryAssetValue}
+          Icon={MdAssessment}
+          bgColor="bg-gradient-to-br from-emerald-700 to-slate-900"
+          thisMonthValue={metrics.inventoryAssetValue}
+          thisMonthLabel="This Month"
+          onClick={() => setActiveBreakdownModal('stock')}
+        />
       </div>
 
       {/* ========================================================================= */}
@@ -1370,6 +1403,214 @@ const Dashboard: React.FC<DashboardProps> = ({ initialView = 'executive' }) => {
           <ReactApexChart options={customerSalesChartOptions} series={customerSalesChartSeries} type="bar" height={300} />
         </div>
       </div>
+
+      {/* ========================================================================= */}
+      {/* ASSET & FINANCIAL METRIC BREAKDOWN POPUP MODAL                            */}
+      {/* ========================================================================= */}
+      {activeBreakdownModal && metrics && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white dark:bg-slate-900 rounded-3xl max-w-xl w-full border border-slate-200 dark:border-slate-800 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            
+            {/* Top Modal Header */}
+            <div className="p-5 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between bg-slate-50/50 dark:bg-slate-800/40">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
+                  {activeBreakdownModal === 'stock' && <MdAssessment size={22} />}
+                  {activeBreakdownModal === 'cash' && <MdAccountBalanceWallet size={22} />}
+                  {activeBreakdownModal === 'bank' && <MdAccountBalance size={22} />}
+                  {activeBreakdownModal === 'receivables' && <MdReceiptLong size={22} />}
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-base text-slate-900 dark:text-white tracking-tight">
+                    {activeBreakdownModal === 'stock' && 'Stock Assets & Valuation Ledger'}
+                    {activeBreakdownModal === 'cash' && 'Cash Liquidity & Inflow Ledger'}
+                    {activeBreakdownModal === 'bank' && 'Corporate Bank Accounts'}
+                    {activeBreakdownModal === 'receivables' && 'Customer Receivables & Aging'}
+                  </h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    {activeBreakdownModal === 'stock' && 'Real-time warehouse physical stock audit'}
+                    {activeBreakdownModal === 'cash' && 'Cash drawer inflows, outflows & balances'}
+                    {activeBreakdownModal === 'bank' && 'Verified multi-bank treasury accounts'}
+                    {activeBreakdownModal === 'receivables' && 'Outstanding customer debt & collection status'}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setActiveBreakdownModal(null)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 flex items-center justify-center transition-colors"
+              >
+                <MdClose size={18} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 overflow-y-auto space-y-4">
+              
+              {/* === 1. STOCK MODAL === */}
+              {activeBreakdownModal === 'stock' && (
+                <div className="space-y-4">
+                  {/* Big Hero Card */}
+                  <div className="p-5 rounded-2xl bg-gradient-to-br from-emerald-600 to-teal-800 text-white shadow-md">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-emerald-100">Current Physical Stock Valuation</span>
+                    <div className="text-3xl font-black mt-1 font-mono tracking-tight">
+                      Rs. {metrics.inventoryAssetValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </div>
+                    <span className="inline-block mt-2 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-white/20 text-white">
+                      100% Synced with Stock Valuation Registry
+                    </span>
+                  </div>
+
+                  {/* Math Audit Trail */}
+                  <div className="bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 p-4 space-y-3 font-mono text-xs">
+                    <div className="flex justify-between items-center py-1.5 border-b border-slate-200/60 dark:border-slate-700/60 font-sans">
+                      <span className="text-slate-600 dark:text-slate-300">1. Month Opening Stock (Sept 1st):</span>
+                      <span className="font-bold text-slate-900 dark:text-white font-mono">
+                        Rs. {metrics.monthOpeningStockValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center py-1.5 border-b border-slate-200/60 dark:border-slate-700/60 font-sans">
+                      <span className="text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                        <span>➕</span> Month Purchases (Inflow):
+                      </span>
+                      <span className="font-bold text-emerald-600 dark:text-emerald-400 font-mono">
+                        +Rs. {metrics.thisMonthStockInflowVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center py-1.5 border-b border-slate-200/60 dark:border-slate-700/60 font-sans">
+                      <span className="text-rose-600 dark:text-rose-400 flex items-center gap-1">
+                        <span>➖</span> Month Sales (Dispatches):
+                      </span>
+                      <span className="font-bold text-rose-600 dark:text-rose-400 font-mono">
+                        -Rs. {metrics.thisMonthStockOutflowVal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center py-1.5 border-b border-slate-200/60 dark:border-slate-700/60 font-sans bg-slate-100/70 dark:bg-slate-700/30 px-2 rounded-lg">
+                      <span className="text-slate-700 dark:text-slate-200 font-bold">Month-to-Date Net Movement:</span>
+                      <span className={`font-black font-mono ${metrics.thisMonthStockMovement < 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                        {metrics.thisMonthStockMovement < 0 ? '-' : '+'}Rs. {Math.abs(metrics.thisMonthStockMovement).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center pt-2 font-sans font-bold text-sm">
+                      <span className="text-slate-900 dark:text-white">Current Physical Stock:</span>
+                      <span className="text-emerald-600 dark:text-emerald-400 font-mono text-base font-black">
+                        Rs. {metrics.inventoryAssetValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* === 2. CASH MODAL === */}
+              {activeBreakdownModal === 'cash' && (
+                <div className="space-y-4">
+                  <div className="p-5 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-700 text-white shadow-md">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-emerald-100">Net Cash in Hand</span>
+                    <div className="text-3xl font-black mt-1 font-mono tracking-tight">
+                      Rs. {metrics.cashBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 p-4 space-y-3 font-sans text-xs">
+                    <div className="flex justify-between items-center py-1.5 border-b border-slate-200/60 dark:border-slate-700/60">
+                      <span className="text-slate-600 dark:text-slate-300">Total Cash Inflows (All-Time):</span>
+                      <span className="font-bold text-emerald-600 dark:text-emerald-400 font-mono">
+                        Rs. {metrics.totalCashInflow.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center py-1.5 border-b border-slate-200/60 dark:border-slate-700/60">
+                      <span className="text-slate-600 dark:text-slate-300">Total Cash Outflows (All-Time):</span>
+                      <span className="font-bold text-rose-600 dark:text-rose-400 font-mono">
+                        Rs. {metrics.totalCashOutflow.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center py-1.5 border-b border-slate-200/60 dark:border-slate-700/60">
+                      <span className="text-slate-600 dark:text-slate-300">This Month Cash Collected:</span>
+                      <span className="font-bold text-emerald-600 dark:text-emerald-400 font-mono">
+                        Rs. {metrics.thisMonthCashInflow.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center pt-2 font-bold text-sm">
+                      <span className="text-slate-900 dark:text-white">Net Cash Balance:</span>
+                      <span className="text-emerald-600 dark:text-emerald-400 font-mono text-base font-black">
+                        Rs. {metrics.cashBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* === 3. BANK MODAL === */}
+              {activeBreakdownModal === 'bank' && (
+                <div className="space-y-4">
+                  <div className="p-5 rounded-2xl bg-gradient-to-br from-teal-600 to-cyan-700 text-white shadow-md">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-teal-100">Total Bank Balance</span>
+                    <div className="text-3xl font-black mt-1 font-mono tracking-tight">
+                      Rs. {metrics.totalBankBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 p-4 space-y-3 font-sans text-xs">
+                    {metrics.bankAccounts.length === 0 ? (
+                      <p className="text-center text-slate-400 py-3">No active corporate bank accounts recorded.</p>
+                    ) : (
+                      metrics.bankAccounts.map((b, idx) => (
+                        <div key={idx} className="flex justify-between items-center py-1.5 border-b border-slate-200/60 dark:border-slate-700/60 last:border-0">
+                          <div>
+                            <span className="font-bold text-slate-900 dark:text-white block">{b.accountTitle || b.bankName}</span>
+                            <span className="text-[10px] text-slate-400 font-mono">{b.accountNumber || 'Primary Account'}</span>
+                          </div>
+                          <span className="font-mono font-bold text-slate-900 dark:text-white">
+                            Rs. {Number(b.netBalance || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* === 4. RECEIVABLES MODAL === */}
+              {activeBreakdownModal === 'receivables' && (
+                <div className="space-y-4">
+                  <div className="p-5 rounded-2xl bg-gradient-to-br from-amber-500 to-amber-700 text-white shadow-md">
+                    <span className="text-xs font-semibold uppercase tracking-wider text-amber-100">Total Customer Receivables</span>
+                    <div className="text-3xl font-black mt-1 font-mono tracking-tight">
+                      Rs. {metrics.totalReceivables.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </div>
+                    <span className="inline-block mt-2 text-[10px] font-bold px-2.5 py-0.5 rounded-full bg-white/20 text-white">
+                      {receivablesList.length} Active Pending Invoices
+                    </span>
+                  </div>
+
+                  <div className="bg-slate-50 dark:bg-slate-800/60 rounded-2xl border border-slate-200/80 dark:border-slate-700/60 p-4 space-y-2 font-sans text-xs max-h-56 overflow-y-auto">
+                    {receivablesList.slice(0, 5).map((rec, idx) => (
+                      <div key={idx} className="flex justify-between items-center py-2 border-b border-slate-200/60 dark:border-slate-700/60 last:border-0">
+                        <div>
+                          <span className="font-bold text-slate-900 dark:text-white block">{rec.customerName}</span>
+                          <span className="text-[10px] text-slate-400 font-mono">Inv: {rec.invoiceNo} • {rec.daysPending} days old</span>
+                        </div>
+                        <span className="font-mono font-bold text-amber-600 dark:text-amber-400">
+                          Rs. {rec.outstandingBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer Actions */}
+            <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-800/40 flex items-center justify-end">
+              <button
+                onClick={() => setActiveBreakdownModal(null)}
+                className="px-5 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 font-bold text-xs transition-all"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div >
   );
 };

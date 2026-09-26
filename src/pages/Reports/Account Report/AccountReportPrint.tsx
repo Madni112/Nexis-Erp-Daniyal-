@@ -1804,7 +1804,7 @@ const AccountReportPrint = () => {
                         <MdArrowBack size={16} /> Back to Report Filter
                     </button>
                     <div className="flex items-center gap-2 flex-wrap">
-                        {(activeTab === 11 || activeTab === 13) && (
+                        {(activeTab === 3 || activeTab === 11 || activeTab === 13) && (
                             <div className="flex items-center bg-white p-0.5 rounded border border-gray-300 shadow-2xs mr-2">
                                 <button
                                     type="button"
@@ -2034,23 +2034,6 @@ const AccountReportPrint = () => {
                     {/* --- 📊 RENDER TABLE 3: VENDOR BALANCE DETAIL REPORT (TAB 3) --- */}
                     {activeTab === 3 && (
                         <div>
-                            <div className="flex justify-between items-center mb-2 print-hidden-element print:hidden">
-                                <span className="text-xs text-slate-500 font-medium">
-                                    Click <span className="font-bold text-slate-700">"Details"</span> or <span className="font-bold text-slate-700">"Expand All"</span> to inspect individual purchase bills, vouchers, and returns per vendor.
-                                </span>
-                                <button
-                                    type="button"
-                                    onClick={toggleAllCustomerDetails}
-                                    className="text-[10.5px] font-bold px-2.5 py-1 rounded-md border border-slate-300 bg-slate-50 hover:bg-slate-100 text-slate-700 flex items-center gap-1 shadow-2xs transition cursor-pointer"
-                                >
-                                    {expandedCustomerIds.size > 0 ? (
-                                        <><MdUnfoldLess size={14} className="text-slate-600" /> Collapse All Details</>
-                                    ) : (
-                                        <><MdUnfoldMore size={14} className="text-emerald-700" /> Expand All Details</>
-                                    )}
-                                </button>
-                            </div>
-
                             <table className="w-full table-auto border border-collapse border-black text-[11px] font-sans text-left print:w-full">
                                 <thead className="bg-gray-100 border-b border-black font-black uppercase text-black font-mono text-[10px]">
                                     <tr>
@@ -2062,7 +2045,6 @@ const AccountReportPrint = () => {
                                         <th className="p-1.5 border border-black text-right w-36">Period Payments (Dr)</th>
                                         <th className="p-1.5 border border-black text-right w-36">Net Closing Balance</th>
                                         <th className="p-1.5 border border-black text-center w-28">Account Status</th>
-                                        <th className="p-1.5 border border-black text-center w-16 print-hidden-element print:hidden">Detail</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -2112,81 +2094,60 @@ const AccountReportPrint = () => {
                                                             </span>
                                                         )}
                                                     </td>
-                                                    <td className="p-1.5 border border-black text-center print-hidden-element print:hidden font-sans">
-                                                        <button
-                                                            type="button"
-                                                            onClick={() => toggleCustomerExpanded(row.id)}
-                                                            className={`p-1 rounded text-[10px] font-bold flex items-center justify-center mx-auto transition cursor-pointer ${
-                                                                isExpanded
-                                                                    ? 'bg-emerald-600 text-white shadow-2xs'
-                                                                    : 'bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300'
-                                                            }`}
-                                                            title={isExpanded ? 'Collapse transaction details' : 'Expand transaction details'}
-                                                        >
-                                                            {isExpanded ? <MdExpandMore size={14} /> : <MdChevronRight size={14} />}
-                                                        </button>
-                                                    </td>
                                                 </tr>
 
-                                                {/* Expanded Transaction Details Sub-Table */}
+                                                {/* Expanded Transaction Details Sub-Table (Seamless Rows) */}
                                                 {isExpanded && (
-                                                    <tr className="bg-slate-50/90 border-b-2 border-black">
-                                                        <td colSpan={9} className="p-3 pl-8 pr-4 border border-black bg-slate-50/70">
-                                                            <div className="bg-white rounded-lg border border-slate-300 p-3 shadow-2xs space-y-2">
-                                                                <div className="text-[10px] font-black uppercase tracking-wider text-slate-800 pb-1.5 border-b border-slate-200 flex justify-between items-center">
-                                                                    <span>Itemized Period Audit for {row.vendor_name}</span>
-                                                                    <span className="text-slate-500 font-mono font-normal">
-                                                                        {hasTransactions ? `${row.transactions.length} Total Records` : 'No Transactions In Period'}
-                                                                    </span>
-                                                                </div>
-
-                                                                {hasTransactions ? (
-                                                                    <table className="w-full text-[10px] border-collapse font-sans">
-                                                                        <thead>
-                                                                            <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-300 text-[9.5px] uppercase font-mono">
-                                                                                <th className="p-1 text-left w-24">Date</th>
-                                                                                <th className="p-1 text-left w-36">Entry Type</th>
-                                                                                <th className="p-1 text-left w-32">Ref / Doc #</th>
-                                                                                <th className="p-1 text-left">Description / Particulars</th>
-                                                                                <th className="p-1 text-right w-28 text-red-700">Credit (Purchases)</th>
-                                                                                <th className="p-1 text-right w-28 text-emerald-700">Debit (Payments)</th>
-                                                                                <th className="p-1 text-right w-32">Running Balance</th>
+                                                    <tr className="bg-slate-50 border-b-2 border-black">
+                                                        <td colSpan={8} className="p-0 border border-black">
+                                                            <table className="w-full text-[10px] border-collapse font-sans bg-white">
+                                                                <thead>
+                                                                    <tr className="bg-slate-100 text-slate-700 font-bold border-b border-slate-300 text-[9.5px] uppercase font-mono">
+                                                                        <th className="p-1.5 pl-6 text-left w-28">Date</th>
+                                                                        <th className="p-1.5 text-left w-36">Entry Type</th>
+                                                                        <th className="p-1.5 text-left w-28 font-mono">Ref / Doc #</th>
+                                                                        <th className="p-1.5 text-left">Description / Particulars</th>
+                                                                        <th className="p-1.5 text-right w-36 text-red-700">Credit (Purchases)</th>
+                                                                        <th className="p-1.5 text-right w-36 text-emerald-700">Debit (Payments)</th>
+                                                                        <th className="p-1.5 pr-4 text-right w-36 font-mono">Running Balance</th>
+                                                                    </tr>
+                                                                </thead>
+                                                                <tbody>
+                                                                    {hasTransactions ? (
+                                                                        row.transactions.map((tx: any, tIdx: number) => (
+                                                                            <tr key={tIdx} className="border-b border-slate-200 hover:bg-slate-50 font-mono text-[10.5px]">
+                                                                                <td className="p-1.5 pl-6 text-slate-600">
+                                                                                    {tx.date && tx.date !== 'Opening' ? tx.date : 'Opening Bal'}
+                                                                                </td>
+                                                                                <td className="p-1.5 font-sans font-semibold text-slate-800">
+                                                                                    {tx.type}
+                                                                                </td>
+                                                                                <td className="p-1.5 font-bold text-slate-900 font-mono">
+                                                                                    {tx.refNo || '-'}
+                                                                                </td>
+                                                                                <td className="p-1.5 font-sans text-slate-600">
+                                                                                    {tx.notes || '-'}
+                                                                                </td>
+                                                                                <td className="p-1.5 text-right font-bold text-red-600 font-mono">
+                                                                                    {tx.credit > 0 ? `Rs. ${tx.credit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
+                                                                                </td>
+                                                                                <td className="p-1.5 text-right font-bold text-emerald-600 font-mono">
+                                                                                    {tx.debit > 0 ? `Rs. ${tx.debit.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
+                                                                                </td>
+                                                                                <td className={`p-1.5 pr-4 text-right font-bold font-mono ${tx.runningBalance > 0.01 ? 'text-red-700' : tx.runningBalance < -0.01 ? 'text-blue-700' : 'text-slate-600'}`}>
+                                                                                    Rs. {tx.runningBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} {tx.runningBalance > 0.01 ? 'Cr' : tx.runningBalance < -0.01 ? 'Dr' : ''}
+                                                                                </td>
                                                                             </tr>
-                                                                        </thead>
-                                                                        <tbody>
-                                                                            {row.transactions.map((tx: any, tIdx: number) => (
-                                                                                <tr key={tIdx} className="border-b border-slate-200 hover:bg-slate-50 font-mono text-[10px]">
-                                                                                    <td className="p-1 text-slate-600">
-                                                                                        {tx.date && tx.date !== 'Opening' ? tx.date : 'Opening Bal'}
-                                                                                    </td>
-                                                                                    <td className="p-1 font-sans font-semibold text-slate-800">
-                                                                                        {tx.type}
-                                                                                    </td>
-                                                                                    <td className="p-1 font-bold text-slate-900">
-                                                                                        {tx.refNo}
-                                                                                    </td>
-                                                                                    <td className="p-1 font-sans text-slate-600">
-                                                                                        {tx.notes}
-                                                                                    </td>
-                                                                                    <td className="p-1 text-right font-bold text-red-600">
-                                                                                        {tx.credit > 0 ? `Rs. ${tx.credit.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '-'}
-                                                                                    </td>
-                                                                                    <td className="p-1 text-right font-bold text-emerald-600">
-                                                                                        {tx.debit > 0 ? `Rs. ${tx.debit.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : '-'}
-                                                                                    </td>
-                                                                                    <td className={`p-1 text-right font-bold ${tx.runningBalance > 0.01 ? 'text-red-700' : tx.runningBalance < -0.01 ? 'text-blue-700' : 'text-slate-600'}`}>
-                                                                                        Rs. {tx.runningBalance.toLocaleString(undefined, { minimumFractionDigits: 2 })} {tx.runningBalance > 0.01 ? 'Cr' : tx.runningBalance < -0.01 ? 'Dr' : ''}
-                                                                                    </td>
-                                                                                </tr>
-                                                                            ))}
-                                                                        </tbody>
-                                                                    </table>
-                                                                ) : (
-                                                                    <div className="py-2 text-center text-slate-400 font-sans text-[10.5px]">
-                                                                        No purchase bills, payments, or returns found within this selected period.
-                                                                    </div>
-                                                                )}
-                                                            </div>
+                                                                        ))
+                                                                    ) : (
+                                                                        <tr>
+                                                                            <td colSpan={7} className="py-2.5 text-center text-slate-400 font-sans text-[10.5px] italic">
+                                                                                No purchase bills, payments, or returns found within this selected period.
+                                                                            </td>
+                                                                        </tr>
+                                                                    )}
+                                                                </tbody>
+                                                            </table>
                                                         </td>
                                                     </tr>
                                                 )}
@@ -2212,7 +2173,7 @@ const AccountReportPrint = () => {
                                             <td className="p-2 border border-black text-right text-primary font-bold">
                                                 Rs. {paginatedRows.reduce((sum, r) => sum + Number(r.closing_balance || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                             </td>
-                                            <td colSpan={2} className="p-2 border border-black text-center text-gray-500 text-[10px] font-sans uppercase">
+                                            <td className="p-2 border border-black text-center text-gray-500 text-[10px] font-sans uppercase">
                                                 {paginatedRows.length} On Page
                                             </td>
                                         </tr>
@@ -2233,7 +2194,7 @@ const AccountReportPrint = () => {
                                         <td className="p-2 border border-black text-right text-primary font-black underline decoration-double text-sm">
                                             Rs. {reportRows.reduce((sum, r) => sum + Number(r.closing_balance || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                         </td>
-                                        <td colSpan={2} className="p-2 border border-black text-center text-gray-500 text-[10px] font-sans uppercase">
+                                        <td className="p-2 border border-black text-center text-gray-500 text-[10px] font-sans uppercase">
                                             {reportRows.length} Vendors
                                         </td>
                                     </tr>
@@ -2248,9 +2209,9 @@ const AccountReportPrint = () => {
                             <thead className="bg-gray-100 border-b border-black font-black uppercase text-black font-mono text-[10px]">
                                 <tr>
                                     <th className="p-1.5 border border-black text-center w-12">S#</th>
-                                    <th className="p-1.5 border border-black w-36">Invoice No</th>
+                                    <th className="p-1.5 border border-black text-center w-28">Date</th>
+                                    <th className="p-1.5 border border-black w-36">Invoice / Ref No</th>
                                     <th className="p-1.5 border border-black">Associated Ledger Entity Title Account Name</th>
-                                    <th className="p-1.5 border border-black text-center w-28">Processing Date</th>
                                     <th className="p-1.5 border border-black text-center w-24">Payment Term</th>
                                     <th className="p-1.5 border border-black text-right pr-3 w-40">Gross Invoice Amount</th>
                                 </tr>
@@ -2259,11 +2220,11 @@ const AccountReportPrint = () => {
                                 {paginatedRows.map((row, i) => (
                                     <tr key={row.id || i} className="border-b border-black hover:bg-gray-50 font-semibold font-mono text-xs">
                                         <td className="p-1.5 border border-black text-center text-gray-400">{startIndex + i + 1}</td>
-                                        <td className="p-1.5 border border-black text-primary font-black uppercase">{row.purchase_no || row.id}</td>
-                                        <td className="p-1.5 border border-black text-black font-sans font-bold">{row.customer_name || row.supplier_name || 'Generic Client Agent'}</td>
                                         <td className="p-1.5 border border-black text-center text-gray-600 font-mono">
                                             {String(row.sale_date || row.created_at || '').split('T')[0]}
                                         </td>
+                                        <td className="p-1.5 border border-black text-primary font-black uppercase">{row.purchase_no || row.id}</td>
+                                        <td className="p-1.5 border border-black text-black font-sans font-bold">{row.customer_name || row.supplier_name || 'Generic Client Agent'}</td>
                                         <td className="p-1.5 border border-black text-center uppercase font-bold text-[10px]">{row.payment_term || 'Settle'}</td>
                                         <td className="p-1.5 border border-black text-right pr-3 text-success font-black">Rs. {Number(row.total_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                                     </tr>
@@ -2758,9 +2719,9 @@ const AccountReportPrint = () => {
                             <thead className="bg-gray-100 border-b border-black font-black uppercase text-black font-mono text-[10px]">
                                 <tr>
                                     <th className="p-1.5 border border-black text-center w-12">S#</th>
-                                    <th className="p-1.5 border border-black w-32">Voucher / Invoice No</th>
-                                    <th className="p-1.5 border border-black w-36">Voucher Type</th>
                                     <th className="p-1.5 border border-black text-center w-28">Voucher Date</th>
+                                    <th className="p-1.5 border border-black w-32">Voucher / Ref No</th>
+                                    <th className="p-1.5 border border-black w-36">Voucher Type</th>
                                     <th className="p-1.5 border border-black">Beneficiary / Particulars / Remarks</th>
                                     <th className="p-1.5 border border-black text-right pr-3 w-36">Voucher Amount (PKR)</th>
                                 </tr>
@@ -2776,9 +2737,9 @@ const AccountReportPrint = () => {
                                     return (
                                         <tr key={row.id || i} className="border-b border-black hover:bg-gray-50 font-semibold font-mono text-xs">
                                             <td className="p-1.5 border border-black text-center text-gray-400">{startIndex + i + 1}</td>
+                                            <td className="p-1.5 border border-black text-center text-gray-500">{displayDate}</td>
                                             <td className="p-1.5 border border-black text-primary font-black uppercase">{displayVoucherNo}</td>
                                             <td className="p-1.5 border border-black font-sans text-purple-700 font-bold uppercase">{displayVoucherType}</td>
-                                            <td className="p-1.5 border border-black text-center text-gray-500">{displayDate}</td>
                                             <td className="p-1.5 border border-black font-sans text-gray-600 truncate max-w-xs">{displayRemarks}</td>
                                             <td className="p-1.5 border border-black text-right pr-3 text-success font-black">Rs. {Number(displayAmount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                                         </tr>
@@ -2933,12 +2894,12 @@ const AccountReportPrint = () => {
                         <table className="w-full table-auto border border-collapse border-black text-[11px] font-sans text-left print:w-full">
                             <thead className="bg-gray-100 border-b border-black font-black uppercase text-black font-mono text-[10px]">
                                 <tr>
-                                    <th className="p-1.5 border border-black text-center w-12">Index</th>
-                                    <th className="p-1.5 border border-black w-32">Invoice No</th>
+                                    <th className="p-1.5 border border-black text-center w-12">S#</th>
+                                    <th className="p-1.5 border border-black text-center w-28">Date</th>
+                                    <th className="p-1.5 border border-black w-32">Invoice / Ref No</th>
                                     <th className="p-1.5 border border-black w-36">Entry Classification</th>
                                     <th className="p-1.5 border border-black w-32">Sales Officer</th>
                                     <th className="p-1.5 border border-black">Customer / Account Title</th>
-                                    <th className="p-1.5 border border-black text-center w-28">Processing Date</th>
                                     <th className="p-1.5 border border-black text-right w-32">Sales Invoice (PKR)</th>
                                     <th className="p-1.5 border border-black text-right w-32 pr-3">Cash Collected (PKR)</th>
                                 </tr>
@@ -2947,11 +2908,11 @@ const AccountReportPrint = () => {
                                 {paginatedRows.map((row, i) => (
                                     <tr key={row.id || i} className="border-b border-black hover:bg-gray-50 font-semibold font-mono text-xs">
                                         <td className="p-1.5 border border-black text-center text-gray-400">{startIndex + i + 1}</td>
+                                        <td className="p-1.5 border border-black text-center text-gray-500">{row.raw_date}</td>
                                         <td className="p-1.5 border border-black text-primary font-black uppercase">{row.doc_ref}</td>
                                         <td className="p-1.5 border border-black text-purple-700 font-bold uppercase text-[10px]">{row.entry_type}</td>
                                         <td className="p-1.5 border border-black font-sans text-black font-bold">{row.salesman}</td>
                                         <td className="p-1.5 border border-black font-sans text-gray-700">{row.customer_name}</td>
-                                        <td className="p-1.5 border border-black text-center text-gray-500">{row.raw_date}</td>
                                         <td className="p-1.5 border border-black text-right text-black font-bold">Rs. {Number(row.sale_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                                         <td className="p-1.5 border border-black text-right pr-3 text-success font-black">Rs. {Number(row.collected_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                                     </tr>

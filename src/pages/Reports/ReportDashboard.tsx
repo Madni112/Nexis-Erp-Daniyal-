@@ -29,7 +29,12 @@ import {
   MdDragIndicator,
   MdRestartAlt,
   MdKeyboardArrowDown,
-  MdKeyboardArrowUp
+  MdKeyboardArrowUp,
+  MdTimeline,
+  MdHistory,
+  MdCompareArrows,
+  MdPriceCheck,
+  MdFormatListBulleted
 } from 'react-icons/md';
 import { exportMultiSheetExcel, ExcelColumn } from '../../utils/excelExport';
 import { toast } from 'react-hot-toast';
@@ -241,6 +246,17 @@ const ALL_REPORTS: ReportItem[] = [
 
   // ── INVENTORY & WAREHOUSES ──
   {
+    id: 'stock-activity-ledger',
+    title: 'Stock Activity & Movement Ledger',
+    category: 'inventory',
+    description: 'Chronological inventory trail auditing opening balances, inward procurement receipts, sales issues, net movements, and closing stock.',
+    badge: 'AUDITED',
+    badgeType: 'audited',
+    path: '/Reports/Stock-Report',
+    state: { activeTab: 1 },
+    icon: MdTimeline
+  },
+  {
     id: 'current-stock-balance',
     title: 'Stock Balances & Valuation Registry',
     category: 'inventory',
@@ -248,23 +264,90 @@ const ALL_REPORTS: ReportItem[] = [
     badge: 'AUDITED',
     badgeType: 'audited',
     path: '/Reports/Stock-Report',
+    state: { activeTab: 2 },
     icon: MdInventory
+  },
+  {
+    id: 'as-of-date-stock-status',
+    title: 'As-Of-Date Stock Status Report',
+    category: 'inventory',
+    description: 'Historical inventory snapshot and asset quantities evaluated as of any past cutoff date.',
+    badge: 'NEW',
+    badgeType: 'new',
+    createdAt: '2026-09-22',
+    path: '/Reports/Stock-Report',
+    state: { activeTab: 3 },
+    icon: MdHistory
+  },
+  {
+    id: 'inter-warehouse-transfers',
+    title: 'Inter-Warehouse Transfer Statement',
+    category: 'inventory',
+    description: 'Internal stock movements and transfer audits between Shop Counter, Main Warehouse, and Godowns.',
+    badge: 'NEW',
+    badgeType: 'new',
+    createdAt: '2026-09-22',
+    path: '/Reports/Stock-Report',
+    state: { activeTab: 4 },
+    icon: MdCompareArrows
+  },
+  {
+    id: 'detailed-pricing-stock',
+    title: 'Detailed Stock Pricing & Asset Valuation',
+    category: 'inventory',
+    description: 'Line-level inventory valuation with purchase costs, retail selling prices, and net asset capital.',
+    badge: 'NEW',
+    badgeType: 'new',
+    createdAt: '2026-09-22',
+    path: '/Reports/Stock-Report',
+    state: { activeTab: 5 },
+    icon: MdPriceCheck
+  },
+  {
+    id: 'product-spec-stock',
+    title: 'Product Catalog & Specification Stock Report',
+    category: 'inventory',
+    description: 'Technical specifications, brand codes, UOM groupings, and current physical stock balances.',
+    badge: 'NEW',
+    badgeType: 'new',
+    createdAt: '2026-09-22',
+    path: '/Reports/Stock-Report',
+    state: { activeTab: 6 },
+    icon: MdFormatListBulleted
+  },
+  {
+    id: 'category-wise-stock',
+    title: 'Category-Wise Stock Valuation Ledger',
+    category: 'inventory',
+    description: 'Structured 3-tier category valuation (Parent Category, Sub-Category, Category) and value tier filters.',
+    badge: 'NEW',
+    badgeType: 'new',
+    createdAt: '2026-09-22',
+    path: '/Reports/Stock-Report',
+    state: { activeTab: 7 },
+    icon: MdCategory
+  },
+  {
+    id: 'warehouse-location-report',
+    title: 'Warehouse Bin & Location Stock Breakdown',
+    category: 'inventory',
+    description: 'Product distribution audit broken down across Shop Counter vs Main Warehouse vs Godowns.',
+    badge: 'AUDITED',
+    badgeType: 'audited',
+    path: '/Reports/Stock-Report',
+    state: { activeTab: 8 },
+    icon: MdStorefront
   },
   {
     id: 'holding-stock-report',
     title: 'Holding Stock & Gatepass Queue',
     category: 'inventory',
     description: 'Reserved quantities allocated on approved delivery challans pending physical dispatch.',
+    badge: 'AUDITED',
+    badgeType: 'audited',
     path: '/Reports/Holding-Report',
+    state: {},
     icon: MdPauseCircleFilled
-  },
-  {
-    id: 'warehouse-location-report',
-    title: 'Warehouse Bin & Location Ledger',
-    category: 'inventory',
-    description: 'Product distribution audit broken down across Shop Counter vs Main Warehouse.',
-    path: '/Reports/Stock-Report',
-    icon: MdStorefront
   },
 
   // ── ACCOUNTS & FINANCIALS ──

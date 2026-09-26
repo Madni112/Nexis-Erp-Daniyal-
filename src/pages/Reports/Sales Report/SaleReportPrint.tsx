@@ -96,9 +96,10 @@ const SaleReportPrint = () => {
 
         // ── 📂 REPORT TYPE: CATEGORY-WISE SALES & VOLUME REPORT ──
         if (rType === 'category-sales') {
-          const [invRes, retRes] = await Promise.all([
+          const [invRes, retRes, catRes] = await Promise.all([
             supabase.from('sales_invoices').select('*').order('id', { ascending: true }),
-            supabase.from('sales_returns').select('*').order('id', { ascending: true })
+            supabase.from('sales_returns').select('*').order('id', { ascending: true }),
+            supabase.from('inventory_categories').select('id, name, parent_id')
           ]);
 
           if (invRes.error) throw invRes.error;
@@ -107,6 +108,14 @@ const SaleReportPrint = () => {
           const allInvoices = invRes.data || [];
           const allReturns = retRes.data || [];
           const allProducts = prodData || [];
+          const allCategories = catRes.data || [];
+
+          const catById = new Map<number, any>();
+          const catByName = new Map<string, any>();
+          allCategories.forEach((c: any) => {
+            if (c.id) catById.set(Number(c.id), c);
+            if (c.name) catByName.set(String(c.name).trim().toLowerCase(), c);
+          });
 
           const startTimestamp = filters.dateFrom ? new Date(filters.dateFrom + 'T00:00:00').getTime() : 0;
           const endTimestamp = filters.dateTo ? new Date(filters.dateTo + 'T23:59:59.999').getTime() : Infinity;
@@ -159,14 +168,48 @@ const SaleReportPrint = () => {
 
           const getProductCategory = (pName: string): { parentCategory: string; subCategory: string; category: string; sku: string; uom: string } => {
             const pKey = pName.trim().toLowerCase();
-            const matched = productLookup[pKey];
-            const pCat = matched?.category || 'General';
-            const sCat = matched?.sub_category || 'General';
-            const leafCat = matched?.sub_sub_category || matched?.category || 'General';
+            const matched = productLookup[pKey] || {};
+
+            let pCat = matched.sub_sub_category || matched.parent_category || '';
+            let sCat = matched.sub_category || '';
+            let lCat = matched.category || '';
+
+            if (!pCat || (catByName.has(pCat.toLowerCase()) && catByName.get(pCat.toLowerCase())?.parent_id !== null)) {
+              if (lCat && catByName.get(lCat.toLowerCase())?.parent_id === null) {
+                pCat = matched.category;
+                lCat = matched.sub_sub_category || matched.sub_category || 'General';
+              } else if (matched.category && catByName.has(matched.category.toLowerCase())) {
+                const leafObj = catByName.get(matched.category.toLowerCase());
+                if (leafObj?.parent_id) {
+                  const subObj = catById.get(Number(leafObj.parent_id));
+                  if (subObj) {
+                    sCat = subObj.name;
+                    if (subObj.parent_id) {
+                      const parentObj = catById.get(Number(subObj.parent_id));
+                      if (parentObj) pCat = parentObj.name;
+                    } else {
+                      pCat = subObj.name;
+                    }
+                  }
+                } else if (leafObj) {
+                  pCat = leafObj.name;
+                }
+              }
+            }
+
+            pCat = pCat || 'General';
+            sCat = sCat || 'General';
+            lCat = lCat || pCat;
+
             const sku = matched?.sku || matched?.item_sr_no || '-';
-            const isTile = Boolean(String(pCat).toLowerCase().includes('tile') || String(sCat).toLowerCase().includes('tile'));
+            const isTile = Boolean(
+              String(pCat).toLowerCase().includes('tile') || 
+              String(sCat).toLowerCase().includes('tile') || 
+              String(lCat).toLowerCase().includes('tile') ||
+              Number(matched?.pieces_per_box || matched?.pcs_per_box || 0) > 1
+            );
             const uom = matched?.uom || (isTile ? 'BOX' : 'Nos');
-            return { parentCategory: pCat, subCategory: sCat, category: leafCat, sku, uom };
+            return { parentCategory: pCat, subCategory: sCat, category: lCat, sku, uom };
           };
 
           // ── 3-TIER TREE DATA CONTAINER ──
@@ -286,13 +329,19 @@ const SaleReportPrint = () => {
               const { parentCategory: pCat, subCategory: sCat, category: lCat, sku, uom } = getProductCategory(pName);
 
               if (filters.parentCategory && filters.parentCategory.length > 0 && !filters.parentCategory.includes('All')) {
-                if (!filters.parentCategory.includes(pCat)) return;
+                const arr = Array.isArray(filters.parentCategory) ? filters.parentCategory : [filters.parentCategory];
+                const matches = arr.some((fc: string) => fc.toLowerCase() === pCat.toLowerCase() || pCat.toLowerCase().includes(fc.toLowerCase()) || fc.toLowerCase().includes(pCat.toLowerCase()));
+                if (!matches) return;
               }
               if (filters.subCategory && filters.subCategory.length > 0 && !filters.subCategory.includes('All')) {
-                if (!filters.subCategory.includes(sCat)) return;
+                const arr = Array.isArray(filters.subCategory) ? filters.subCategory : [filters.subCategory];
+                const matches = arr.some((sc: string) => sc.toLowerCase() === sCat.toLowerCase() || sCat.toLowerCase().includes(sc.toLowerCase()) || sc.toLowerCase().includes(sCat.toLowerCase()));
+                if (!matches) return;
               }
               if (filters.subSubCategory && filters.subSubCategory.length > 0 && !filters.subSubCategory.includes('All')) {
-                if (!filters.subSubCategory.includes(lCat)) return;
+                const arr = Array.isArray(filters.subSubCategory) ? filters.subSubCategory : [filters.subSubCategory];
+                const matches = arr.some((ssc: string) => ssc.toLowerCase() === lCat.toLowerCase() || lCat.toLowerCase().includes(ssc.toLowerCase()) || ssc.toLowerCase().includes(lCat.toLowerCase()));
+                if (!matches) return;
               }
 
               const { parentNode, subNode, leafNode } = getOrCreateHierarchyNodes(pCat, sCat, lCat);
@@ -390,13 +439,19 @@ const SaleReportPrint = () => {
               const { parentCategory: pCat, subCategory: sCat, category: lCat, sku, uom } = getProductCategory(pName);
 
               if (filters.parentCategory && filters.parentCategory.length > 0 && !filters.parentCategory.includes('All')) {
-                if (!filters.parentCategory.includes(pCat)) return;
+                const arr = Array.isArray(filters.parentCategory) ? filters.parentCategory : [filters.parentCategory];
+                const matches = arr.some((fc: string) => fc.toLowerCase() === pCat.toLowerCase() || pCat.toLowerCase().includes(fc.toLowerCase()) || fc.toLowerCase().includes(pCat.toLowerCase()));
+                if (!matches) return;
               }
               if (filters.subCategory && filters.subCategory.length > 0 && !filters.subCategory.includes('All')) {
-                if (!filters.subCategory.includes(sCat)) return;
+                const arr = Array.isArray(filters.subCategory) ? filters.subCategory : [filters.subCategory];
+                const matches = arr.some((sc: string) => sc.toLowerCase() === sCat.toLowerCase() || sCat.toLowerCase().includes(sc.toLowerCase()) || sc.toLowerCase().includes(sCat.toLowerCase()));
+                if (!matches) return;
               }
               if (filters.subSubCategory && filters.subSubCategory.length > 0 && !filters.subSubCategory.includes('All')) {
-                if (!filters.subSubCategory.includes(lCat)) return;
+                const arr = Array.isArray(filters.subSubCategory) ? filters.subSubCategory : [filters.subSubCategory];
+                const matches = arr.some((ssc: string) => ssc.toLowerCase() === lCat.toLowerCase() || lCat.toLowerCase().includes(ssc.toLowerCase()) || ssc.toLowerCase().includes(lCat.toLowerCase()));
+                if (!matches) return;
               }
 
               const { parentNode, subNode, leafNode } = getOrCreateHierarchyNodes(pCat, sCat, lCat);
@@ -661,20 +716,32 @@ const SaleReportPrint = () => {
               if (filters.product && filters.product.length > 0 && !filters.product.includes('All')) {
                 if (!filters.product.includes(pName)) return;
               }
+              const prodParentCat = p.sub_sub_category || p.parent_category || p.category || '';
+              const prodSubCat = p.sub_category || '';
+              const prodLeafCat = p.category || '';
+              const prodBrand = p.bin || p.brand || '';
+
               if (filters.parentCategory && filters.parentCategory.length > 0 && !filters.parentCategory.includes('All')) {
-                const prodCat = p.category || p.parent_category || '';
-                if (!filters.parentCategory.includes(prodCat)) return;
+                const matchP = filters.parentCategory.includes(prodParentCat) || filters.parentCategory.includes(prodLeafCat);
+                if (!matchP) return;
+              }
+              if (filters.subCategory && filters.subCategory.length > 0 && !filters.subCategory.includes('All')) {
+                if (!filters.subCategory.includes(prodSubCat)) return;
+              }
+              if (filters.subSubCategory && filters.subSubCategory.length > 0 && !filters.subSubCategory.includes('All')) {
+                if (!filters.subSubCategory.includes(prodLeafCat)) return;
               }
               if (filters.bin && filters.bin.length > 0 && !filters.bin.includes('All')) {
-                const prodBrand = p.brand || '';
                 if (!filters.bin.includes(prodBrand)) return;
               }
 
               productSummaryMap[key] = {
                 product_name: pName,
                 sku: p.item_sr_no || p.sku || '-',
-                category: p.category || 'General',
-                brand: p.brand || '-',
+                parentCategory: prodParentCat || '-',
+                subCategory: prodSubCat || '-',
+                category: prodLeafCat || '-',
+                brand: prodBrand || '-',
                 uom: p.uom || productUomMap[key] || 'Nos',
                 sold_qty: 0,
                 gross_sales: 0,
@@ -710,13 +777,23 @@ const SaleReportPrint = () => {
                             (it.sku && (p.item_sr_no || '').toLowerCase() === String(it.sku).toLowerCase())
               );
 
+              const prodParentCat = matchingProd?.sub_sub_category || matchingProd?.parent_category || matchingProd?.category || '';
+              const prodSubCat = matchingProd?.sub_category || '';
+              const prodLeafCat = matchingProd?.category || it.category || '';
+              const prodBrand = matchingProd?.bin || matchingProd?.brand || it.brand || '';
+
               // Category / Brand filters
               if (filters.parentCategory && filters.parentCategory.length > 0 && !filters.parentCategory.includes('All')) {
-                const prodCat = matchingProd?.category || matchingProd?.parent_category || '';
-                if (!filters.parentCategory.includes(prodCat)) return;
+                const matchP = filters.parentCategory.includes(prodParentCat) || filters.parentCategory.includes(prodLeafCat);
+                if (!matchP) return;
+              }
+              if (filters.subCategory && filters.subCategory.length > 0 && !filters.subCategory.includes('All')) {
+                if (!filters.subCategory.includes(prodSubCat)) return;
+              }
+              if (filters.subSubCategory && filters.subSubCategory.length > 0 && !filters.subSubCategory.includes('All')) {
+                if (!filters.subSubCategory.includes(prodLeafCat)) return;
               }
               if (filters.bin && filters.bin.length > 0 && !filters.bin.includes('All')) {
-                const prodBrand = matchingProd?.brand || '';
                 if (!filters.bin.includes(prodBrand)) return;
               }
 
@@ -726,15 +803,15 @@ const SaleReportPrint = () => {
               const lineTotal = Number(it.total || it.amount || (qty * rate) - discount);
               const uom = it.uom || matchingProd?.uom || productUomMap[key] || 'Nos';
               const sku = it.sku || matchingProd?.item_sr_no || matchingProd?.sku || '-';
-              const category = matchingProd?.category || it.category || 'General';
-              const brand = matchingProd?.brand || it.brand || '-';
 
               if (!productSummaryMap[key]) {
                 productSummaryMap[key] = {
                   product_name: pName,
                   sku,
-                  category,
-                  brand,
+                  parentCategory: prodParentCat || '-',
+                  subCategory: prodSubCat || '-',
+                  category: prodLeafCat || '-',
+                  brand: prodBrand || '-',
                   uom,
                   sold_qty: 0,
                   gross_sales: 0,
@@ -1659,8 +1736,10 @@ const SaleReportPrint = () => {
             { header: 'S#', key: 'sno', width: 8, alignment: { horizontal: 'center' } },
             { header: 'Product / Item Name', key: 'product_name', width: 32 },
             { header: 'SKU / Code', key: 'sku', width: 16 },
-            { header: 'Category', key: 'category', width: 18 },
             { header: 'Brand', key: 'brand', width: 16 },
+            { header: 'Parent Category', key: 'parentCategory', width: 18 },
+            { header: 'Sub Category', key: 'subCategory', width: 18 },
+            { header: 'Leaf Category', key: 'category', width: 18 },
             { header: 'UOM', key: 'uom', width: 10, alignment: { horizontal: 'center' } },
             { header: 'Sold Qty', key: 'sold_qty', width: 14, numFmt: '#,##0.00', alignment: { horizontal: 'right' } },
             { header: 'Returned Qty', key: 'returned_qty', width: 14, numFmt: '#,##0.00', alignment: { horizontal: 'right' } },
@@ -1674,8 +1753,10 @@ const SaleReportPrint = () => {
             sno: i + 1,
             product_name: r.product_name,
             sku: r.sku || '-',
-            category: r.category || 'General',
             brand: r.brand || '-',
+            parentCategory: r.parentCategory || '-',
+            subCategory: r.subCategory || '-',
+            category: r.category || '-',
             uom: r.uom,
             sold_qty: r.sold_qty,
             returned_qty: r.returned_qty,
@@ -3071,23 +3152,29 @@ const SaleReportPrint = () => {
               <table className="w-full table-auto border border-collapse border-black text-[11px] font-sans antialiased text-left print:w-full">
                 <thead>
                   <tr className="bg-gray-100 border-b border-black font-black uppercase text-black font-mono text-[10px]">
-                    <th className="p-1.5 border border-black text-center w-10">S#</th>
-                    <th className="p-1.5 border border-black">Product / Item Name</th>
-                    <th className="p-1.5 border border-black">SKU / Code</th>
-                    <th className="p-1.5 border border-black">Category</th>
-                    <th className="p-1.5 border border-black text-center">UOM</th>
-                    <th className="p-1.5 border border-black text-right">Sold Qty</th>
-                    <th className="p-1.5 border border-black text-right">Return Qty</th>
-                    <th className="p-1.5 border border-black text-right">Net Qty</th>
-                    <th className="p-1.5 border border-black text-right">Avg. Rate (PKR)</th>
-                    <th className="p-1.5 border border-black text-right">Net Sales Revenue (PKR)</th>
-                    <th className="p-1.5 border border-black text-center">Last Sold Date</th>
+                    <th rowSpan={2} className="p-1.5 border border-black text-center w-10">S#</th>
+                    <th rowSpan={2} className="p-1.5 border border-black">Product / Item Name</th>
+                    <th rowSpan={2} className="p-1.5 border border-black">SKU / Code</th>
+                    <th rowSpan={2} className="p-1.5 border border-black">Brand</th>
+                    <th colSpan={3} className="p-1 border border-black text-center bg-gray-200">Category Classification</th>
+                    <th rowSpan={2} className="p-1.5 border border-black text-center">UOM</th>
+                    <th rowSpan={2} className="p-1.5 border border-black text-right">Sold Qty</th>
+                    <th rowSpan={2} className="p-1.5 border border-black text-right">Return Qty</th>
+                    <th rowSpan={2} className="p-1.5 border border-black text-right">Net Qty</th>
+                    <th rowSpan={2} className="p-1.5 border border-black text-right">Avg. Rate (PKR)</th>
+                    <th rowSpan={2} className="p-1.5 border border-black text-right">Net Sales Revenue (PKR)</th>
+                    <th rowSpan={2} className="p-1.5 border border-black text-center">Last Sold Date</th>
+                  </tr>
+                  <tr className="bg-gray-100 border-b border-black font-black uppercase text-black font-mono text-[9px]">
+                    <th className="p-1 border border-black text-left">Parent</th>
+                    <th className="p-1 border border-black text-left">Sub</th>
+                    <th className="p-1 border border-black text-left">Leaf</th>
                   </tr>
                 </thead>
                 <tbody>
                   {displayedRows.length === 0 ? (
                     <tr>
-                      <td colSpan={11} className="text-center py-10 font-bold italic border border-black text-gray-400 bg-gray-50/50">
+                      <td colSpan={14} className="text-center py-10 font-bold italic border border-black text-gray-400 bg-gray-50/50">
                         No product sales history records discovered matching chosen selection criteria.
                       </td>
                     </tr>
@@ -3099,7 +3186,10 @@ const SaleReportPrint = () => {
                           <td className="p-1.5 border border-black text-center text-gray-600">{realIndex}</td>
                           <td className="p-1.5 border border-black font-sans font-bold text-black">{row.product_name}</td>
                           <td className="p-1.5 border border-black text-gray-700 text-[10px]">{row.sku || '-'}</td>
-                          <td className="p-1.5 border border-black font-sans text-gray-600 text-[10px]">{row.category}</td>
+                          <td className="p-1.5 border border-black font-sans text-gray-600 text-[10px]">{row.brand || '-'}</td>
+                          <td className="p-1.5 border border-black font-sans text-gray-600 text-[10px]">{row.parentCategory || '-'}</td>
+                          <td className="p-1.5 border border-black font-sans text-gray-600 text-[10px]">{row.subCategory || '-'}</td>
+                          <td className="p-1.5 border border-black font-sans text-gray-600 text-[10px]">{row.category || '-'}</td>
                           <td className="p-1.5 border border-black text-center text-gray-700 font-bold">{row.uom}</td>
                           <td className="p-1.5 border border-black text-right text-black font-bold">
                             {Number(row.sold_qty || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
@@ -3128,7 +3218,7 @@ const SaleReportPrint = () => {
                   {/* 📄 Page Subtotal Row */}
                   {!isPrinting && pageSize !== 'all' && (
                     <tr className="bg-amber-50/80 border-t border-black font-bold font-mono text-xs text-amber-950">
-                      <td colSpan={5} className="p-2 border border-black text-right uppercase tracking-wider text-amber-900">
+                      <td colSpan={8} className="p-2 border border-black text-right uppercase tracking-wider text-amber-900">
                         Page {currentPage} Subtotal ({displayedRows.length} products):
                       </td>
                       <td className="p-2 border border-black text-right text-black font-bold">
@@ -3149,7 +3239,7 @@ const SaleReportPrint = () => {
                   )}
                   {/* 📊 Overall Grand Totals Row */}
                   <tr className="bg-gray-100 border-t-2 border-black font-black font-mono text-xs">
-                    <td colSpan={5} className="p-2 border border-black text-right uppercase tracking-wider text-gray-900">
+                    <td colSpan={8} className="p-2 border border-black text-right uppercase tracking-wider text-gray-900">
                       Grand Total Summary (All {reportRows.length} Products):
                     </td>
                     <td className="p-2 border border-black text-right text-black">

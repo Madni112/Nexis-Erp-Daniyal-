@@ -319,9 +319,9 @@ const HoldingReportPrint: React.FC = () => {
               <thead>
                 <tr className="bg-gray-100 border-b border-black font-black uppercase text-black font-mono text-[10px]">
                   <th className="p-1.5 border border-black text-center w-10">S#</th>
+                  <th className="p-1.5 border border-black text-center w-24">Date</th>
                   <th className="p-1.5 border border-black">Gatepass #</th>
                   <th className="p-1.5 border border-black">Invoice #</th>
-                  <th className="p-1.5 border border-black text-center">Date</th>
                   <th className="p-1.5 border border-black">Customer Title</th>
                   <th className="p-1.5 border border-black">Salesman</th>
                   <th className="p-1.5 border border-black">Product Description</th>
@@ -343,9 +343,9 @@ const HoldingReportPrint: React.FC = () => {
                   paginatedRows.map((r: any, idx: number) => (
                     <tr key={idx} className="border-b border-black font-mono text-xs">
                       <td className="p-1 border border-black text-center text-gray-500">{startIndex + idx + 1}</td>
+                      <td className="p-1 border border-black text-center text-gray-600 font-sans text-[10px]">{r.date}</td>
                       <td className="p-1 border border-black font-bold">{r.gatepassNo}</td>
                       <td className="p-1 border border-black">{r.invoiceNo}</td>
-                      <td className="p-1 border border-black text-center text-gray-600 font-sans text-[10px]">{r.date}</td>
                       <td className="p-1 border border-black font-sans font-bold">{r.customerName}</td>
                       <td className="p-1 border border-black font-sans text-gray-700">{r.salesman}</td>
                       <td className="p-1 border border-black font-sans">

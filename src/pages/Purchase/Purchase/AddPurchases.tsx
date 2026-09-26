@@ -394,20 +394,48 @@ const AddPurchases = () => {
                 // Sync updated items back to linked GRN so Inward Challan stays accurate
                 const linkedGrnId = values.grnId || editData?.metadata?.grn_id || editData?.grn_id || null;
                 if (linkedGrnId) {
-                  // Delete old grn_items and re-insert updated ones
+                  // Fetch existing GRN items so we retain accepted_qty for already verified items
+                  const { data: existingGrnItems } = await supabase
+                    .from('grn_items')
+                    .select('*')
+                    .eq('grn_id', linkedGrnId);
+
                   await supabase.from('grn_items').delete().eq('grn_id', linkedGrnId);
-                  const updatedGrnItems = values.items.map((item: any) => ({
-                    grn_id: linkedGrnId,
-                    product_name: item.itemName,
-                    warehouse_name: item.warehouse || values.targetWarehouse || locations[0]?.name || 'Main Warehouse',
-                    qty: Number(item.qty),
-                    uom: item.uom || 'EACH'
-                  }));
+
+                  let hasUnverified = false;
+                  const updatedGrnItems = values.items.map((item: any) => {
+                    const matched = (existingGrnItems || []).find((eg: any) =>
+                      eg.product_name === item.itemName &&
+                      String(eg.warehouse_name).toUpperCase() === String(item.warehouse || values.targetWarehouse || locations[0]?.name || 'Main Warehouse').toUpperCase() &&
+                      Number(eg.qty) === Number(item.qty)
+                    );
+
+                    const acceptedQty = matched ? matched.accepted_qty : null;
+                    const rejectedQty = matched ? matched.rejected_qty : 0;
+                    const holdQty = matched ? matched.hold_qty : 0;
+
+                    const isUnverified = (acceptedQty == null) || (acceptedQty === 0 && rejectedQty === 0 && Number(item.qty) > 0);
+                    if (isUnverified) hasUnverified = true;
+
+                    return {
+                      grn_id: linkedGrnId,
+                      product_name: item.itemName,
+                      warehouse_name: item.warehouse || values.targetWarehouse || locations[0]?.name || 'Main Warehouse',
+                      qty: Number(item.qty),
+                      uom: item.uom || 'EACH',
+                      accepted_qty: acceptedQty,
+                      rejected_qty: rejectedQty,
+                      hold_qty: holdQty
+                    };
+                  });
                   await supabase.from('grn_items').insert(updatedGrnItems);
-                  // Also update GRN header date/vendor
+
+                  // Update GRN header date/vendor and status
+                  const newStatus = hasUnverified ? 'Partially Received' : 'Confirm';
                   await supabase.from('grn_receipts').update({
                     vendor_name: values.supplierName,
                     receipt_date: values.purchaseDate,
+                    status: newStatus
                   }).eq('id', linkedGrnId);
                 }
 
