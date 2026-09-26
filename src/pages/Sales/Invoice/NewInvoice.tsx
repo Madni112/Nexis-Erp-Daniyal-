@@ -210,6 +210,9 @@ const NewInvoice = () => {
     shippingAddress: Yup.string().nullable(),
     saleDate: Yup.string().required('Required Field').test('valid-date', 'Date must be within last 3 days', function(value) {
       if (!value) return false;
+      if (editData && (editData.sale_date || editData.date) && value === String(editData.sale_date || editData.date).split('T')[0]) {
+        return true;
+      }
       const selected = new Date(value);
       selected.setHours(0,0,0,0);
       const base = serverToday ? new Date(serverToday) : new Date();
@@ -921,7 +924,7 @@ const NewInvoice = () => {
                       name="saleDate" 
                       value={values.saleDate} 
                       onChange={handleChange}
-                      min={new Date(new Date().setDate(new Date().getDate() - 3)).toISOString().split('T')[0]}
+                      min={editData ? undefined : new Date(new Date().setDate(new Date().getDate() - 3)).toISOString().split('T')[0]}
                       max={new Date().toISOString().split('T')[0]}
                       className={`w-full rounded border p-2 text-sm bg-transparent font-bold outline-none text-black dark:text-white ${hasAttempted && errors.saleDate ? 'border-red-500 bg-red-50/10' : 'border-stroke dark:border-strokedark focus:border-primary'}`} 
                     />
