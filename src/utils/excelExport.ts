@@ -5,7 +5,8 @@ export interface ExcelColumn {
   key: string;
   width?: number;
   type?: 'text' | 'number' | 'currency' | 'date' | 'percent';
-  alignment?: 'left' | 'center' | 'right';
+  alignment?: 'left' | 'center' | 'right' | { horizontal?: 'left' | 'center' | 'right'; vertical?: string };
+  numFmt?: string;
 }
 
 export interface ExcelExportConfig {
@@ -232,10 +233,39 @@ const createStyledWorksheet = (config: any): XLSX.WorkSheet => {
   // ==========================================
   // ROW 5: TABLE COLUMN HEADERS
   // ==========================================
+  // Helper to extract alignment string safely (handles both string and { horizontal: 'right' })
+  const getAlignment = (colAlign: any, defaultAlign: 'left' | 'center' | 'right'): 'left' | 'center' | 'right' => {
+    if (typeof colAlign === 'string') return colAlign as 'left' | 'center' | 'right';
+    if (colAlign && typeof colAlign === 'object' && colAlign.horizontal) return colAlign.horizontal;
+    return defaultAlign;
+  };
+
+  // Helper to check if a column represents currency or general numbers
+  const isCurrencyColumn = (col: any) => {
+    if (col.type === 'currency') return true;
+    if (col.type === 'number' || col.type === 'text' || col.type === 'date') return false;
+    const key = String(col.key || '').toLowerCase();
+    const hdr = String(col.header || '').toLowerCase();
+    return key.includes('amount') || key.includes('sales') || key.includes('revenue') || key.includes('spend') ||
+      key.includes('valuation') || key.includes('debit') || key.includes('credit') || key.includes('rate') ||
+      key.includes('price') || hdr.includes('(pkr)') || hdr.includes('(rs.)');
+  };
+
+  const isNumberColumn = (col: any) => {
+    if (col.type === 'number') return true;
+    if (col.type === 'currency' || col.type === 'text' || col.type === 'date') return false;
+    const key = String(col.key || '').toLowerCase();
+    const hdr = String(col.header || '').toLowerCase();
+    return key.includes('qty') || key.includes('units') || key.includes('count') || key.includes('stock') ||
+      hdr.includes('qty') || hdr.includes('units');
+  };
+
+  // Header row
   const headerRowIdx = currentRow;
-  columns.forEach((col, colIdx) => {
+  columns.forEach((col: any, colIdx: number) => {
     const cellRef = `${XLSX.utils.encode_col(colIdx)}${headerRowIdx + 1}`;
-    const align = col.alignment || (col.type === 'currency' || col.type === 'number' ? 'right' : col.type === 'date' ? 'center' : 'left');
+    const defaultAlign = (isCurrencyColumn(col) || isNumberColumn(col)) ? 'right' : (col.type === 'date' ? 'center' : 'left');
+    const align = getAlignment(col.alignment, defaultAlign);
 
     ws[cellRef] = {
       v: col.header,
@@ -258,15 +288,15 @@ const createStyledWorksheet = (config: any): XLSX.WorkSheet => {
     const isZebra = rowIdx % 2 === 1;
     const rowBg = isZebra ? activeTheme.zebra : 'FFFFFF';
 
-    // Special Handling: Grouped Header Banner Row (e.g. Salesman / Customer Banner Box in Excel)
+    // Special Handling: Grouped Header Banner Row
     if (item._isHeader || item._isSubHeader || item._isSectionHeader) {
       const isSub = Boolean(item._isSubHeader || item._isSectionHeader);
       const bannerText = item._bannerText || item.header || '';
       const isReturnSection = bannerText.toUpperCase().includes('RETURN');
 
       const bgColor = isSub
-        ? (isReturnSection ? 'FFE4E6' : 'F0FDF4') // Rose for returns, Emerald for sales
-        : 'E2E8F0'; // Slate for master group header
+        ? (isReturnSection ? 'FFE4E6' : 'F0FDF4')
+        : 'E2E8F0';
       const textColor = isSub
         ? (isReturnSection ? '881337' : '064E3B')
         : '0F172A';
@@ -312,12 +342,14 @@ const createStyledWorksheet = (config: any): XLSX.WorkSheet => {
       return;
     }
 
-    // Special Handling: Subtotal Row per Customer / Group
+    // Special Handling: Subtotal Row per Group
     if (item._isSubtotal) {
-      columns.forEach((col, colIdx) => {
+      columns.forEach((col: any, colIdx: number) => {
         const cellRef = `${XLSX.utils.encode_col(colIdx)}${currentRow + 1}`;
         const rawVal = item[col.key];
         const isNum = typeof rawVal === 'number';
+        const defaultAlign = (isCurrencyColumn(col) || isNumberColumn(col) || isNum) ? 'right' : 'left';
+        const align = getAlignment(col.alignment, defaultAlign);
 
         ws[cellRef] = {
           v: rawVal !== undefined && rawVal !== null ? rawVal : '',
@@ -325,14 +357,14 @@ const createStyledWorksheet = (config: any): XLSX.WorkSheet => {
           s: {
             font: { name: 'Calibri', sz: 10, bold: true, color: { rgb: '0F172A' } },
             fill: { fgColor: { rgb: 'F1F5F9' } },
-            alignment: { horizontal: col.alignment || (isNum ? 'right' : 'left'), vertical: 'center' },
+            alignment: { horizontal: align, vertical: 'center' },
             border: {
               top: { style: 'thin', color: { rgb: '0F172A' } },
               bottom: { style: 'medium', color: { rgb: '0F172A' } },
               left: { style: 'thin', color: { rgb: 'CBD5E1' } },
               right: { style: 'thin', color: { rgb: 'CBD5E1' } }
             },
-            ...(isNum ? { numFmt: '#,##0.00' } : {})
+            ...(isNum ? { numFmt: col.numFmt || '#,##0.00' } : {})
           }
         };
       });
@@ -342,31 +374,45 @@ const createStyledWorksheet = (config: any): XLSX.WorkSheet => {
       return;
     }
 
-    columns.forEach((col, colIdx) => {
+    columns.forEach((col: any, colIdx: number) => {
       const cellRef = `${XLSX.utils.encode_col(colIdx)}${currentRow + 1}`;
       const rawVal = item[col.key];
-      const align = col.alignment || (col.type === 'currency' || col.type === 'number' ? 'right' : col.type === 'date' ? 'center' : 'left');
+      const isCur = isCurrencyColumn(col);
+      const isNum = isNumberColumn(col);
+      const defaultAlign = (isCur || isNum) ? 'right' : (col.type === 'date' ? 'center' : 'left');
+      const align = getAlignment(col.alignment, defaultAlign);
 
       let cellValue: any = rawVal;
       let cellType = 's';
-      let numFmt: string | undefined = undefined;
+      let numFmt: string | undefined = col.numFmt;
 
-      if (col.type === 'currency') {
+      if (isCur) {
         const num = Number(rawVal || 0);
         cellValue = isNaN(num) ? 0 : num;
         cellType = 'n';
-        numFmt = '#,##0.00';
-      } else if (col.type === 'number') {
+        numFmt = col.numFmt || '#,##0.00';
+      } else if (isNum) {
         const num = Number(rawVal || 0);
         cellValue = isNaN(num) ? 0 : num;
         cellType = 'n';
-        numFmt = '#,##0';
+        numFmt = col.numFmt || (num % 1 !== 0 ? '#,##0.00' : '#,##0.00');
       } else if (col.type === 'date') {
         cellValue = rawVal ? String(rawVal).split('T')[0] : '-';
         cellType = 's';
+      } else if (col.type === 'percent') {
+        const num = Number(rawVal || 0);
+        cellValue = isNaN(num) ? 0 : num;
+        cellType = 'n';
+        numFmt = col.numFmt || '0.00%';
       } else {
-        cellValue = rawVal !== undefined && rawVal !== null ? String(rawVal) : '-';
-        cellType = 's';
+        if (typeof rawVal === 'number') {
+          cellValue = rawVal;
+          cellType = 'n';
+          numFmt = col.numFmt || (rawVal % 1 !== 0 ? '#,##0.00' : '#,##0');
+        } else {
+          cellValue = rawVal !== undefined && rawVal !== null ? String(rawVal) : '-';
+          cellType = 's';
+        }
       }
 
       ws[cellRef] = {
@@ -389,36 +435,46 @@ const createStyledWorksheet = (config: any): XLSX.WorkSheet => {
   // ==========================================
   // TOTAL / SUMMARY ROW (IF APPLICABLE)
   // ==========================================
-  if (summaryRow && data.length > 0) {
-    const summaryData: Record<string, any> = typeof summaryRow === 'object' ? summaryRow : {};
+  const shouldRenderSummary = summaryRow !== false && data.length > 0;
+  if (shouldRenderSummary) {
+    const summaryData: Record<string, any> = typeof summaryRow === 'object' && summaryRow !== null ? summaryRow : {};
+    const validDataRows = data.filter(row => !row._isHeader && !row._isSubHeader && !row._isSectionHeader && !row._isSubtotal);
 
     // Calculate sum for currency and number columns if not provided
-    columns.forEach((col) => {
-      if (summaryData[col.key] === undefined && (col.type === 'currency' || col.type === 'number')) {
-        const sum = data.reduce((acc, row) => acc + (Number(row[col.key]) || 0), 0);
+    columns.forEach((col: any) => {
+      const isCur = isCurrencyColumn(col);
+      const isNum = isNumberColumn(col);
+      if (summaryData[col.key] === undefined && (isCur || isNum)) {
+        const sum = validDataRows.reduce((acc, row) => acc + (Number(row[col.key]) || 0), 0);
         summaryData[col.key] = sum;
       }
     });
 
-    columns.forEach((col, colIdx) => {
+    columns.forEach((col: any, colIdx: number) => {
       const cellRef = `${XLSX.utils.encode_col(colIdx)}${currentRow + 1}`;
       const isFirstCol = colIdx === 0;
-      const align = col.alignment || (col.type === 'currency' || col.type === 'number' ? 'right' : 'left');
+      const isCur = isCurrencyColumn(col);
+      const isNum = isNumberColumn(col);
+      const defaultAlign = (isCur || isNum) ? 'right' : 'left';
+      const align = getAlignment(col.alignment, defaultAlign);
 
       let val = summaryData[col.key];
       let cellType = 's';
-      let numFmt: string | undefined = undefined;
+      let numFmt: string | undefined = col.numFmt;
 
       if (isFirstCol && !val) {
         val = 'SUMMARY';
       }
 
-      if (col.type === 'currency' && typeof val === 'number') {
+      if (isCur && typeof val === 'number') {
         cellType = 'n';
-        numFmt = '#,##0.00';
-      } else if (col.type === 'number' && typeof val === 'number') {
+        numFmt = col.numFmt || '#,##0.00';
+      } else if (isNum && typeof val === 'number') {
         cellType = 'n';
-        numFmt = '#,##0';
+        numFmt = col.numFmt || '#,##0.00';
+      } else if (typeof val === 'number') {
+        cellType = 'n';
+        numFmt = col.numFmt || '#,##0.00';
       } else {
         val = val !== undefined && val !== null ? String(val) : '';
       }

@@ -315,36 +315,6 @@ const REPORT_REGISTRY: Record<string, ReportConfig> = {
     tab: 4,
     fields: ['location', 'parentCategory', 'subCategory', 'subSubCategory', 'brand', 'product', 'salesman']
   },
-  'detailed-pricing-stock': {
-    id: 'detailed-pricing-stock',
-    title: 'Detailed Stock Pricing & Asset Valuation',
-    categoryName: 'Inventory & Warehouses',
-    subtitle: 'Line-level inventory valuation with purchase costs, retail selling prices, and net asset capital.',
-    badge: 'NEW',
-    badgeType: 'new',
-    createdAt: '2026-09-22',
-    icon: MdPriceCheck,
-    targetPrintPath: '/Reports/Stock-Report/Print',
-    printType: 'stock',
-    tab: 5,
-    hideDateFilter: true,
-    fields: ['location', 'parentCategory', 'subCategory', 'subSubCategory', 'brand', 'product']
-  },
-  'product-spec-stock': {
-    id: 'product-spec-stock',
-    title: 'Product Catalog & Specification Stock Report',
-    categoryName: 'Inventory & Warehouses',
-    subtitle: 'Technical specifications, brand codes, UOM groupings, and current physical stock balances.',
-    badge: 'NEW',
-    badgeType: 'new',
-    createdAt: '2026-09-22',
-    icon: MdFormatListBulleted,
-    targetPrintPath: '/Reports/Stock-Report/Print',
-    printType: 'stock',
-    tab: 6,
-    hideDateFilter: true,
-    fields: ['location', 'parentCategory', 'subCategory', 'subSubCategory', 'brand', 'product']
-  },
   'category-wise-stock': {
     id: 'category-wise-stock',
     title: 'Category-Wise Stock Valuation Ledger',

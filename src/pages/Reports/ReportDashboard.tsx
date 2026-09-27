@@ -292,30 +292,6 @@ const ALL_REPORTS: ReportItem[] = [
     icon: MdCompareArrows
   },
   {
-    id: 'detailed-pricing-stock',
-    title: 'Detailed Stock Pricing & Asset Valuation',
-    category: 'inventory',
-    description: 'Line-level inventory valuation with purchase costs, retail selling prices, and net asset capital.',
-    badge: 'NEW',
-    badgeType: 'new',
-    createdAt: '2026-09-22',
-    path: '/Reports/Stock-Report',
-    state: { activeTab: 5 },
-    icon: MdPriceCheck
-  },
-  {
-    id: 'product-spec-stock',
-    title: 'Product Catalog & Specification Stock Report',
-    category: 'inventory',
-    description: 'Technical specifications, brand codes, UOM groupings, and current physical stock balances.',
-    badge: 'NEW',
-    badgeType: 'new',
-    createdAt: '2026-09-22',
-    path: '/Reports/Stock-Report',
-    state: { activeTab: 6 },
-    icon: MdFormatListBulleted
-  },
-  {
     id: 'category-wise-stock',
     title: 'Category-Wise Stock Valuation Ledger',
     category: 'inventory',

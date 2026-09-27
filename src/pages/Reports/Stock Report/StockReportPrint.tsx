@@ -27,26 +27,168 @@ const StockReportPrint = () => {
     );
     const [activeStatusContainerTab, setActiveStatusContainerTab] = useState<string>('out_of_stock');
 
-    useEffect(() => {
-        const originalTitle = document.title;
-        document.title = 'NHT ENTERPRISES (Noor Horizon Technologies)';
+    // Helper to construct the 3-tier category hierarchy tree from any row subset
+    const buildCategoryTreeFromRows = (rows: any[]) => {
+        const parentMap: { [pKey: string]: {
+            parent_name: string;
+            total_units: number;
+            total_valuation: number;
+            total_skus: number;
+            sub_categories_map: { [sKey: string]: {
+                sub_name: string;
+                total_units: number;
+                total_valuation: number;
+                total_skus: number;
+                categories_map: { [lKey: string]: {
+                    category_name: string;
+                    total_units: number;
+                    total_valuation: number;
+                    products: any[];
+                }}
+            }}
+        }} = {};
 
-        const handleBeforePrint = () => setIsPrinting(true);
-        const handleAfterPrint = () => setIsPrinting(false);
+        let totalVal = 0;
+        rows.forEach((row: any) => {
+            const rawPName = String(row.sub_sub_category || row.parent_category || row.category || 'General Products').trim() || 'General Products';
+            const rawSName = String(row.sub_category || 'General').trim() || 'General';
+            const rawLName = String(row.category || rawPName || 'General').trim() || 'General';
 
-        window.addEventListener('beforeprint', handleBeforePrint);
-        window.addEventListener('afterprint', handleAfterPrint);
+            const pKey = rawPName.toUpperCase();
+            const sKey = rawSName.toUpperCase();
+            const lKey = rawLName.toUpperCase();
 
-        return () => {
-            document.title = originalTitle;
-            window.removeEventListener('beforeprint', handleBeforePrint);
-            window.removeEventListener('afterprint', handleAfterPrint);
-        };
-    }, []);
+            const qty = Number(row.computed_true_stock !== undefined ? row.computed_true_stock : row.current_stock || 0);
+            const rate = Number(row.retail_price || row.sale_price || row.purchase_price || row.price || 0);
+            const val = Number(row.calculated_valuation !== undefined ? row.calculated_valuation : (qty * rate));
+            totalVal += val;
 
-    useEffect(() => {
-        setCurrentPage(1);
-    }, [activeTab, activeStatusContainerTab, activeViewMode, JSON.stringify(filters)]);
+            if (!parentMap[pKey]) {
+                parentMap[pKey] = {
+                    parent_name: pKey,
+                    total_units: 0,
+                    total_valuation: 0,
+                    total_skus: 0,
+                    sub_categories_map: {}
+                };
+            }
+            const pNode = parentMap[pKey];
+            pNode.total_units += qty;
+            pNode.total_valuation += val;
+            pNode.total_skus += 1;
+
+            if (!pNode.sub_categories_map[sKey]) {
+                pNode.sub_categories_map[sKey] = {
+                    sub_name: sKey,
+                    total_units: 0,
+                    total_valuation: 0,
+                    total_skus: 0,
+                    categories_map: {}
+                };
+            }
+            const sNode = pNode.sub_categories_map[sKey];
+            sNode.total_units += qty;
+            sNode.total_valuation += val;
+            sNode.total_skus += 1;
+
+            if (!sNode.categories_map[lKey]) {
+                sNode.categories_map[lKey] = {
+                    category_name: lKey,
+                    total_units: 0,
+                    total_valuation: 0,
+                    products: []
+                };
+            }
+            const lNode = sNode.categories_map[lKey];
+            lNode.total_units += qty;
+            lNode.total_valuation += val;
+            lNode.products.push({
+                ...row,
+                stock_qty: qty,
+                unit_rate: rate,
+                line_valuation: val
+            });
+        });
+
+        return Object.values(parentMap).sort((a, b) => a.parent_name.localeCompare(b.parent_name)).map((pNode) => {
+            const subCategories = Object.values(pNode.sub_categories_map).sort((a, b) => a.sub_name.localeCompare(b.sub_name)).map((sNode) => {
+                const leafCategories = Object.values(sNode.categories_map).sort((a, b) => a.category_name.localeCompare(b.category_name)).map((lNode) => {
+                    return {
+                        ...lNode,
+                        products: lNode.products.map(prod => ({
+                            ...prod,
+                            share_of_category: lNode.total_valuation > 0 ? (prod.line_valuation / lNode.total_valuation) * 100 : 0
+                        }))
+                    };
+                });
+                return {
+                    ...sNode,
+                    categories: leafCategories
+                };
+            });
+            return {
+                ...pNode,
+                sub_categories: subCategories,
+                grand_share_pct: totalVal > 0 ? (pNode.total_valuation / totalVal) * 100 : 0
+            };
+        });
+    };
+
+    // ── 3-TIER CATEGORY HIERARCHY TREE (Detailed View matching Purchase & Sales) ──
+    const categoryHierarchyTree = useMemo(() => {
+        return buildCategoryTreeFromRows(reportRows);
+    }, [reportRows]);
+
+    // ── SUMMARY VIEW: FLAT CATEGORY ROWS (Matching Purchase & Sales) ──
+    const categorySummaryRows = useMemo(() => {
+        const summaryMap: { [key: string]: {
+            parent_name: string;
+            sub_name: string;
+            category_name: string;
+            products_count: number;
+            total_units: number;
+            total_valuation: number;
+            contribution_pct: number;
+        }} = {};
+
+        let grandValuation = 0;
+        reportRows.forEach((row: any) => {
+            const rawPName = String(row.sub_sub_category || row.parent_category || row.category || 'General Products').trim() || 'General Products';
+            const rawSName = String(row.sub_category || 'General').trim() || 'General';
+            const rawLName = String(row.category || rawPName || 'General').trim() || 'General';
+
+            const pName = rawPName.toUpperCase();
+            const sName = rawSName.toUpperCase();
+            const lName = rawLName.toUpperCase();
+
+            const qty = Number(row.computed_true_stock !== undefined ? row.computed_true_stock : row.current_stock || 0);
+            const rate = Number(row.retail_price || row.sale_price || row.purchase_price || row.price || 0);
+            const val = Number(row.calculated_valuation !== undefined ? row.calculated_valuation : (qty * rate));
+            grandValuation += val;
+
+            const key = `${pName}___${sName}___${lName}`;
+            if (!summaryMap[key]) {
+                summaryMap[key] = {
+                    parent_name: pName,
+                    sub_name: sName,
+                    category_name: lName,
+                    products_count: 0,
+                    total_units: 0,
+                    total_valuation: 0,
+                    contribution_pct: 0
+                };
+            }
+            const item = summaryMap[key];
+            item.products_count += 1;
+            item.total_units += qty;
+            item.total_valuation += val;
+        });
+
+        return Object.values(summaryMap).sort((a, b) => a.parent_name.localeCompare(b.parent_name) || a.sub_name.localeCompare(b.sub_name) || a.category_name.localeCompare(b.category_name)).map(item => ({
+            ...item,
+            contribution_pct: grandValuation > 0 ? (item.total_valuation / grandValuation) * 100 : 0
+        }));
+    }, [reportRows]);
 
     const statusGroups = useMemo(() => {
         const outOfStock: any[] = [];
@@ -121,9 +263,14 @@ const StockReportPrint = () => {
     }, [reportRows]);
 
     const activeDisplayRows = useMemo(() => {
-        if (activeViewMode === 'detailed' && activeTab !== 4 && activeStatusContainerTab !== 'all') {
-            const grp = statusGroups.find(g => g.key === activeStatusContainerTab);
-            return grp ? grp.items : reportRows;
+        if (activeViewMode === 'detailed') {
+            if (activeTab === 7) {
+                return reportRows;
+            }
+            if (activeTab !== 4 && activeStatusContainerTab !== 'all') {
+                const grp = statusGroups.find(g => g.key === activeStatusContainerTab);
+                return grp ? grp.items : reportRows;
+            }
         }
         return reportRows;
     }, [activeViewMode, activeTab, activeStatusContainerTab, statusGroups, reportRows]);
@@ -134,6 +281,18 @@ const StockReportPrint = () => {
         const start = (currentPage - 1) * limit;
         return activeDisplayRows.slice(start, start + limit);
     }, [activeDisplayRows, currentPage, pageSize, isPrinting]);
+
+    const paginatedCategorySummaryRows = useMemo(() => {
+        if (isPrinting || pageSize === 'all') return categorySummaryRows;
+        const limit = typeof pageSize === 'number' ? pageSize : 25;
+        const start = (currentPage - 1) * limit;
+        return categorySummaryRows.slice(start, start + limit);
+    }, [categorySummaryRows, currentPage, pageSize, isPrinting]);
+
+    const paginatedCategoryTree = useMemo(() => {
+        if (isPrinting || pageSize === 'all') return categoryHierarchyTree;
+        return buildCategoryTreeFromRows(paginatedRows);
+    }, [categoryHierarchyTree, paginatedRows, isPrinting, pageSize]);
 
     const startIndex = (currentPage - 1) * (pageSize === 'all' ? 0 : (pageSize as number));
 
@@ -205,18 +364,139 @@ const StockReportPrint = () => {
                 const { data: baseProducts, error: prodError } = await prodQuery;
                 if (prodError) throw prodError;
 
-                // 2. We only fetch raw tables for Tab 8 now. Tabs 1-3 use the RPC.
+                // 2. Fetch raw tables for Tab 3 (Multi-location Breakdown) and Tab 8 (Location Ledger)
                 let openStocks: any = [], purchases: any = [], sales: any = [], pReturns: any = [], sReturns: any = [];
-                if (activeTab === 8) {
-                    const [os, p, s, pr, sr] = await Promise.all([
+                let dbLocsData: any[] = [], transfersData: any[] = [];
+                if (activeTab === 8 || activeTab === 3) {
+                    const [os, p, s, pr, sr, dbLocsRes, transRes] = await Promise.all([
                         supabase.from('opening_stocks').select('*'),
                         supabase.from('supplier_purchases').select('*'),
                         supabase.from('sales_invoices').select('*'),
                         supabase.from('purchase_returns').select('*'),
-                        supabase.from('sales_returns').select('*')
+                        supabase.from('sales_returns').select('*'),
+                        supabase.from('inventory_locations').select('id, name, location_type'),
+                        supabase.from('stock_transfers').select('*')
                     ]);
-                    openStocks = os.data; purchases = p.data; sales = s.data; pReturns = pr.data; sReturns = sr.data;
+                    openStocks = os.data || [];
+                    purchases = p.data || [];
+                    sales = s.data || [];
+                    pReturns = pr.data || [];
+                    sReturns = sr.data || [];
+                    dbLocsData = dbLocsRes.data || [];
+                    transfersData = transRes.data || [];
                 }
+
+                const registeredLocs = (dbLocsData && dbLocsData.length > 0)
+                    ? dbLocsData.map(l => String(l.name).trim())
+                    : ['Market', 'Latifabad', 'Main Warehouse'];
+
+                // Find primary sale point location (e.g. SHOP / Sale Point) for sales with blank dispatch warehouse
+                const defaultSaleLoc = registeredLocs.find(l => {
+                    const matched = dbLocsData.find(dbL => String(dbL.name).trim().toLowerCase() === l.toLowerCase());
+                    return matched && String(matched.location_type || '').toLowerCase().includes('sale');
+                }) || registeredLocs.find(l => l.toLowerCase().includes('shop') || l.toLowerCase().includes('market')) || registeredLocs[0] || 'SHOP';
+
+                const computeProductLocations = (product: any) => {
+                    const name = String(product.product_name || '').trim().toLowerCase();
+                    const locationStockMap: { [loc: string]: number } = {};
+
+                    const getNormalizedLocName = (rawLoc: string, isSale: boolean = false) => {
+                        if (!rawLoc) return isSale ? defaultSaleLoc : (registeredLocs[0] || 'SHOP');
+                        const clean = String(rawLoc).trim();
+                        const matched = registeredLocs.find(l => l.toLowerCase() === clean.toLowerCase());
+                        return matched || clean;
+                    };
+
+                    // 1. Opening Stock
+                    (openStocks || []).forEach((os: any) => {
+                        const osName = String(os.product_name || os.item_name || os.itemName || '').trim().toLowerCase();
+                        if (osName === name || osName.includes(name)) {
+                            const loc = getNormalizedLocName(os.location || os.target_warehouse || os.warehouse_name, false);
+                            const qty = Number(os.quantity || os.qty || 0);
+                            locationStockMap[loc] = (locationStockMap[loc] || 0) + qty;
+                        }
+                    });
+
+                    // 2. Purchases (Stock In)
+                    (purchases || []).forEach((p: any) => {
+                        if (String(p.status).toLowerCase() !== 'cancel' && String(p.status).toLowerCase() !== 'deleted') {
+                            const loc = getNormalizedLocName(p.target_warehouse || p.location, false);
+                            const items = Array.isArray(p.items) ? p.items : JSON.parse(p.items || '[]');
+                            items.forEach((i: any) => {
+                                const iName = String(i.product_name || i.itemName || i.item_name || '').trim().toLowerCase();
+                                if (iName === name || iName.includes(name)) {
+                                    const qty = Number(i.qty || i.quantity || 0);
+                                    locationStockMap[loc] = (locationStockMap[loc] || 0) + qty;
+                                }
+                            });
+                        }
+                    });
+
+                    // 3. Sales Returns (Stock In)
+                    (sReturns || []).forEach((sr: any) => {
+                        if (String(sr.status).toLowerCase() !== 'cancel') {
+                            const loc = getNormalizedLocName(sr.dispatch_warehouse || sr.location, true);
+                            const items = Array.isArray(sr.items) ? sr.items : JSON.parse(sr.items || '[]');
+                            items.forEach((i: any) => {
+                                const iName = String(i.product_name || i.itemName || i.item_name || '').trim().toLowerCase();
+                                if (iName === name || iName.includes(name)) {
+                                    const qty = Number(i.qty || i.quantity || 0);
+                                    locationStockMap[loc] = (locationStockMap[loc] || 0) + qty;
+                                }
+                            });
+                        }
+                    });
+
+                    // 4. Stock Transfers (Movement between locations)
+                    (transfersData || []).forEach((t: any) => {
+                        if (String(t.status).toLowerCase() !== 'cancelled') {
+                            const fromLoc = getNormalizedLocName(t.from_location, false);
+                            const toLoc = getNormalizedLocName(t.to_location, false);
+                            const items = Array.isArray(t.items) ? t.items : JSON.parse(t.items || '[]');
+                            items.forEach((i: any) => {
+                                const iName = String(i.product_name || i.itemName || i.item_name || '').trim().toLowerCase();
+                                if (iName === name || iName.includes(name)) {
+                                    const qty = Number(i.qty || i.quantity || 0);
+                                    locationStockMap[fromLoc] = (locationStockMap[fromLoc] || 0) - qty;
+                                    locationStockMap[toLoc] = (locationStockMap[toLoc] || 0) + qty;
+                                }
+                            });
+                        }
+                    });
+
+                    // 5. Sales Invoices (Stock Out)
+                    (sales || []).forEach((s: any) => {
+                        const statusClean = String(s.sale_status || '').trim().toLowerCase();
+                        if (statusClean !== 'cancel' && statusClean !== 'deleted') {
+                            const loc = getNormalizedLocName(s.dispatch_warehouse || s.location, true);
+                            const items = Array.isArray(s.items) ? s.items : JSON.parse(s.items || '[]');
+                            items.forEach((i: any) => {
+                                const iName = String(i.product_name || i.itemName || i.item_name || '').trim().toLowerCase();
+                                if (iName === name || iName.includes(name)) {
+                                    const qty = Number(i.qty || i.quantity || 0);
+                                    locationStockMap[loc] = (locationStockMap[loc] || 0) - qty;
+                                }
+                            });
+                        }
+                    });
+
+                    // 6. Purchase Returns (Stock Out)
+                    (pReturns || []).forEach((pr: any) => {
+                        if (String(pr.status).toLowerCase() !== 'cancel') {
+                            const loc = getNormalizedLocName(pr.source_warehouse || pr.location, false);
+                            const items = Array.isArray(pr.items) ? pr.items : JSON.parse(pr.items || '[]');
+                            items.forEach((i: any) => {
+                                const iName = String(i.product_name || i.itemName || i.item_name || '').trim().toLowerCase();
+                                if (iName === name || iName.includes(name)) {
+                                    const qty = Number(i.qty || i.quantity || 0);
+                                    locationStockMap[loc] = (locationStockMap[loc] || 0) - qty;
+                                }
+                            });
+                        }
+                    });
+
+                    return locationStockMap;
+                };
 
                 const asOfDateClean = (activeTab === 3 && filters.asOfDate) ? String(filters.asOfDate).trim() : '';
                 const dateFromClean = filters.dateFrom ? String(filters.dateFrom).trim() : '';
@@ -253,13 +533,48 @@ const StockReportPrint = () => {
                     stockMap.set(String(row.product_name).toLowerCase(), row);
                 });
 
+                const targetLocFilter = Array.isArray(filters.location) && filters.location.length > 0 
+                    ? filters.location.map((l: string) => l.trim().toLowerCase()) 
+                    : [];
+
                 const calculatedAggregatedRows = (baseProducts || []).map(product => {
                     const name = String(product.product_name || '').trim().toLowerCase();
                     const stock = stockMap.get(name) || { opening_stock: 0, prior_in: 0, prior_out: 0, period_in: 0, period_out: 0 };
                     
                     const computedOpening = Number(stock.opening_stock) + Number(stock.prior_in) - Number(stock.prior_out);
                     const netActivity = Number(stock.period_in) - Number(stock.period_out);
-                    const trueRemainingStock = computedOpening + netActivity;
+                    let trueRemainingStock = computedOpening + netActivity;
+
+                    let locationBreakdown: Array<{ location: string; qty: number }> = [];
+                    if (activeTab === 3) {
+                        const locMap = computeProductLocations(product);
+                        const mapLocs = Object.keys(locMap);
+                        let candidateLocs = registeredLocs.slice();
+                        if (candidateLocs.length === 0) candidateLocs = ['Market'];
+                        mapLocs.forEach(ml => {
+                            if (!candidateLocs.some(c => c.toLowerCase() === ml.toLowerCase())) {
+                                candidateLocs.push(ml);
+                            }
+                        });
+
+                        if (targetLocFilter.length > 0) {
+                            candidateLocs = candidateLocs.filter(l => targetLocFilter.includes(l.toLowerCase()));
+                            if (candidateLocs.length === 0) candidateLocs = filters.location;
+                        }
+
+                        locationBreakdown = candidateLocs.map(locName => ({
+                            location: locName,
+                            qty: locMap[locName] || 0
+                        }));
+
+                        // If no location transaction existed yet, place trueRemainingStock on primary location
+                        if (mapLocs.length === 0 && locationBreakdown.length > 0) {
+                            locationBreakdown[0].qty = trueRemainingStock;
+                        }
+
+                        // Set total remaining stock from sum of breakdown locations
+                        trueRemainingStock = locationBreakdown.reduce((sum, b) => sum + b.qty, 0);
+                    }
 
                     return {
                         ...product,
@@ -268,127 +583,22 @@ const StockReportPrint = () => {
                         period_stock_out: Number(stock.period_out),
                         net_activity: netActivity,
                         computed_true_stock: trueRemainingStock,
-                        calculated_valuation: trueRemainingStock * Number(product.retail_price || product.sale_price || 0)
+                        calculated_valuation: trueRemainingStock * Number(product.retail_price || product.sale_price || 0),
+                        locationBreakdown
                     };
                 });
 
                 // --- 📍 TAB 8 SPECIFIC: PER-LOCATION DYNAMIC TRANSACTION LEDGER BREAKDOWN ---
                 if (activeTab === 8) {
-                    const { data: dbLocs } = await supabase.from('inventory_locations').select('name');
-                    const registeredLocs = (dbLocs && dbLocs.length > 0)
-                        ? dbLocs.map(l => String(l.name).trim())
-                        : ['Market', 'Latifabad', 'Main Warehouse'];
-                    const { data: transfers } = await supabase.from('stock_transfers').select('*');
-
                     const locationRows: any[] = [];
-                    const targetLocFilter = Array.isArray(filters.location) && filters.location.length > 0 
-                        ? filters.location.map((l: string) => l.trim().toLowerCase()) 
-                        : [];
 
                     for (const product of (baseProducts || [])) {
-                        const name = String(product.product_name || '').trim().toLowerCase();
                         const rate = Number(product.retail_price || product.sale_price || product.price || 0);
-
-                        const locationStockMap: { [loc: string]: number } = {};
-
-                        const getNormalizedLocName = (rawLoc: string) => {
-                            if (!rawLoc) return registeredLocs[0] || 'Market';
-                            const clean = String(rawLoc).trim();
-                            const matched = registeredLocs.find(l => l.toLowerCase() === clean.toLowerCase());
-                            return matched || clean;
-                        };
-
-                        // 1. Opening Stock
-                        (openStocks || []).forEach((os: any) => {
-                            const osName = String(os.product_name || os.item_name || os.itemName || '').trim().toLowerCase();
-                            if (osName === name || osName.includes(name)) {
-                                const loc = getNormalizedLocName(os.location || os.target_warehouse || os.warehouse_name);
-                                const qty = Number(os.quantity || os.qty || 0);
-                                locationStockMap[loc] = (locationStockMap[loc] || 0) + qty;
-                            }
-                        });
-
-                        // 2. Purchases (Stock In)
-                        (purchases || []).forEach((p: any) => {
-                            if (String(p.status).toLowerCase() !== 'cancel' && String(p.status).toLowerCase() !== 'deleted') {
-                                const loc = getNormalizedLocName(p.target_warehouse || p.location);
-                                const items = Array.isArray(p.items) ? p.items : JSON.parse(p.items || '[]');
-                                items.forEach((i: any) => {
-                                    const iName = String(i.product_name || i.itemName || i.item_name || '').trim().toLowerCase();
-                                    if (iName === name || iName.includes(name)) {
-                                        const qty = Number(i.qty || i.quantity || 0);
-                                        locationStockMap[loc] = (locationStockMap[loc] || 0) + qty;
-                                    }
-                                });
-                            }
-                        });
-
-                        // 3. Sales Returns (Stock In)
-                        (sReturns || []).forEach((sr: any) => {
-                            if (String(sr.status).toLowerCase() !== 'cancel') {
-                                const loc = getNormalizedLocName(sr.dispatch_warehouse || sr.location);
-                                const items = Array.isArray(sr.items) ? sr.items : JSON.parse(sr.items || '[]');
-                                items.forEach((i: any) => {
-                                    const iName = String(i.product_name || i.itemName || i.item_name || '').trim().toLowerCase();
-                                    if (iName === name || iName.includes(name)) {
-                                        const qty = Number(i.qty || i.quantity || 0);
-                                        locationStockMap[loc] = (locationStockMap[loc] || 0) + qty;
-                                    }
-                                });
-                            }
-                        });
-
-                        // 4. Stock Transfers (Movement between locations)
-                        (transfers || []).forEach((t: any) => {
-                            if (String(t.status).toLowerCase() !== 'cancelled') {
-                                const fromLoc = getNormalizedLocName(t.from_location);
-                                const toLoc = getNormalizedLocName(t.to_location);
-                                const items = Array.isArray(t.items) ? t.items : JSON.parse(t.items || '[]');
-                                items.forEach((i: any) => {
-                                    const iName = String(i.product_name || i.itemName || i.item_name || '').trim().toLowerCase();
-                                    if (iName === name || iName.includes(name)) {
-                                        const qty = Number(i.qty || i.quantity || 0);
-                                        locationStockMap[fromLoc] = (locationStockMap[fromLoc] || 0) - qty;
-                                        locationStockMap[toLoc] = (locationStockMap[toLoc] || 0) + qty;
-                                    }
-                                });
-                            }
-                        });
-
-                        // 5. Sales Invoices (Stock Out)
-                        (sales || []).forEach((s: any) => {
-                            const statusClean = String(s.sale_status || '').trim().toLowerCase();
-                            if (statusClean !== 'cancel' && statusClean !== 'deleted') {
-                                const loc = getNormalizedLocName(s.dispatch_warehouse || s.location);
-                                const items = Array.isArray(s.items) ? s.items : JSON.parse(s.items || '[]');
-                                items.forEach((i: any) => {
-                                    const iName = String(i.product_name || i.itemName || i.item_name || '').trim().toLowerCase();
-                                    if (iName === name || iName.includes(name)) {
-                                        const qty = Number(i.qty || i.quantity || 0);
-                                        locationStockMap[loc] = (locationStockMap[loc] || 0) - qty;
-                                    }
-                                });
-                            }
-                        });
-
-                        // 6. Purchase Returns (Stock Out)
-                        (pReturns || []).forEach((pr: any) => {
-                            if (String(pr.status).toLowerCase() !== 'cancel') {
-                                const loc = getNormalizedLocName(pr.source_warehouse || pr.location);
-                                const items = Array.isArray(pr.items) ? pr.items : JSON.parse(pr.items || '[]');
-                                items.forEach((i: any) => {
-                                    const iName = String(i.product_name || i.itemName || i.item_name || '').trim().toLowerCase();
-                                    if (iName === name || iName.includes(name)) {
-                                        const qty = Number(i.qty || i.quantity || 0);
-                                        locationStockMap[loc] = (locationStockMap[loc] || 0) - qty;
-                                    }
-                                });
-                            }
-                        });
+                        const locationStockMap = computeProductLocations(product);
 
                         const activeLocations = Object.keys(locationStockMap);
                         if (activeLocations.length === 0) {
-                            activeLocations.push(registeredLocs[0] || 'Market');
+                            activeLocations.push(defaultSaleLoc || registeredLocs[0] || 'SHOP');
                             locationStockMap[activeLocations[0]] = Number(product.current_stock || product.stock || 0);
                         }
 
@@ -402,8 +612,6 @@ const StockReportPrint = () => {
                                     computed_true_stock: qty,
                                     calculated_valuation: qty * rate
                                 });
-
-                                // warehouse_inventory retired — formula-based stock is source of truth
                             }
                         }
                     }
@@ -493,6 +701,18 @@ const StockReportPrint = () => {
 
     const [exporting, setExporting] = useState(false);
 
+    const formatLocation = (rowLocation?: string) => {
+        if (rowLocation && String(rowLocation).trim() !== '') return rowLocation;
+        if (Array.isArray(filters.location)) {
+            if (filters.location.length > 0) return filters.location.join(', ');
+            return 'All Locations';
+        }
+        if (filters.location && typeof filters.location === 'string' && filters.location.trim() !== '' && filters.location !== 'All') {
+            return filters.location;
+        }
+        return 'All Locations';
+    };
+
     const handleExportExcel = async () => {
         try {
             setExporting(true);
@@ -553,6 +773,90 @@ const StockReportPrint = () => {
                     employee: r.employee || r.created_by || 'Officer',
                     total_quantity: Number(r.total_quantity || 0)
                 }));
+            } else if (activeTab === 7) {
+                if (tab7ViewMode === 'summary') {
+                    columns = [
+                        { header: 'S#', key: 'idx', width: 8, alignment: 'center' },
+                        { header: 'Parent Category', key: 'parent_name', width: 22 },
+                        { header: 'Sub Category', key: 'sub_name', width: 22 },
+                        { header: 'Leaf Category Title', key: 'category_name', width: 24 },
+                        { header: 'Products', key: 'products_count', width: 14, type: 'number', alignment: 'center' },
+                        { header: 'Stock Units', key: 'total_units', width: 16, type: 'number', alignment: 'right' },
+                        { header: 'Asset Valuation (PKR)', key: 'total_valuation', width: 22, type: 'currency', alignment: 'right' },
+                        { header: 'Share %', key: 'contribution_pct', width: 14, type: 'percent', alignment: 'right' }
+                    ];
+                    exportData = categorySummaryRows.map((cat, idx) => ({
+                        idx: idx + 1,
+                        parent_name: cat.parent_name,
+                        sub_name: cat.sub_name,
+                        category_name: cat.category_name,
+                        products_count: cat.products_count,
+                        total_units: cat.total_units,
+                        total_valuation: cat.total_valuation,
+                        contribution_pct: (cat.contribution_pct || 0) / 100
+                    }));
+                } else {
+                    columns = [
+                        { header: 'S#', key: 'idx', width: 8, alignment: 'center' },
+                        { header: 'Product Item Name', key: 'product_name', width: 32 },
+                        { header: 'SKU / Code', key: 'sku', width: 16 },
+                        { header: 'Brand', key: 'brand', width: 16 },
+                        { header: 'UOM', key: 'uom', width: 10, alignment: 'center' },
+                        { header: 'Current Stock', key: 'current_stock', width: 14, type: 'number', alignment: 'right' },
+                        { header: 'Unit Rate (PKR)', key: 'price', width: 16, type: 'currency', alignment: 'right' },
+                        { header: 'Valuation (PKR)', key: 'valuation', width: 20, type: 'currency', alignment: 'right' }
+                    ];
+                    exportData = [];
+                    Object.entries(groupedCategoryTree).forEach(([pName, pVal]: [string, any]) => {
+                        exportData.push({
+                            _isHeader: true,
+                            _bannerText: `🏢 PARENT CATEGORY: ${pName.toUpperCase()}`
+                        });
+                        Object.entries(pVal.subs || {}).forEach(([sName, sVal]: [string, any]) => {
+                            exportData.push({
+                                _isSubHeader: true,
+                                _bannerText: `  📂 SUB-CATEGORY: ${sName.toUpperCase()}`
+                            });
+                            Object.entries(sVal.leaves || {}).forEach(([lName, lVal]: [string, any]) => {
+                                const leafProds = lVal.products || [];
+                                const leafUnits = leafProds.reduce((sum: number, p: any) => sum + Number(p.current_stock || 0), 0);
+                                const leafVal = leafProds.reduce((sum: number, p: any) => sum + (Number(p.current_stock || 0) * Number(p.retail_price || p.sale_price || p.price || 0)), 0);
+
+                                exportData.push({
+                                    _isSectionHeader: true,
+                                    _bannerText: `    🏷️ ${lName.toUpperCase()} (${leafProds.length} Products | ${leafUnits.toLocaleString()} Units | Rs. ${leafVal.toLocaleString(undefined, { minimumFractionDigits: 2 })})`
+                                });
+
+                                leafProds.forEach((p: any, pIdx: number) => {
+                                    const stk = Number(p.current_stock || 0);
+                                    const prc = Number(p.retail_price || p.sale_price || p.price || 0);
+                                    exportData.push({
+                                        idx: pIdx + 1,
+                                        product_name: p.product_name,
+                                        sku: p.sku || '-',
+                                        brand: p.bin || '-',
+                                        uom: p.uom || 'Pcs',
+                                        current_stock: stk,
+                                        price: prc,
+                                        valuation: stk * prc
+                                    });
+                                });
+
+                                exportData.push({
+                                    _isSubtotal: true,
+                                    idx: '',
+                                    product_name: `Subtotal (${lName}):`,
+                                    sku: '',
+                                    brand: '',
+                                    uom: '',
+                                    current_stock: leafUnits,
+                                    price: 0,
+                                    valuation: leafVal
+                                });
+                            });
+                        });
+                    });
+                }
             } else {
                 columns = [
                     { header: 'S#', key: 'idx', width: 8, alignment: 'center' },
@@ -587,6 +891,7 @@ const StockReportPrint = () => {
                 filterSummary: filterMeta,
                 columns,
                 data: exportData,
+                summaryRow: (activeTab === 7 && tab7ViewMode === 'detailed') ? false : true,
                 theme: 'emerald'
             });
 
@@ -636,26 +941,32 @@ const StockReportPrint = () => {
                 <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-slate-50 p-3 rounded border print-hidden-element print:hidden">
                     <button type="button" onClick={() => navigate(-1)} className="flex items-center gap-2 font-bold hover:underline cursor-pointer"><MdArrowBack size={16} /> Back to Report Filter</button>
                     
-                    {/* View Switcher Toggle */}
-                    {activeTab !== 4 && (
+                    {/* View Switcher Toggle (Exclusively for Tab 7: Category-Wise Stock Valuation Ledger) */}
+                    {activeTab === 7 && (
                         <div className="flex bg-slate-200 p-0.5 rounded-lg border border-slate-300">
                             <button
                                 type="button"
-                                onClick={() => setActiveViewMode('summary')}
+                                onClick={() => {
+                                    setActiveViewMode('summary');
+                                    setCurrentPage(1);
+                                }}
                                 className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-bold transition cursor-pointer ${
                                     activeViewMode === 'summary' ? 'bg-white text-primary shadow-xs font-black' : 'text-slate-600 hover:text-black'
                                 }`}
                             >
-                                <MdTableChart size={14} /> Standard View
+                                <MdTableChart size={14} /> Summary View
                             </button>
                             <button
                                 type="button"
-                                onClick={() => setActiveViewMode('detailed')}
+                                onClick={() => {
+                                    setActiveViewMode('detailed');
+                                    setCurrentPage(1);
+                                }}
                                 className={`flex items-center gap-1.5 px-3 py-1 rounded text-xs font-bold transition cursor-pointer ${
                                     activeViewMode === 'detailed' ? 'bg-white text-primary shadow-xs font-black' : 'text-slate-600 hover:text-black'
                                 }`}
                             >
-                                <MdViewList size={14} /> Grouped Status Containers
+                                <MdViewList size={14} /> Detailed View
                             </button>
                         </div>
                     )}
@@ -685,7 +996,7 @@ const StockReportPrint = () => {
                             {activeTab === 4 && 'Stock Transfer Statement'}
                             {activeTab === 5 && 'Detailed Pricing Metrics Sheet'}
                             {activeTab === 6 && 'Core Product Specification Log'}
-                            {activeTab === 7 && 'Status Detail Valuation Ledger'}
+                            {activeTab === 7 && 'Category-Wise Stock Valuation Ledger'}
                             {activeTab === 8 && 'Location Stock Breakdown Statement'}
                         </b></span>
                         {(activeTab === 1 || activeTab === 4) && filters.dateFrom && filters.dateTo && (
@@ -702,7 +1013,11 @@ const StockReportPrint = () => {
                 </div>
 
                 <ReportPagination
-                    totalCount={activeDisplayRows.length}
+                    totalCount={
+                        activeTab === 7 && activeViewMode === 'summary'
+                            ? categorySummaryRows.length
+                            : activeDisplayRows.length
+                    }
                     currentPage={currentPage}
                     pageSize={pageSize}
                     onPageChange={setCurrentPage}
@@ -713,187 +1028,153 @@ const StockReportPrint = () => {
                 />
 
                 <div className="w-full overflow-x-auto">
-                    {/* --- 📑 DETAILED VIEW: GROUPED STOCK AVAILABILITY STATUS CONTAINERS --- */}
-                    {activeViewMode === 'detailed' && activeTab !== 4 ? (
+                    {/* --- 📑 DETAILED VIEW: TAB 7 3-TIER HIERARCHICAL CATEGORY TREE (Permanently Opened) --- */}
+                    {activeTab === 7 && activeViewMode === 'detailed' ? (
                         <div className="space-y-6">
-                            {/* Screen-Only Container Tabs */}
-                            <div className="flex flex-wrap items-center justify-between gap-3 p-2 bg-slate-100/90 rounded-xl border border-slate-200 print-hidden-element print:hidden">
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <span className="text-[11px] font-black text-slate-500 uppercase px-2 font-mono">Status Container Tabs:</span>
-                                    {statusGroups.map((group) => {
-                                        const Icon = group.icon;
-                                        const isActive = activeStatusContainerTab === group.key;
-                                        return (
-                                            <button
-                                                key={group.key}
-                                                type="button"
-                                                onClick={() => setActiveStatusContainerTab(group.key)}
-                                                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                                                    isActive
-                                                        ? `${group.headerBg} border-2 ${group.containerBorder} shadow-sm font-black scale-[1.02]`
-                                                        : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-300 shadow-2xs'
-                                                }`}
-                                            >
-                                                <Icon className={`w-4 h-4 ${isActive ? group.headerAccent : 'text-slate-400'}`} />
-                                                <span>{group.title.split('(')[0].trim()}</span>
-                                                <span className={`px-1.5 py-0.5 rounded text-[10px] font-black ${
-                                                    isActive ? 'bg-white/90 border border-slate-300 text-slate-900' : 'bg-slate-100 text-slate-600'
-                                                }`}>
-                                                    {group.items.length} SKUs
-                                                </span>
-                                            </button>
-                                        );
-                                    })}
-                                    <button
-                                        type="button"
-                                        onClick={() => setActiveStatusContainerTab('all')}
-                                        className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition cursor-pointer ${
-                                            activeStatusContainerTab === 'all'
-                                                ? 'bg-slate-800 text-white shadow-sm font-black border-2 border-slate-900'
-                                                : 'bg-white hover:bg-slate-50 text-slate-700 border border-slate-300'
-                                        }`}
-                                    >
-                                        <MdFormatListBulleted size={15} />
-                                        <span>All Containers</span>
-                                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-black ${
-                                            activeStatusContainerTab === 'all' ? 'bg-slate-700 text-white' : 'bg-slate-100 text-slate-600'
-                                        }`}>
-                                            {statusGroups.reduce((acc, g) => acc + g.items.length, 0)} SKUs
-                                        </span>
-                                    </button>
+                            {/* Aggregation Summary Indicator */}
+                            <div className="flex justify-between items-center mb-2 print:hidden">
+                                <div className="text-xs text-slate-700 font-mono font-bold bg-slate-100 border border-slate-200 px-3 py-1.5 rounded">
+                                    Showing <b>{paginatedCategoryTree.reduce((sum, p) => sum + p.total_skus, 0)}</b> of <b>{reportRows.length}</b> Products (Across <b>{paginatedCategoryTree.length}</b> Categories on Page {currentPage})
                                 </div>
                             </div>
 
-                            {statusGroups.map((group) => {
-                                const Icon = group.icon;
-                                const isVisibleOnScreen = activeStatusContainerTab === 'all' || activeStatusContainerTab === group.key;
+                            {paginatedCategoryTree.map((pNode, pIdx) => {
+                                const pKey = `parent-${pNode.parent_id || pNode.parent_name || pIdx}`;
+
                                 return (
-                                    <div
-                                        key={group.key}
-                                        className={`border-2 ${group.containerBorder} rounded-lg overflow-hidden shadow-xs bg-white ${
-                                            isVisibleOnScreen ? 'block' : 'hidden'
-                                        } print:block print:mb-8 print:break-inside-avoid`}
-                                    >
-                                        {/* Status Container Header Banner */}
-                                        <div className={`${group.headerBg} p-3 border-b flex flex-col md:flex-row justify-between items-start md:items-center gap-2 font-mono`}>
+                                    <div key={pKey} className="border-2 border-slate-700 rounded-lg overflow-hidden shadow-sm bg-white print:break-inside-avoid print:mb-6">
+                                        {/* Parent Category Banner (Permanently Visible) */}
+                                        <div className="bg-slate-800 text-white p-2.5 flex flex-col md:flex-row justify-between items-start md:items-center gap-2 select-none">
                                             <div className="flex items-center gap-2.5">
-                                                <Icon className={`w-5 h-5 ${group.headerAccent} shrink-0`} />
-                                                <div>
-                                                    <div className="flex items-center gap-2 flex-wrap">
-                                                        <span className="font-sans font-black text-sm uppercase tracking-wide text-slate-900">{group.title}</span>
-                                                        <span className={`px-2 py-0.5 rounded text-[10px] font-black uppercase border ${group.badgeClass}`}>
-                                                            {group.badgeText}
-                                                        </span>
-                                                    </div>
-                                                    <p className="text-[10px] text-gray-600 font-mono mt-0.5">{group.subtitle}</p>
-                                                </div>
+                                                <span className="font-sans font-black uppercase text-xs tracking-wider">
+                                                    {pNode.parent_name}
+                                                </span>
+                                                <span className="bg-slate-700 text-slate-200 text-[10px] font-mono px-2 py-0.5 rounded border border-slate-600 font-bold">
+                                                    {pNode.total_skus} {pNode.total_skus === 1 ? 'Product' : 'Products'}
+                                                </span>
                                             </div>
-                                            <div className="flex items-center gap-2 text-xs font-mono font-bold flex-wrap">
-                                                <span className="bg-white px-2 py-0.5 rounded border border-slate-300 text-slate-800">
-                                                    <b>{group.items.length}</b> SKUs
+                                            <div className="flex items-center gap-4 font-mono text-xs flex-wrap">
+                                                <span>Total Stock: <b>{pNode.total_units.toLocaleString()} Units</b></span>
+                                                <span className="text-emerald-300 font-black">
+                                                    Valuation: Rs. {pNode.total_valuation.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                                 </span>
-                                                <span className="bg-white px-2 py-0.5 rounded border border-slate-300 text-slate-900">
-                                                    Total Units: <b>{group.totalQty.toLocaleString()}</b>
-                                                </span>
-                                                <span className="bg-white px-2 py-0.5 rounded border border-slate-300 text-emerald-800 font-black">
-                                                    Total Valuation: <b>Rs. {group.totalValuation.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</b>
+                                                <span className="bg-emerald-900/60 text-emerald-200 border border-emerald-500/40 text-[10px] px-2 py-0.5 rounded font-black">
+                                                    {pNode.grand_share_pct.toFixed(1)}% Share
                                                 </span>
                                             </div>
                                         </div>
 
-                                        {/* Container Table */}
-                                        {group.items.length === 0 ? (
-                                            <div className="py-8 text-center text-gray-400 italic font-mono text-xs bg-gray-50/50">
-                                                No products currently categorized under {group.title}.
-                                            </div>
-                                        ) : (
-                                            <table className="w-full table-auto border border-collapse border-slate-300 text-[11px] font-sans text-left">
-                                                <thead className="bg-slate-50 border-b border-slate-300 font-black uppercase text-black font-mono text-[10px]">
-                                                    <tr>
-                                                        <th rowSpan={2} className="p-2 border border-slate-300 text-center w-12">Index</th>
-                                                        <th rowSpan={2} className="p-2 border border-slate-300">Product Stock Asset Identifier</th>
-                                                        <th rowSpan={2} className="p-2 border border-slate-300 w-28">Location</th>
-                                                        <th rowSpan={2} className="p-2 border border-slate-300 text-center w-20">Brand</th>
-                                                        <th colSpan={3} className="p-1.5 border border-slate-300 text-center bg-slate-100 font-extrabold tracking-wider">Category Classification</th>
-                                                        <th rowSpan={2} className="p-2 border border-slate-300 text-right pr-2">Unit Rate (Rs.)</th>
-                                                        <th rowSpan={2} className="p-2 border border-slate-300 text-right pr-2">Remaining Qty</th>
-                                                        <th rowSpan={2} className="p-2 border border-slate-300 text-right pr-3">Asset Valuation (Rs.)</th>
-                                                    </tr>
-                                                    <tr>
-                                                        <th className="p-1 border border-slate-300 text-center font-bold bg-slate-50 text-[9px]">Parent</th>
-                                                        <th className="p-1 border border-slate-300 text-center font-bold bg-slate-50 text-[9px]">Sub</th>
-                                                        <th className="p-1 border border-slate-300 text-center font-bold bg-slate-50 text-[9px]">Leaf</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {((activeStatusContainerTab === group.key && !isPrinting && pageSize !== 'all') ? paginatedRows : group.items).map((row, idx) => {
-                                                        const qty = Number(row.computed_true_stock !== undefined ? row.computed_true_stock : row.current_stock || 0);
-                                                        const rate = Number(row.retail_price || row.sale_price || row.purchase_price || row.price || 0);
-                                                        const val = Number(row.calculated_valuation !== undefined ? row.calculated_valuation : (qty * rate));
-                                                        const loc = row.warehouse_location || (filters.location && filters.location !== 'All' ? filters.location : 'Main Facility');
-                                                        const displayIdx = (!isPrinting && pageSize !== 'all' && activeStatusContainerTab === group.key)
-                                                            ? (currentPage - 1) * (typeof pageSize === 'number' ? pageSize : 25) + idx + 1
-                                                            : idx + 1;
+                                        {/* Sub Categories (Permanently Open) */}
+                                        <div className="p-3 space-y-4 bg-slate-50">
+                                            {pNode.sub_categories.map((sNode: any, sIdx: number) => {
+                                                const sKey = `sub-${pIdx}-${sIdx}`;
 
-                                                        return (
-                                                            <tr key={row.id || idx} className="border-b border-slate-300 hover:bg-gray-50 font-semibold font-mono text-xs">
-                                                                <td className="p-2 border border-slate-300 text-center text-gray-400">{displayIdx}</td>
-                                                                <td className="p-2 border border-slate-300 font-bold text-black font-sans uppercase">{row.product_name}</td>
-                                                                <td className="p-2 border border-slate-300 font-sans text-gray-700 font-bold">{loc}</td>
-                                                                <td className="p-2 border border-slate-300 font-sans text-purple-700 font-bold text-center">{row.bin || '-'}</td>
-                                                                <td className="p-2 border border-slate-300 font-sans text-slate-800">{row.sub_sub_category || '-'}</td>
-                                                                <td className="p-2 border border-slate-300 font-sans text-slate-700">{row.sub_category || '-'}</td>
-                                                                <td className="p-2 border border-slate-300 font-sans text-slate-600">{row.category || '-'}</td>
-                                                                <td className="p-2 border border-slate-300 text-right pr-2 font-mono text-gray-700">
-                                                                    {rate > 0 ? `Rs. ${rate.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
-                                                                </td>
-                                                                <td className={`p-2 border border-slate-300 text-right pr-2 font-black ${qty <= 0 ? 'text-red-700' : qty <= 10 ? 'text-amber-700' : 'text-emerald-700'}`}>
-                                                                    {qty.toLocaleString()} {row.uom || 'PC'}
-                                                                </td>
-                                                                <td className="p-2 border border-slate-300 text-right pr-3 font-mono font-bold text-slate-900">
-                                                                    {val > 0 ? `Rs. ${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
-                                                                </td>
-                                                            </tr>
-                                                        );
-                                                    })}
-                                                </tbody>
-                                                <tfoot>
-                                                    {!isPrinting && pageSize !== 'all' && activeStatusContainerTab === group.key && (
-                                                        <tr className="bg-amber-50/80 border-t border-amber-200 font-bold font-mono text-xs text-amber-950">
-                                                            <td colSpan={7} className="p-2 border border-slate-300 text-right uppercase tracking-wider">
-                                                                Page Subtotal (This Page):
-                                                            </td>
-                                                            <td className="p-2 border border-slate-300 text-right pr-2 font-mono">-</td>
-                                                            <td className="p-2 border border-slate-300 text-right pr-2 font-black text-primary">
-                                                                {paginatedRows.reduce((sum, r) => sum + Number(r.computed_true_stock !== undefined ? r.computed_true_stock : r.current_stock || 0), 0).toLocaleString()}
-                                                            </td>
-                                                            <td className="p-2 border border-slate-300 text-right pr-3 text-success font-black">
-                                                                Rs. {paginatedRows.reduce((sum, r) => {
-                                                                    const q = Number(r.computed_true_stock !== undefined ? r.computed_true_stock : r.current_stock || 0);
-                                                                    const rate = Number(r.retail_price || r.sale_price || r.purchase_price || r.price || 0);
-                                                                    return sum + Number(r.calculated_valuation !== undefined ? r.calculated_valuation : (q * rate));
-                                                                }, 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                                            </td>
-                                                        </tr>
-                                                    )}
-                                                    <tr className="bg-slate-100 border-t-2 border-slate-400 font-black font-mono text-xs">
-                                                        <td colSpan={7} className="p-2 border border-slate-300 text-right uppercase tracking-wider text-gray-800">
-                                                            Total for {group.title} ({group.items.length} SKUs):
-                                                        </td>
-                                                        <td className="p-2 border border-slate-300 text-right pr-2">-</td>
-                                                        <td className="p-2 border border-slate-300 text-right pr-2 font-black text-slate-900">
-                                                            {group.totalQty.toLocaleString()}
-                                                        </td>
-                                                        <td className="p-2 border border-slate-300 text-right pr-3 text-emerald-800 font-black">
-                                                            Rs. {group.totalValuation.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                                                        </td>
-                                                    </tr>
-                                                </tfoot>
-                                            </table>
-                                        )}
+                                                return (
+                                                    <div key={sKey} className="border border-slate-300 rounded-md bg-white overflow-hidden shadow-2xs">
+                                                        {/* Sub-Category Banner */}
+                                                        <div className="bg-slate-100 p-2 flex justify-between items-center font-mono text-xs border-b border-slate-200">
+                                                            <div className="flex items-center gap-2 pl-2">
+                                                                <span className="font-bold uppercase text-slate-800 font-sans text-xs">
+                                                                    ↳ Sub-Category: {sNode.sub_name}
+                                                                </span>
+                                                                <span className="text-slate-500 text-[10px] font-bold">
+                                                                    ({sNode.total_skus} {sNode.total_skus === 1 ? 'Product' : 'Products'})
+                                                                </span>
+                                                            </div>
+                                                            <div className="flex items-center gap-4 text-xs font-semibold">
+                                                                <span className="text-slate-700 font-bold">{sNode.total_units.toLocaleString()} Units</span>
+                                                                <span className="font-black text-slate-900">
+                                                                    Rs. {sNode.total_valuation.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Leaf Categories (Permanently Open) */}
+                                                        <div className="p-2.5 space-y-3">
+                                                            {sNode.categories.map((lNode: any, lIdx: number) => (
+                                                                <div key={lIdx} className="border border-slate-200 rounded overflow-hidden">
+                                                                    <div className="text-[11px] font-bold text-slate-800 bg-slate-50 px-2.5 py-1.5 border-b border-slate-200 flex justify-between items-center font-mono">
+                                                                        <span className="font-sans font-bold text-slate-900">• {lNode.category_name} ({lNode.products.length} {lNode.products.length === 1 ? 'Product' : 'Products'})</span>
+                                                                        <span className="text-emerald-800 font-black">
+                                                                            Leaf Valuation: Rs. {lNode.total_valuation.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                                        </span>
+                                                                    </div>
+
+                                                                    <table className="w-full table-auto border border-collapse border-slate-200 text-[11px] font-sans text-left">
+                                                                        <thead className="bg-slate-100 border-b border-slate-300 font-black uppercase text-slate-700 font-mono text-[9.5px]">
+                                                                            <tr>
+                                                                                <th className="p-1.5 border border-slate-300 text-center w-10">S#</th>
+                                                                                <th className="p-1.5 border border-slate-300">Product Stock Asset Identifier</th>
+                                                                                <th className="p-1.5 border border-slate-300 text-center w-20">Brand</th>
+                                                                                <th className="p-1.5 border border-slate-300 text-center w-16">UOM</th>
+                                                                                <th className="p-1.5 border border-slate-300 text-right w-24">Balance Units</th>
+                                                                                <th className="p-1.5 border border-slate-300 text-right w-28">Unit Rate (Rs.)</th>
+                                                                                <th className="p-1.5 border border-slate-300 text-right w-36 pr-3 text-emerald-800">Asset Valuation (Rs.)</th>
+                                                                                <th className="p-1.5 border border-slate-300 text-right pr-2 w-16">Share %</th>
+                                                                            </tr>
+                                                                        </thead>
+                                                                        <tbody>
+                                                                            {lNode.products.map((p: any, pItemIdx: number) => (
+                                                                                <tr key={p.id || pItemIdx} className="border-b border-slate-200 hover:bg-slate-50 font-semibold font-mono text-xs">
+                                                                                    <td className="p-1.5 border border-slate-300 text-center text-gray-400">{pItemIdx + 1}</td>
+                                                                                    <td className="p-1.5 border border-slate-300 font-bold text-black font-sans uppercase">{p.product_name}</td>
+                                                                                    <td className="p-1.5 border border-slate-300 font-sans text-purple-700 font-bold text-center">{p.bin || '-'}</td>
+                                                                                    <td className="p-1.5 border border-slate-300 uppercase text-center text-slate-600">{p.uom || 'PC'}</td>
+                                                                                    <td className="p-1.5 border border-slate-300 text-right font-black text-primary">
+                                                                                        {p.stock_qty.toLocaleString()}
+                                                                                    </td>
+                                                                                    <td className="p-1.5 border border-slate-300 text-right font-mono text-gray-700">
+                                                                                        {p.unit_rate > 0 ? `Rs. ${p.unit_rate.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
+                                                                                    </td>
+                                                                                    <td className="p-1.5 border border-slate-300 text-right pr-3 font-mono font-bold text-slate-900">
+                                                                                        {p.line_valuation > 0 ? `Rs. ${p.line_valuation.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '-'}
+                                                                                    </td>
+                                                                                    <td className="p-1.5 border border-slate-300 text-right pr-2 font-mono text-slate-600">
+                                                                                        {p.share_of_category.toFixed(1)}%
+                                                                                    </td>
+                                                                                </tr>
+                                                                            ))}
+                                                                        </tbody>
+                                                                        <tfoot>
+                                                                            <tr className="bg-slate-50 border-t border-slate-300 font-black font-mono text-xs">
+                                                                                <td colSpan={4} className="p-1.5 border border-slate-300 text-right uppercase text-slate-700">
+                                                                                    Subtotal for {lNode.category_name}:
+                                                                                </td>
+                                                                                <td className="p-1.5 border border-slate-300 text-right font-black text-primary">
+                                                                                    {lNode.total_units.toLocaleString()}
+                                                                                </td>
+                                                                                <td className="p-1.5 border border-slate-300 text-right">-</td>
+                                                                                <td className="p-1.5 border border-slate-300 text-right pr-3 text-emerald-800 font-black">
+                                                                                    Rs. {lNode.total_valuation.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                                                </td>
+                                                                                <td className="p-1.5 border border-slate-300 text-right pr-2 font-black">100.0%</td>
+                                                                            </tr>
+                                                                        </tfoot>
+                                                                    </table>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
                                     </div>
                                 );
                             })}
+
+                            {/* Detailed View Grand Total Summary Banner */}
+                            <div className="bg-slate-900 text-white p-3.5 rounded-lg border-2 border-black flex flex-col md:flex-row justify-between items-start md:items-center gap-2 font-mono mt-4 shadow-sm">
+                                <div>
+                                    <span className="font-black uppercase tracking-wider text-xs">Grand Inventory Stock Valuation Summary:</span>
+                                    <span className="text-slate-400 text-xs ml-2">({categoryHierarchyTree.length} Parent Categories • {reportRows.length} Total Products)</span>
+                                </div>
+                                <div className="flex items-center gap-6 text-xs font-mono font-bold flex-wrap">
+                                    <span>Total Physical Units: <b className="text-emerald-400">{reportRows.reduce((sum, r) => sum + Number(r.computed_true_stock !== undefined ? r.computed_true_stock : r.current_stock || 0), 0).toLocaleString()}</b></span>
+                                    <span className="text-emerald-300 font-black text-sm underline decoration-double">
+                                        Grand Valuation: Rs. {reportRows.reduce((sum, r) => sum + Number(r.calculated_valuation !== undefined ? r.calculated_valuation : ((r.computed_true_stock || 0) * (r.retail_price || r.sale_price || 0))), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </span>
+                                </div>
+                            </div>
                         </div>
                     ) : (
                         <>
@@ -1030,9 +1311,9 @@ const StockReportPrint = () => {
                                 <tr>
                                     <th rowSpan={2} className="p-2 border border-slate-300 text-center w-12">Index</th>
                                     <th rowSpan={2} className="p-2 border border-slate-300">Product Stock Asset Identifier</th>
-                                    <th rowSpan={2} className="p-2 border border-slate-300">Warehouse Location</th>
                                     <th rowSpan={2} className="p-2 border border-slate-300 text-center w-20">Brand</th>
                                     <th colSpan={3} className="p-1.5 border border-slate-300 text-center bg-slate-100 font-extrabold tracking-wider">Category Classification</th>
+                                    <th rowSpan={2} className="p-2 border border-slate-300">Warehouse Location</th>
                                     <th rowSpan={2} className="p-2 border border-slate-300 text-center">Stock Availability Status</th>
                                     <th rowSpan={2} className="p-2 border border-slate-300 text-right pr-3">Dynamic Remaining Quantity</th>
                                 </tr>
@@ -1044,39 +1325,73 @@ const StockReportPrint = () => {
                             </thead>
                             <tbody>
                                 {paginatedRows.map((row, idx) => {
-                                    const qty = Number(row.computed_true_stock || 0);
-                                    const loc = filters.location && filters.location !== 'All' ? filters.location : 'All Warehouses';
-
-                                    let statusBadge = (
-                                        <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-green-100 text-green-800 border border-green-300">
-                                            In Stock
-                                        </span>
-                                    );
-                                    if (qty <= 0) {
-                                        statusBadge = (
-                                            <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-red-100 text-red-800 border border-red-300">
-                                                Out of Stock
-                                            </span>
-                                        );
-                                    } else if (qty <= 10) {
-                                        statusBadge = (
-                                            <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-yellow-100 text-yellow-800 border border-yellow-300">
-                                                Low Stock
-                                            </span>
-                                        );
-                                    }
+                                    const breakdowns: Array<{ location: string; qty: number }> = (row.locationBreakdown && row.locationBreakdown.length > 0)
+                                        ? row.locationBreakdown
+                                        : [{ location: formatLocation(row.warehouse_location || row.location), qty: Number(row.computed_true_stock || 0) }];
 
                                     return (
-                                        <tr key={row.id} className="border-b border-slate-300 hover:bg-gray-50 font-semibold font-mono text-xs">
-                                            <td className="p-2 border border-slate-300 text-center text-gray-400">{startIndex + idx + 1}</td>
-                                            <td className="p-2 border border-slate-300 font-bold text-black font-sans uppercase">{row.product_name}</td>
-                                            <td className="p-2 border border-slate-300 font-sans text-gray-700 font-bold">{loc}</td>
-                                            <td className="p-2 border border-slate-300 font-sans text-purple-700 font-bold text-center">{row.bin || '-'}</td>
-                                            <td className="p-2 border border-slate-300 font-sans text-slate-800">{row.sub_sub_category || '-'}</td>
-                                            <td className="p-2 border border-slate-300 font-sans text-slate-700">{row.sub_category || '-'}</td>
-                                            <td className="p-2 border border-slate-300 font-sans text-slate-600">{row.category || '-'}</td>
-                                            <td className="p-2 border border-slate-300 text-center">{statusBadge}</td>
-                                            <td className="p-2 border border-slate-300 text-right pr-3 text-success font-black">{qty.toLocaleString()}</td>
+                                        <tr key={row.id || idx} className="border-b border-slate-300 hover:bg-gray-50 font-semibold font-mono text-xs">
+                                            <td className="p-2 border border-slate-300 text-center text-gray-400 align-middle">{startIndex + idx + 1}</td>
+                                            <td className="p-2 border border-slate-300 font-bold text-black font-sans uppercase align-middle">{row.product_name}</td>
+                                            <td className="p-2 border border-slate-300 font-sans text-purple-700 font-bold text-center align-middle">{row.bin || '-'}</td>
+                                            <td className="p-2 border border-slate-300 font-sans text-slate-800 align-middle">{row.sub_sub_category || '-'}</td>
+                                            <td className="p-2 border border-slate-300 font-sans text-slate-700 align-middle">{row.sub_category || '-'}</td>
+                                            <td className="p-2 border border-slate-300 font-sans text-slate-600 align-middle">{row.category || '-'}</td>
+                                            
+                                            {/* Multi-Location Expanded Sub-Rows */}
+                                            <td className="p-0 border border-slate-300 align-top">
+                                                <div className="divide-y divide-slate-300 h-full flex flex-col justify-stretch">
+                                                    {breakdowns.map((b, bIdx) => (
+                                                        <div key={bIdx} className="p-2 font-sans text-gray-700 font-bold flex-1 flex items-center min-h-[34px]">
+                                                            {b.location}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </td>
+
+                                            <td className="p-0 border border-slate-300 align-top">
+                                                <div className="divide-y divide-slate-300 h-full flex flex-col justify-stretch">
+                                                    {breakdowns.map((b, bIdx) => {
+                                                        const bQty = Number(b.qty || 0);
+                                                        let statusBadge = (
+                                                            <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-green-100 text-green-800 border border-green-300">
+                                                                In Stock
+                                                            </span>
+                                                        );
+                                                        if (bQty <= 0) {
+                                                            statusBadge = (
+                                                                <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-red-100 text-red-800 border border-red-300">
+                                                                    Out of Stock
+                                                                </span>
+                                                            );
+                                                        } else if (bQty <= 10) {
+                                                            statusBadge = (
+                                                                <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-yellow-100 text-yellow-800 border border-yellow-300">
+                                                                    Low Stock
+                                                                </span>
+                                                            );
+                                                        }
+                                                        return (
+                                                            <div key={bIdx} className="p-2 flex-1 flex items-center justify-center min-h-[34px]">
+                                                                {statusBadge}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </td>
+
+                                            <td className="p-0 border border-slate-300 align-top">
+                                                <div className="divide-y divide-slate-300 h-full flex flex-col justify-stretch">
+                                                    {breakdowns.map((b, bIdx) => {
+                                                        const bQty = Number(b.qty || 0);
+                                                        return (
+                                                            <div key={bIdx} className="p-2 pr-3 text-right text-success font-black flex-1 flex items-center justify-end min-h-[34px]">
+                                                                {bQty.toLocaleString()}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </td>
                                         </tr>
                                     );
                                 })}
@@ -1221,63 +1536,74 @@ const StockReportPrint = () => {
                         </table>
                     )}
 
-                    {/* --- 📊 RENDER CHANNEL 5: FINANCIAL REAL-TIME VALUE TIERS SUMMARY STATEMENT (TAB 7) --- */}
+                    {/* --- 📊 RENDER CHANNEL 5: FLAT CATEGORY SUMMARY STATEMENT (TAB 7 - SUMMARY VIEW) --- */}
                     {activeTab === 7 && (
                         <table className="w-full table-auto border border-collapse border-slate-300 text-[11px] font-sans text-left">
-                            <thead className="bg-slate-50 border-b border-slate-300 font-black uppercase text-black font-mono text-[10px]">
+                            <thead className="bg-slate-100 border-b border-slate-400 font-black uppercase text-slate-800 font-mono text-[10px]">
                                 <tr>
-                                    <th rowSpan={2} className="p-2 border border-slate-300 text-center w-12">Index</th>
-                                    <th rowSpan={2} className="p-2 border border-slate-300">Stock Asset Description</th>
-                                    <th rowSpan={2} className="p-2 border border-slate-300 text-center w-20">Brand</th>
-                                    <th colSpan={3} className="p-1.5 border border-slate-300 text-center bg-slate-100 font-extrabold tracking-wider">Category Classification</th>
-                                    <th rowSpan={2} className="p-2 border border-slate-300 text-center w-20">Units Count</th>
-                                    <th rowSpan={2} className="p-2 border border-slate-300 text-right w-24">Unit Rate</th>
-                                    <th rowSpan={2} className="p-2 border border-slate-300 text-right w-36 pr-4 bg-green-50/30 text-success">Aggregated StockValue</th>
-                                </tr>
-                                <tr>
-                                    <th className="p-1 border border-slate-300 text-center font-bold bg-slate-50 text-[9px]">Parent</th>
-                                    <th className="p-1 border border-slate-300 text-center font-bold bg-slate-50 text-[9px]">Sub</th>
-                                    <th className="p-1 border border-slate-300 text-center font-bold bg-slate-50 text-[9px]">Leaf</th>
+                                    <th className="p-2 border border-slate-300 text-center w-12">S#</th>
+                                    <th className="p-2 border border-slate-300">Parent Category</th>
+                                    <th className="p-2 border border-slate-300">Sub-Category</th>
+                                    <th className="p-2 border border-slate-300">Leaf Category Title</th>
+                                    <th className="p-2 border border-slate-300 text-center w-24 text-emerald-800">Products</th>
+                                    <th className="p-2 border border-slate-300 text-right w-28">Stock Units</th>
+                                    <th className="p-2 border border-slate-300 text-right w-36 pr-3 text-emerald-800">Asset Valuation (PKR)</th>
+                                    <th className="p-2 border border-slate-300 text-right pr-2 w-20">Share %</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {paginatedRows.map((row, idx) => {
-                                    const qty = Number(row.computed_true_stock || 0);
-                                    const rate = Number(row.retail_price || row.sale_price || 0);
-
-                                    return (
-                                        <tr key={row.id} className="border-b border-slate-300 hover:bg-gray-50 font-semibold font-mono text-xs">
-                                            <td className="p-2 border border-slate-300 text-center text-gray-400">{startIndex + idx + 1}</td>
-                                            <td className="p-2 border border-slate-300 font-bold text-black font-sans uppercase">{row.product_name}</td>
-                                            <td className="p-2 border border-slate-300 font-sans text-purple-700 font-bold text-center">{row.bin || '-'}</td>
-                                            <td className="p-2 border border-slate-300 font-sans text-slate-800">{row.sub_sub_category || '-'}</td>
-                                            <td className="p-2 border border-slate-300 font-sans text-slate-700">{row.sub_category || '-'}</td>
-                                            <td className="p-2 border border-slate-300 font-sans text-slate-600">{row.category || '-'}</td>
-                                            <td className="p-2 border border-slate-300 text-center text-primary font-black">{qty.toLocaleString()}</td>
-                                            <td className="p-2 border border-slate-300 text-right">Rs. {rate.toLocaleString()}</td>
-                                            <td className="p-2 border border-slate-300 text-right pr-4 text-success font-black bg-success/5">Rs. {row.calculated_valuation.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                        </tr>
-                                    );
-                                })}
+                                {paginatedCategorySummaryRows.length === 0 ? (
+                                    <tr>
+                                        <td colSpan={8} className="text-center py-10 font-bold italic border border-slate-300 text-gray-400 bg-gray-50">
+                                            No category records found matching selected criteria.
+                                        </td>
+                                    </tr>
+                                ) : (
+                                    paginatedCategorySummaryRows.map((cat, idx) => {
+                                        const displayIdx = (!isPrinting && pageSize !== 'all') ? startIndex + idx + 1 : idx + 1;
+                                        return (
+                                            <tr key={idx} className="border-b border-slate-300 hover:bg-slate-50 font-semibold font-mono text-xs">
+                                                <td className="p-2 border border-slate-300 text-center text-gray-400">{displayIdx}</td>
+                                                <td className="p-2 border border-slate-300 font-sans uppercase font-bold text-slate-900">{cat.parent_name}</td>
+                                                <td className="p-2 border border-slate-300 font-sans text-slate-700">{cat.sub_name}</td>
+                                                <td className="p-2 border border-slate-300 font-sans font-bold text-slate-900">{cat.category_name}</td>
+                                                <td className="p-2 border border-slate-300 text-center font-bold text-slate-700">{cat.products_count}</td>
+                                                <td className="p-2 border border-slate-300 text-right font-black text-primary">{Number(cat.total_units).toLocaleString()}</td>
+                                                <td className="p-2 border border-slate-300 text-right pr-3 font-mono font-black text-emerald-800">
+                                                    Rs. {Number(cat.total_valuation).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                                </td>
+                                                <td className="p-2 border border-slate-300 text-right pr-2 font-mono font-bold text-slate-600">
+                                                    {Number(cat.contribution_pct || 0).toFixed(1)}%
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
+                                )}
                             </tbody>
                             <tfoot>
                                 {!isPrinting && pageSize !== 'all' && (
                                     <tr className="bg-amber-50/80 border-t border-amber-200 font-bold font-mono text-xs text-amber-950">
-                                        <td colSpan={6} className="p-2 border border-slate-300 text-right uppercase tracking-wider">Page Subtotal (This Page):</td>
-                                        <td className="p-2 border border-slate-300 text-center text-primary font-black">{paginatedRows.reduce((s, r) => s + (r.computed_true_stock || 0), 0).toLocaleString()}</td>
-                                        <td className="p-2 border border-slate-300"></td>
-                                        <td className="p-2 border border-slate-300 text-right pr-4 text-success text-sm font-black">
-                                            Rs. {paginatedRows.reduce((sum, r) => sum + (r.calculated_valuation || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                        <td colSpan={4} className="p-2 border border-slate-300 text-right uppercase tracking-wider">Page Subtotal (This Page):</td>
+                                        <td className="p-2 border border-slate-300 text-center">{paginatedCategorySummaryRows.reduce((s, r) => s + (r.products_count || 0), 0)}</td>
+                                        <td className="p-2 border border-slate-300 text-right font-black text-primary">{paginatedCategorySummaryRows.reduce((s, r) => s + (r.total_units || 0), 0).toLocaleString()}</td>
+                                        <td className="p-2 border border-slate-300 text-right pr-3 text-emerald-800 font-black">
+                                            Rs. {paginatedCategorySummaryRows.reduce((s, r) => s + (r.total_valuation || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                        </td>
+                                        <td className="p-2 border border-slate-300 text-right pr-2 font-black">
+                                            {paginatedCategorySummaryRows.reduce((s, r) => s + (r.contribution_pct || 0), 0).toFixed(1)}%
                                         </td>
                                     </tr>
                                 )}
                                 <tr className="bg-slate-100 border-t-2 border-slate-400 font-black font-mono text-xs">
-                                    <td colSpan={6} className="p-2 border border-slate-300 text-right uppercase tracking-wider text-gray-800">Gross StockValue Assets Allocation (All {reportRows.length} Records):</td>
-                                    <td className="p-2 border border-slate-300 text-center text-primary font-black">{reportRows.reduce((s, r) => s + (r.computed_true_stock || 0), 0).toLocaleString()}</td>
-                                    <td className="p-2 border border-slate-300"></td>
-                                    <td className="p-2 border border-slate-300 text-right pr-4 text-success underline decoration-double text-sm bg-success/10 font-black">
-                                        Rs. {reportRows.reduce((sum, r) => sum + (r.calculated_valuation || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                    <td colSpan={4} className="p-2 border border-slate-300 text-right uppercase tracking-wider text-gray-800">
+                                        Grand Total Summary ({categorySummaryRows.length} Categories • {reportRows.length} Products):
                                     </td>
+                                    <td className="p-2 border border-slate-300 text-center font-black text-slate-800">{reportRows.length}</td>
+                                    <td className="p-2 border border-slate-300 text-right font-black text-primary">{categorySummaryRows.reduce((s, r) => s + (r.total_units || 0), 0).toLocaleString()}</td>
+                                    <td className="p-2 border border-slate-300 text-right pr-3 text-emerald-800 underline decoration-double font-black text-sm">
+                                        Rs. {categorySummaryRows.reduce((s, r) => s + (r.total_valuation || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                    </td>
+                                    <td className="p-2 border border-slate-300 text-right pr-2 font-black">100.0%</td>
                                 </tr>
                             </tfoot>
                         </table>
@@ -1310,7 +1636,7 @@ const StockReportPrint = () => {
                                     const qty = Number(row.computed_true_stock || 0);
                                     const sPrice = Number(row.sale_price ?? row.retail_price ?? row.price ?? row.unit_price ?? row.mrp ?? row.rp ?? 0);
                                     const netValue = qty * sPrice;
-                                    const locName = row.warehouse_location || (filters.location && filters.location !== 'All' ? filters.location : 'Main Warehouse');
+                                    const locName = formatLocation(row.warehouse_location || row.location);
 
                                     let statusBadge = (
                                         <span className="px-2 py-0.5 rounded text-[10px] font-black uppercase bg-green-100 text-green-800 border border-green-300">
@@ -1390,7 +1716,11 @@ const StockReportPrint = () => {
                 </div>
 
                 <ReportPagination
-                    totalCount={activeDisplayRows.length}
+                    totalCount={
+                        activeTab === 7 && activeViewMode === 'summary'
+                            ? categorySummaryRows.length
+                            : activeDisplayRows.length
+                    }
                     currentPage={currentPage}
                     pageSize={pageSize}
                     onPageChange={setCurrentPage}
