@@ -241,7 +241,7 @@ const PrintInvoice = () => {
         @media print {
           @page {
             size: A4 portrait;
-            margin: 12mm 14mm;
+            margin: 8mm 10mm;
           }
           aside, nav, header, .no-print, button {
             display: none !important;
@@ -251,7 +251,7 @@ const PrintInvoice = () => {
           body {
             background: white !important;
             color: #0f172a !important;
-            font-size: 10.5px !important;
+            font-size: 14px !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
@@ -261,6 +261,7 @@ const PrintInvoice = () => {
             padding: 0 !important;
             margin: 0 !important;
             width: 100% !important;
+            font-size: 14px !important;
           }
           table {
             width: 100% !important;
@@ -269,6 +270,14 @@ const PrintInvoice = () => {
           th {
             background-color: #0f172a !important;
             color: white !important;
+            font-size: 14px !important;
+            font-weight: 800 !important;
+            padding: 5px 6px !important;
+          }
+          td {
+            font-size: 13.5px !important;
+            font-weight: 600 !important;
+            padding: 5px 6px !important;
           }
         }
       `}</style>

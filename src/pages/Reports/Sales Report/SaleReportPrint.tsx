@@ -2512,7 +2512,7 @@ const SaleReportPrint = () => {
             margin: 0 !important;
             padding: 0 !important;
             background: white !important;
-            font-size: 11px !important;
+            font-size: 15px !important;
             color: #000000 !important;
           }
           aside, header, nav, footer, .print-hidden-element, button {
@@ -2528,24 +2528,24 @@ const SaleReportPrint = () => {
             break-inside: auto !important;
           }
           th {
-            font-size: 11px !important;
+            font-size: 15px !important;
             font-weight: 800 !important;
-            padding: 4px 6px !important;
+            padding: 6px 6px !important;
             color: #000000 !important;
             background-color: #f3f4f6 !important;
             border: 1px solid #000000 !important;
           }
           td {
-            font-size: 11px !important;
-            font-weight: 600 !important;
-            padding: 4px 6px !important;
+            font-size: 14.5px !important;
+            font-weight: 700 !important;
+            padding: 6px 6px !important;
             color: #000000 !important;
             border: 1px solid #374151 !important;
           }
           tfoot td {
-            font-size: 11.5px !important;
-            font-weight: 800 !important;
-            padding: 5px 6px !important;
+            font-size: 15.5px !important;
+            font-weight: 900 !important;
+            padding: 6px 6px !important;
             color: #000000 !important;
             border: 1.5px solid #000000 !important;
           }
@@ -2558,6 +2558,11 @@ const SaleReportPrint = () => {
           .break-inside-avoid {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
+          }
+          /* Eliminate double/overflow right borders */
+          .border-2.border-slate-900, .border-2 {
+            border: none !important;
+            box-shadow: none !important;
           }
         }
       `}} />
@@ -2625,9 +2630,21 @@ const SaleReportPrint = () => {
         </div>
 
         {/* ── OFFICIAL CORPORATE REPORT HEADER ── */}
-        <div className="text-center space-y-1 py-4 border-b border-double border-black">
-          <h1 className="text-xl font-black uppercase tracking-widest font-serif">ZOAIB ALI & COMPANY</h1>
-          <p className="text-[10px] font-bold tracking-wider text-gray-500 uppercase">
+        <div className="relative text-center space-y-1.5 py-4 border-b border-double border-black">
+          {/* Top-Left ZAC Brand Icon Badge (Sidebar Style) */}
+          <div className="absolute left-2 top-2">
+            <div className="w-13 h-13 rounded-2xl bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-800 flex items-center justify-center shadow-lg shadow-emerald-600/30 border border-emerald-400/40 relative overflow-hidden select-none shrink-0">
+              <div className="absolute inset-0 bg-gradient-to-t from-transparent via-white/10 to-white/20" />
+              <span className="relative z-10 font-cinzel font-black tracking-widest text-[16px] text-white leading-none pl-0.5">
+                ZAC
+              </span>
+            </div>
+          </div>
+
+          <h1 className="text-3xl font-black uppercase tracking-widest font-serif text-slate-950">
+            {businessName || 'ZOAIB ALI & COMPANY'}
+          </h1>
+          <p className="text-xs font-bold tracking-wider text-gray-600 uppercase">
             {rType === 'category-sales'
               ? 'Category-Wise Product Sales, Net Volume Realization & Revenue Contribution Statement'
               : rType === 'product-sales-history' 
@@ -2644,7 +2661,7 @@ const SaleReportPrint = () => {
               ? 'Sales Return, Defect Restock & Credit Ledger Statement'
               : 'Sales Invoice Detail Audit Report'}
           </p>
-          <div className="text-[10px] pt-1 font-mono flex flex-wrap justify-between px-2 text-gray-600">
+          <div className="text-xs pt-1.5 font-mono flex flex-wrap justify-between px-2 text-gray-700">
             <span>
               Report Categorization: <b className="text-black uppercase underline">
                 {rType === 'category-sales'
@@ -2844,25 +2861,25 @@ const SaleReportPrint = () => {
                   displayedRows.map((cat: any, cIdx: number) => {
                     const realIndex = isPrinting || pageSize === 'all' ? cIdx + 1 : (currentPage - 1) * (pageSize as number) + cIdx + 1;
                     return (
-                      <div key={cIdx} className="border-2 border-slate-900 rounded-sm overflow-hidden shadow-2xs bg-white space-y-0">
+                      <div key={cIdx} className="border-2 border-slate-900 print:border-none rounded-sm overflow-visible shadow-2xs print:shadow-none bg-white space-y-0">
                         {/* 🏷️ CATEGORY HEADER BANNER (WITH PARENT & SUB CATEGORY MENTIONED) */}
-                        <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 text-white p-3 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 font-mono text-xs border-b-2 border-slate-900">
+                        <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 text-white p-3.5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 font-mono text-sm border-b-2 border-slate-900">
                           <div className="flex items-center gap-2.5 flex-wrap">
-                            <span className="bg-emerald-500 text-black px-2 py-0.5 rounded font-black text-xs">#{realIndex}</span>
-                            <span className="font-black font-sans text-sm tracking-wide uppercase text-white flex items-center gap-1.5">
+                            <span className="bg-emerald-500 text-black px-2 py-0.5 rounded font-black text-sm">#{realIndex}</span>
+                            <span className="font-black font-sans text-base tracking-wide uppercase text-white flex items-center gap-1.5">
                               🏷️ CATEGORY: {cat.category_name}
                             </span>
-                            <span className="bg-slate-800 text-slate-300 text-[10px] px-2 py-0.5 rounded border border-slate-700">
+                            <span className="bg-slate-800 text-slate-200 text-xs px-2 py-0.5 rounded border border-slate-700">
                               📁 Parent: <b className="text-white font-sans">{cat.parent_name}</b>
                             </span>
-                            <span className="bg-slate-800 text-slate-300 text-[10px] px-2 py-0.5 rounded border border-slate-700">
+                            <span className="bg-slate-800 text-slate-200 text-xs px-2 py-0.5 rounded border border-slate-700">
                               📂 Sub: <b className="text-white font-sans">{cat.sub_name}</b>
                             </span>
-                            <span className="bg-indigo-900/70 text-indigo-200 text-[10px] px-2 py-0.5 rounded border border-indigo-700">
+                            <span className="bg-indigo-900/70 text-indigo-200 text-xs px-2 py-0.5 rounded border border-indigo-700">
                               {cat.products_count || (cat.products || []).length} Products
                             </span>
                           </div>
-                          <div className="text-right text-[11px] font-black font-mono flex items-center gap-2.5 flex-wrap">
+                          <div className="text-right text-xs font-black font-mono flex items-center gap-2.5 flex-wrap">
                             <span className="text-emerald-400">Sold: {Number(cat.gross_units || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             <span className="text-slate-600">|</span>
                             <span className="text-rose-400">Ret: {Number(cat.returned_units || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
@@ -2873,7 +2890,7 @@ const SaleReportPrint = () => {
                               Net Rev: Rs. {Number(cat.net_revenue || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                             </span>
                             <span className="text-slate-600">|</span>
-                            <span className="bg-emerald-500/20 text-emerald-300 text-[10px] px-1.5 py-0.5 rounded border border-emerald-500/40">
+                            <span className="bg-emerald-500/20 text-emerald-300 text-xs px-1.5 py-0.5 rounded border border-emerald-500/40">
                               {Number(cat.contribution_pct || 0).toFixed(1)}% Share
                             </span>
                           </div>
@@ -2893,7 +2910,7 @@ const SaleReportPrint = () => {
                               <th className="p-1.5 border border-black text-right whitespace-nowrap">Gross Sales (PKR)</th>
                               <th className="p-1.5 border border-black text-right whitespace-nowrap">Ret Amount</th>
                               <th className="p-1.5 border border-black text-right whitespace-nowrap pr-2">Net Rev (PKR)</th>
-                              <th className="p-1.5 border border-black text-right whitespace-nowrap pr-1">% Share</th>
+                              <th className="p-1.5 border border-black text-center whitespace-nowrap px-1.5">% Share</th>
                             </tr>
                           </thead>
                           <tbody>

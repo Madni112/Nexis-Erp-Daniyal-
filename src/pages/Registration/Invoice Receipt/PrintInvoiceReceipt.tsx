@@ -90,12 +90,13 @@ const PrintInvoiceReceipt: React.FC = () => {
         {`
         @page {
           size: A4 portrait;
-          margin: 15mm 15mm 15mm 15mm;
+          margin: 10mm 12mm;
         }
         @media print {
           body, html {
             background: #ffffff !important;
             color: #000000 !important;
+            font-size: 14px !important;
           }
           aside, nav, header, .no-print, button {
             display: none !important;
@@ -106,10 +107,19 @@ const PrintInvoiceReceipt: React.FC = () => {
             padding: 0 !important;
             margin: 0 !important;
             width: 100% !important;
-          }
-          * {
+            font-size: 14px !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
+          }
+          table th {
+            font-size: 14px !important;
+            font-weight: 800 !important;
+            padding: 6px 8px !important;
+          }
+          table td {
+            font-size: 13.5px !important;
+            font-weight: 600 !important;
+            padding: 6px 8px !important;
           }
         }
       `}

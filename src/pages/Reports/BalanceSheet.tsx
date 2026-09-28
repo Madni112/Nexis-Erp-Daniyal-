@@ -259,22 +259,61 @@ const BalanceSheet: React.FC = () => {
       <style dangerouslySetInnerHTML={{
         __html: `
         @media print {
+          @page { size: landscape; margin: 6mm 6mm; }
+          body, html { height: auto !important; min-height: 0 !important; overflow: visible !important; background: white !important; margin: 0 !important; padding: 0 !important; }
           body * { visibility: hidden !important; }
-          .balance-sheet-print-container, .balance-sheet-print-container * { visibility: visible !important; }
+          .balance-sheet-print-container, .balance-sheet-print-container * {
+            visibility: visible !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
           .balance-sheet-print-container {
-            position: absolute !important;
-            top: 0 !important;
-            left: 0 !important;
+            position: static !important;
             width: 100% !important;
-            z-index: 999999 !important;
             background: white !important;
-            color: black !important;
-            padding: 16px !important;
+            color: #000000 !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            font-size: 15px !important;
           }
           aside, header, nav, button, input, .print-hidden-element {
             display: none !important;
             visibility: hidden !important;
           }
+          table {
+            width: 100% !important;
+            box-sizing: border-box !important;
+            border-collapse: collapse !important;
+            border: 1.5px solid black !important;
+            page-break-inside: auto !important;
+            break-inside: auto !important;
+          }
+          th {
+            font-size: 15px !important;
+            font-weight: 800 !important;
+            padding: 6px 8px !important;
+            color: #000000 !important;
+            background-color: #f3f4f6 !important;
+            border: 1px solid #000000 !important;
+          }
+          td {
+            font-size: 14.5px !important;
+            font-weight: 700 !important;
+            padding: 6px 8px !important;
+            color: #000000 !important;
+            border: 1px solid #374151 !important;
+          }
+          tfoot td {
+            font-size: 16px !important;
+            font-weight: 900 !important;
+            padding: 7px 8px !important;
+            color: #000000 !important;
+            border: 1.5px solid #000000 !important;
+          }
+          tr { page-break-inside: avoid !important; break-inside: avoid !important; }
+          thead { display: table-header-group !important; }
+          tfoot { display: table-footer-group !important; }
+          .break-inside-avoid { break-inside: avoid !important; page-break-inside: avoid !important; }
         }
       `}} />
 
@@ -341,14 +380,22 @@ const BalanceSheet: React.FC = () => {
       <div className="balance-sheet-print-container flex flex-col gap-6">
         
         {/* Printable Header for physical paper prints */}
-        <div className="hidden print:block text-center mb-4 border-b-2 border-black pb-3">
-          <h1 className="text-2xl font-black text-black uppercase tracking-wider font-serif">{businessName || 'ZOAIB ALI & COMPANY'}</h1>
-          <h2 className="text-sm font-extrabold text-gray-800 uppercase tracking-widest font-mono">
+        <div className="hidden print:block relative text-center mb-4 border-b-2 border-black pb-3">
+          <div className="absolute left-2 top-0">
+            <div className="w-13 h-13 rounded-2xl bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-800 flex items-center justify-center shadow-lg shadow-emerald-600/30 border border-emerald-400/40 relative overflow-hidden select-none shrink-0">
+              <div className="absolute inset-0 bg-gradient-to-t from-transparent via-white/10 to-white/20" />
+              <span className="relative z-10 font-cinzel font-black tracking-widest text-[16px] text-white leading-none pl-0.5">
+                ZAC
+              </span>
+            </div>
+          </div>
+          <h1 className="text-3xl font-black text-slate-950 uppercase tracking-widest font-serif">{businessName || 'ZOAIB ALI & COMPANY'}</h1>
+          <h2 className="text-xs font-extrabold text-gray-800 uppercase tracking-widest font-mono mt-1">
             {activePerspective === 'summary'
               ? 'COMMERCIAL EXECUTIVE SUMMARY & FINANCIAL TRAJECTORY STATEMENT'
               : 'CORPORATE GAAP BALANCE SHEET FINANCIAL STATEMENT'}
           </h2>
-          <div className="flex justify-between items-center text-[10px] text-gray-600 font-mono mt-2 pt-1 border-t border-gray-300">
+          <div className="flex justify-between items-center text-xs text-gray-700 font-mono mt-2 pt-1 border-t border-gray-300">
             <span>Audit Perspective: <b>{activePerspective.toUpperCase().replace('_', ' ')}</b></span>
             <span>Accounting Standard: <b>GAAP (Assets = Liabilities + Equity)</b></span>
             <span>Cutoff As Of Date: <b>{asOfDate}</b></span>

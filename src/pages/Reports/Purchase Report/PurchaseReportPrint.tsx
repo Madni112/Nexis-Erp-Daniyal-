@@ -1192,16 +1192,61 @@ const PurchaseReportPrint = () => {
       <style dangerouslySetInnerHTML={{
         __html: `
         @media print {
-          @page { size: auto; margin: 12mm 10mm 12mm 10mm; }
-          body, html { height: auto !important; min-height: 0 !important; overflow: visible !important; background: white !important; }
+          @page { size: landscape; margin: 6mm 6mm; }
+          body, html { height: auto !important; min-height: 0 !important; overflow: visible !important; background: white !important; margin: 0 !important; padding: 0 !important; }
           body * { visibility: hidden !important; }
-          .print-root-container, .print-root-container * { visibility: visible !important; }
-          .print-root-container { position: static !important; width: 100% !important; height: auto !important; min-height: 0 !important; overflow: visible !important; background: white !important; padding: 0 !important; margin: 0 !important; }
+          .print-root-container, .print-root-container * {
+            visibility: visible !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+          .print-root-container {
+            position: static !important;
+            width: 100% !important;
+            height: auto !important;
+            min-height: 0 !important;
+            overflow: visible !important;
+            background: white !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            font-size: 15px !important;
+            color: #000000 !important;
+          }
           aside, header, nav, footer, .print-hidden-element, button { display: none !important; visibility: hidden !important; }
-          table { page-break-inside: auto !important; }
-          tr, td, th { page-break-inside: avoid !important; break-inside: avoid !important; }
+          table {
+            width: 100% !important;
+            box-sizing: border-box !important;
+            border-collapse: collapse !important;
+            border: 1.5px solid black !important;
+            page-break-inside: auto !important;
+            break-inside: auto !important;
+          }
+          th {
+            font-size: 15px !important;
+            font-weight: 800 !important;
+            padding: 6px 8px !important;
+            color: #000000 !important;
+            background-color: #f3f4f6 !important;
+            border: 1px solid #000000 !important;
+          }
+          td {
+            font-size: 14.5px !important;
+            font-weight: 700 !important;
+            padding: 6px 8px !important;
+            color: #000000 !important;
+            border: 1px solid #374151 !important;
+          }
+          tfoot td {
+            font-size: 16px !important;
+            font-weight: 900 !important;
+            padding: 7px 8px !important;
+            color: #000000 !important;
+            border: 1.5px solid #000000 !important;
+          }
+          tr { page-break-inside: avoid !important; break-inside: avoid !important; }
           thead { display: table-header-group !important; }
           tfoot { display: table-footer-group !important; }
+          .break-inside-avoid { break-inside: avoid !important; page-break-inside: avoid !important; }
         }
       `}} />
 
@@ -1259,14 +1304,24 @@ const PurchaseReportPrint = () => {
         </div>
 
         {/* ── REPORT FORMAL HEADER BANNER ── */}
-        <div className="text-center space-y-1 py-4 border-b border-double border-black">
-          <h1 className="text-xl font-black uppercase tracking-widest font-serif">
+        <div className="relative text-center space-y-1.5 py-4 border-b border-double border-black">
+          {/* Top-Left ZAC Brand Icon Badge (Sidebar Style) */}
+          <div className="absolute left-2 top-2">
+            <div className="w-13 h-13 rounded-2xl bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-800 flex items-center justify-center shadow-lg shadow-emerald-600/30 border border-emerald-400/40 relative overflow-hidden select-none shrink-0">
+              <div className="absolute inset-0 bg-gradient-to-t from-transparent via-white/10 to-white/20" />
+              <span className="relative z-10 font-cinzel font-black tracking-widest text-[16px] text-white leading-none pl-0.5">
+                ZAC
+              </span>
+            </div>
+          </div>
+
+          <h1 className="text-3xl font-black uppercase tracking-widest font-serif text-slate-950">
             {businessName || 'ZOAIB ALI & COMPANY'}
           </h1>
-          <p className="text-[10px] font-bold tracking-wider text-gray-500 uppercase">
+          <p className="text-xs font-bold tracking-wider text-gray-600 uppercase">
             Master Corporate Procurement Audit &amp; Supplier Accounts Workbook
           </p>
-          <div className="text-[10px] pt-1 font-mono flex justify-between px-2 text-gray-600">
+          <div className="text-xs pt-1.5 font-mono flex justify-between px-2 text-gray-700">
             <span>
               Audit Sub-Categorization:{' '}
               <b className="text-black uppercase underline">

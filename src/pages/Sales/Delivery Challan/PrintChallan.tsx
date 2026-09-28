@@ -137,11 +137,18 @@ const PrintChallan = () => {
             table-layout: auto !important;
             border-collapse: collapse !important;
             margin-top: 15px !important;
-          }
-          th, td {
-            padding: 10px 8px !important;
+          th {
+            padding: 8px 8px !important;
             border: 1px solid #000000 !important;
-            font-size: 13px !important;
+            font-size: 14.5px !important;
+            font-weight: 800 !important;
+            text-align: center !important;
+          }
+          td {
+            padding: 8px 8px !important;
+            border: 1px solid #000000 !important;
+            font-size: 14px !important;
+            font-weight: 600 !important;
             text-align: center !important;
           }
         }

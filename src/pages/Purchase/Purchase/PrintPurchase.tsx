@@ -274,7 +274,7 @@ const PrintPurchase = () => {
           body {
             background: white !important;
             color: #0f172a !important;
-            font-size: 11px !important;
+            font-size: 14px !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
@@ -285,6 +285,7 @@ const PrintPurchase = () => {
             margin: 0 !important;
             width: 100% !important;
             max-width: 100% !important;
+            font-size: 14px !important;
           }
           table {
             width: 100% !important;
@@ -298,11 +299,21 @@ const PrintPurchase = () => {
           .print-table-header th {
             color: #ffffff !important;
             background-color: #0f172a !important;
+            font-size: 14px !important;
+            font-weight: 800 !important;
+            padding: 5px 6px !important;
+          }
+          table td {
+            font-size: 13.5px !important;
+            font-weight: 600 !important;
+            padding: 5px 6px !important;
           }
           .print-total-row td {
             background-color: #f1f5f9 !important;
             border-top: 2px solid #0f172a !important;
             border-bottom: 2px solid #0f172a !important;
+            font-size: 15px !important;
+            font-weight: 800 !important;
           }
         }
       `}</style>
