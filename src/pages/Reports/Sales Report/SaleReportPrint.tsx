@@ -31,6 +31,7 @@ const SaleReportPrint = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(activeViewMode === 'detailed' ? 10 : 25);
   const [isPrinting, setIsPrinting] = useState(false);
+  const [printOrientation, setPrintOrientation] = useState<'landscape' | 'portrait'>('landscape');
 
   useEffect(() => {
     const handleBefore = () => setIsPrinting(true);
@@ -2488,11 +2489,7 @@ const SaleReportPrint = () => {
       <style dangerouslySetInnerHTML={{
         __html: `
         @media print {
-          @page { size: portrait; margin: 6mm 4mm 6mm 4mm; }
-          *, *::before, *::after {
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
+          @page { size: landscape; margin: 6mm 6mm; }
           body, html {
             height: auto !important;
             min-height: 0 !important;
@@ -2502,14 +2499,21 @@ const SaleReportPrint = () => {
             padding: 0 !important;
           }
           body * { visibility: hidden !important; }
-          .print-root-container, .print-root-container * { visibility: visible !important; }
+          .print-root-container, .print-root-container * {
+            visibility: visible !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
           .print-root-container {
             position: static !important;
             width: 100% !important;
+            max-width: 100% !important;
             box-sizing: border-box !important;
             margin: 0 !important;
-            padding: 0 1mm !important;
+            padding: 0 !important;
             background: white !important;
+            font-size: 11px !important;
+            color: #000000 !important;
           }
           aside, header, nav, footer, .print-hidden-element, button {
             display: none !important;
@@ -2522,6 +2526,28 @@ const SaleReportPrint = () => {
             border: 1.5px solid black !important;
             page-break-inside: auto !important;
             break-inside: auto !important;
+          }
+          th {
+            font-size: 11px !important;
+            font-weight: 800 !important;
+            padding: 4px 6px !important;
+            color: #000000 !important;
+            background-color: #f3f4f6 !important;
+            border: 1px solid #000000 !important;
+          }
+          td {
+            font-size: 11px !important;
+            font-weight: 600 !important;
+            padding: 4px 6px !important;
+            color: #000000 !important;
+            border: 1px solid #374151 !important;
+          }
+          tfoot td {
+            font-size: 11.5px !important;
+            font-weight: 800 !important;
+            padding: 5px 6px !important;
+            color: #000000 !important;
+            border: 1.5px solid #000000 !important;
           }
           tr {
             page-break-inside: avoid !important;
@@ -2570,6 +2596,15 @@ const SaleReportPrint = () => {
                 </button>
               </div>
             )}
+
+            <button
+              type="button"
+              onClick={() => setPrintOrientation(prev => prev === 'landscape' ? 'portrait' : 'landscape')}
+              className="flex items-center gap-1.5 bg-white hover:bg-gray-50 text-slate-800 border border-slate-300 py-1.5 px-3 rounded font-bold cursor-pointer transition shadow-2xs text-xs"
+              title="Toggle Print Layout Orientation"
+            >
+              📄 Layout: <span className="uppercase text-primary font-black">{printOrientation}</span>
+            </button>
 
             <button
               type="button"
@@ -2847,18 +2882,18 @@ const SaleReportPrint = () => {
                         {/* 📦 PRODUCTS TABLE DIRECTLY UNDER CATEGORY HEADER */}
                         <table className="w-full table-auto border-collapse text-[11px] font-sans antialiased text-left print:w-full">
                           <thead>
-                            <tr className="bg-gray-100 border-b border-black font-black uppercase text-black font-mono text-[9px]">
+                            <tr className="bg-gray-100 border-b border-black font-black uppercase text-black font-mono text-[10px]">
                               <th className="p-1.5 border border-black text-center w-8">S#</th>
-                              <th className="p-1.5 border border-black">Product / Item Name</th>
-                              <th className="p-1.5 border border-black w-28">SKU / Code</th>
-                              <th className="p-1.5 border border-black text-center w-14">UOM</th>
-                              <th className="p-1.5 border border-black text-right w-18">Gross Sold</th>
-                              <th className="p-1.5 border border-black text-right w-16">Ret Qty</th>
-                              <th className="p-1.5 border border-black text-right w-20">Net Qty</th>
-                              <th className="p-1.5 border border-black text-right w-24">Gross Sales (PKR)</th>
-                              <th className="p-1.5 border border-black text-right w-20">Ret Amount</th>
-                              <th className="p-1.5 border border-black text-right w-26 pr-2">Net Rev (PKR)</th>
-                              <th className="p-1.5 border border-black text-right w-14 pr-1">% Share</th>
+                              <th className="p-1.5 border border-black min-w-[180px]">Product / Item Name</th>
+                              <th className="p-1.5 border border-black whitespace-nowrap">SKU / Code</th>
+                              <th className="p-1.5 border border-black text-center w-12">UOM</th>
+                              <th className="p-1.5 border border-black text-right whitespace-nowrap">Gross Sold</th>
+                              <th className="p-1.5 border border-black text-right whitespace-nowrap">Ret Qty</th>
+                              <th className="p-1.5 border border-black text-right whitespace-nowrap">Net Qty</th>
+                              <th className="p-1.5 border border-black text-right whitespace-nowrap">Gross Sales (PKR)</th>
+                              <th className="p-1.5 border border-black text-right whitespace-nowrap">Ret Amount</th>
+                              <th className="p-1.5 border border-black text-right whitespace-nowrap pr-2">Net Rev (PKR)</th>
+                              <th className="p-1.5 border border-black text-right whitespace-nowrap pr-1">% Share</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -3152,26 +3187,26 @@ const SaleReportPrint = () => {
           ) : rType === 'product-sales-history' ? (
             activeViewMode === 'summary' ? (
               // ── 📊 SUMMARY VIEW TABLE (1 ROW / PRODUCT) ──
-              <table className="w-full table-auto border-2 border-black border-collapse text-[10px] font-sans antialiased text-left print:w-full print:text-[8.5px] print:border-2 print:border-black">
+              <table className="w-full table-auto border-2 border-black border-collapse text-xs font-sans antialiased text-left print:w-full print:border-2 print:border-black">
                 <thead>
-                  <tr className="bg-gray-100 border-b border-black font-black uppercase text-black font-mono text-[9.5px] print:text-[8px]">
-                    <th rowSpan={2} className="p-1 border border-black text-center w-7">S#</th>
-                    <th rowSpan={2} className="p-1 border border-black">Product / Item Name</th>
-                    <th rowSpan={2} className="p-1 border border-black whitespace-nowrap">SKU / Code</th>
-                    <th rowSpan={2} className="p-1 border border-black">Brand</th>
-                    <th colSpan={3} className="p-0.5 border border-black text-center bg-gray-200">Category Classification</th>
-                    <th rowSpan={2} className="p-1 border border-black text-center w-8">UOM</th>
-                    <th rowSpan={2} className="p-1 border border-black text-right whitespace-nowrap">Sold Qty</th>
-                    <th rowSpan={2} className="p-1 border border-black text-right whitespace-nowrap">Return Qty</th>
-                    <th rowSpan={2} className="p-1 border border-black text-right whitespace-nowrap">Net Qty</th>
-                    <th rowSpan={2} className="p-1 border border-black text-right whitespace-nowrap">Avg. Rate (PKR)</th>
-                    <th rowSpan={2} className="p-1 border border-black text-right whitespace-nowrap">Net Sales Revenue (PKR)</th>
-                    <th rowSpan={2} className="p-1 border border-black text-center whitespace-nowrap border-r-2 border-r-black">Last Sold Date</th>
+                  <tr className="bg-gray-100 border-b border-black font-black uppercase text-black font-mono text-[11px]">
+                    <th rowSpan={2} className="p-1.5 border border-black text-center w-8">S#</th>
+                    <th rowSpan={2} className="p-1.5 border border-black">Product / Item Name</th>
+                    <th rowSpan={2} className="p-1.5 border border-black whitespace-nowrap">SKU / Code</th>
+                    <th rowSpan={2} className="p-1.5 border border-black">Brand</th>
+                    <th colSpan={3} className="p-1 border border-black text-center bg-gray-200">Category Classification</th>
+                    <th rowSpan={2} className="p-1.5 border border-black text-center w-10">UOM</th>
+                    <th rowSpan={2} className="p-1.5 border border-black text-right whitespace-nowrap">Sold Qty</th>
+                    <th rowSpan={2} className="p-1.5 border border-black text-right whitespace-nowrap">Return Qty</th>
+                    <th rowSpan={2} className="p-1.5 border border-black text-right whitespace-nowrap">Net Qty</th>
+                    <th rowSpan={2} className="p-1.5 border border-black text-right whitespace-nowrap">Avg. Rate (PKR)</th>
+                    <th rowSpan={2} className="p-1.5 border border-black text-right whitespace-nowrap">Net Sales Revenue (PKR)</th>
+                    <th rowSpan={2} className="p-1.5 border border-black text-center whitespace-nowrap border-r-2 border-r-black">Last Sold Date</th>
                   </tr>
-                  <tr className="bg-gray-100 border-b border-black font-black uppercase text-black font-mono text-[8px]">
-                    <th className="p-0.5 border border-black text-left">Parent</th>
-                    <th className="p-0.5 border border-black text-left">Sub</th>
-                    <th className="p-0.5 border border-black text-left">Leaf</th>
+                  <tr className="bg-gray-100 border-b border-black font-black uppercase text-black font-mono text-[10px]">
+                    <th className="p-1 border border-black text-left">Parent</th>
+                    <th className="p-1 border border-black text-left">Sub</th>
+                    <th className="p-1 border border-black text-left">Leaf</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -3185,31 +3220,31 @@ const SaleReportPrint = () => {
                     displayedRows.map((row, idx) => {
                       const realIndex = isPrinting ? idx + 1 : (currentPage - 1) * pageSize + idx + 1;
                       return (
-                        <tr key={idx} className="border-b border-black hover:bg-gray-50 font-semibold font-mono text-[10px] print:text-[8.5px]">
-                          <td className="p-1 border border-black text-center text-gray-600">{realIndex}</td>
-                          <td className="p-1 border border-black font-sans font-bold text-black">{row.product_name}</td>
-                          <td className="p-1 border border-black text-gray-700 text-[9px] whitespace-nowrap">{row.sku || '-'}</td>
-                          <td className="p-1 border border-black font-sans text-gray-600 text-[9px]">{row.brand || '-'}</td>
-                          <td className="p-1 border border-black font-sans text-gray-600 text-[8.5px]">{row.parentCategory || '-'}</td>
-                          <td className="p-1 border border-black font-sans text-gray-600 text-[8.5px]">{row.subCategory || '-'}</td>
-                          <td className="p-1 border border-black font-sans text-gray-600 text-[8.5px]">{row.category || '-'}</td>
-                          <td className="p-1 border border-black text-center text-gray-700 font-bold whitespace-nowrap">{row.uom}</td>
-                          <td className="p-1 border border-black text-right text-black font-bold whitespace-nowrap">
+                        <tr key={idx} className="border-b border-black hover:bg-gray-50 font-semibold font-mono text-xs">
+                          <td className="p-1.5 border border-black text-center text-gray-600">{realIndex}</td>
+                          <td className="p-1.5 border border-black font-sans font-bold text-black">{row.product_name}</td>
+                          <td className="p-1.5 border border-black text-gray-700 text-[11px] whitespace-nowrap">{row.sku || '-'}</td>
+                          <td className="p-1.5 border border-black font-sans text-gray-600 text-[11px]">{row.brand || '-'}</td>
+                          <td className="p-1.5 border border-black font-sans text-gray-600 text-[11px]">{row.parentCategory || '-'}</td>
+                          <td className="p-1.5 border border-black font-sans text-gray-600 text-[11px]">{row.subCategory || '-'}</td>
+                          <td className="p-1.5 border border-black font-sans text-gray-600 text-[11px]">{row.category || '-'}</td>
+                          <td className="p-1.5 border border-black text-center text-gray-700 font-bold whitespace-nowrap">{row.uom}</td>
+                          <td className="p-1.5 border border-black text-right text-black font-bold whitespace-nowrap">
                             {Number(row.sold_qty || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                           </td>
-                          <td className="p-1 border border-black text-right text-rose-700 font-bold whitespace-nowrap">
+                          <td className="p-1.5 border border-black text-right text-rose-700 font-bold whitespace-nowrap">
                             {Number(row.returned_qty || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                           </td>
-                          <td className="p-1 border border-black text-right text-primary font-black whitespace-nowrap">
+                          <td className="p-1.5 border border-black text-right text-primary font-black whitespace-nowrap">
                             {Number(row.net_qty || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                           </td>
-                          <td className="p-1 border border-black text-right text-gray-800 whitespace-nowrap font-mono">
+                          <td className="p-1.5 border border-black text-right text-gray-800 whitespace-nowrap font-mono">
                             Rs. {Number(row.avg_rate || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                           </td>
-                          <td className="p-1 border border-black text-right text-emerald-700 font-black whitespace-nowrap font-mono">
+                          <td className="p-1.5 border border-black text-right text-emerald-700 font-black whitespace-nowrap font-mono">
                             Rs. {Number(row.final_net_sales || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                           </td>
-                          <td className="p-1 border border-black text-center text-gray-600 text-[9px] whitespace-nowrap font-mono border-r-2 border-r-black">
+                          <td className="p-1.5 border border-black text-center text-gray-600 text-[11px] whitespace-nowrap font-mono border-r-2 border-r-black">
                             {row.last_sale_date || '-'}
                           </td>
                         </tr>
