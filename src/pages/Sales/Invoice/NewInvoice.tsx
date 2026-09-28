@@ -63,7 +63,7 @@ const NewInvoice = () => {
         setInitialLoading(true);
         const { data: cust } = await supabase.from('customers').select('id, customerName, primaryPhone');
         const { data: prod } = await supabase.from('products').select('id, product_name, current_stock, retail_price, item_sr_no, category, hs_code, uom, pieces_per_box, pcs_per_box, pieces_per_packing, product_description, bin, item_type, service_charges');
-        const { data: sm } = await supabase.from('salesmen').select('id, name');
+        const { data: sm } = await supabase.from('salesmen').select('id, name, invoice_name, invoice_names');
         const { data: trans } = await supabase.from('logistics_transportation').select('id, name, base_charges');
         const { data: locMaster } = await supabase.from('inventory_locations').select('name');
         const { data: wh } = await supabase.from('opening_stocks').select('location');
@@ -108,6 +108,24 @@ const NewInvoice = () => {
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  const getSalesmanPrefix = (salesmanName: string, smList: any[] = salesmenList): string => {
+    if (!salesmanName) return '';
+    const smObj = (smList && smList.length > 0 ? smList : salesmenList).find(
+      (s) => (s.name || '').toLowerCase().trim() === salesmanName.toLowerCase().trim()
+    );
+    const rawPrefix = (
+      smObj?.invoice_name ||
+      (smObj?.invoice_names && smObj?.invoice_names[0]) ||
+      smObj?.name ||
+      salesmanName ||
+      ''
+    )
+      .trim()
+      .toUpperCase();
+
+    return rawPrefix ? `${rawPrefix}-` : '';
+  };
 
   const getFormInitialValues = () => {
     if (editData) {
@@ -171,29 +189,43 @@ const NewInvoice = () => {
   };
 
   const validationSchema = Yup.object().shape({
-    invoiceNo: Yup.string().required('Invoice # is required').test(
-      'check-invoice-unique',
-      'This Invoice Number already exists!',
-      async function (value) {
-        if (!value) return true;
-        const originalInvoiceNo = editData?.invoice_no;
-        if (originalInvoiceNo && String(originalInvoiceNo).trim().toLowerCase() === String(value).trim().toLowerCase()) {
+    invoiceNo: Yup.string()
+      .required('Invoice # is required')
+      .test(
+        'has-digits',
+        'Please enter the invoice number digits',
+        function (value, ctx) {
+          if (!value) return false;
+          const prefix = getSalesmanPrefix(ctx.parent.salesman, salesmenList);
+          if (prefix && value.trim().toUpperCase() === prefix.trim().toUpperCase()) {
+            return false;
+          }
           return true;
         }
-        try {
-          const { data, error } = await supabase
-            .from('sales_invoices')
-            .select('id')
-            .ilike('invoice_no', value.trim())
-            .maybeSingle();
-          if (error) return true;
-          if (data) return false;
-          return true;
-        } catch (e) {
-          return true;
+      )
+      .test(
+        'check-invoice-unique',
+        'This Invoice Number already exists!',
+        async function (value) {
+          if (!value) return true;
+          const originalInvoiceNo = editData?.invoice_no;
+          if (originalInvoiceNo && String(originalInvoiceNo).trim().toLowerCase() === String(value).trim().toLowerCase()) {
+            return true;
+          }
+          try {
+            const { data, error } = await supabase
+              .from('sales_invoices')
+              .select('id')
+              .ilike('invoice_no', value.trim())
+              .maybeSingle();
+            if (error) return true;
+            if (data) return false;
+            return true;
+          } catch (e) {
+            return true;
+          }
         }
-      }
-    ),
+      ),
     gatePasses: Yup.object().test('all-gate-passes', 'Gate pass required for all locations', function (value, ctx) {
       const { items } = ctx.parent;
       if (!items || !Array.isArray(items)) return true;
@@ -901,11 +933,22 @@ const NewInvoice = () => {
               return acc + calculateLineTotals(item, values.taxScenario, values.applyFbrTax).netTotal;
             }, 0) + Number(values.transportCharges || 0) + Number(values.additionalCharges || 0);
 
+            const currentPrefix = getSalesmanPrefix(values.salesman, salesmenList);
+
+            // Extract user-typed suffix
+            let rawSuffix = values.invoiceNo || '';
+            if (currentPrefix && rawSuffix.toUpperCase().startsWith(currentPrefix.toUpperCase())) {
+              rawSuffix = rawSuffix.slice(currentPrefix.length);
+            }
+
             // Auto-lock salesman value if logged in as salesman
-            if (isSalesman && (matchedSalesman || currentSalesmanName) && values.salesman !== (matchedSalesman || currentSalesmanName)) {
-              setTimeout(() => {
-                setFieldValue('salesman', matchedSalesman || currentSalesmanName);
-              }, 0);
+            if (isSalesman && (matchedSalesman || currentSalesmanName)) {
+              const currentOfficer = matchedSalesman || currentSalesmanName;
+              if (values.salesman !== currentOfficer) {
+                setTimeout(() => {
+                  setFieldValue('salesman', currentOfficer);
+                }, 0);
+              }
             }
 
             return (
@@ -913,7 +956,38 @@ const NewInvoice = () => {
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-gray-50 dark:bg-meta-4/5 p-4 rounded-sm border border-stroke dark:border-strokedark">
                   <div>
                     <label className="block font-bold text-gray-500 mb-1">Invoice Number #: *</label>
-                    <input type="text" name="invoiceNo" placeholder="Enter Invoice #" value={values.invoiceNo} onChange={(e) => setFieldValue('invoiceNo', e.target.value.toUpperCase())} className={`w-full rounded border p-2 text-sm bg-white dark:bg-boxdark font-bold outline-none text-black dark:text-white ${hasAttempted && errors.invoiceNo ? 'border-red-500 bg-red-50/10' : 'border-stroke dark:border-strokedark focus:border-primary'}`} />
+                    <div className={`flex items-center rounded border overflow-hidden bg-white dark:bg-boxdark ${hasAttempted && errors.invoiceNo ? 'border-red-500 bg-red-50/10' : 'border-stroke dark:border-strokedark focus-within:border-primary'}`}>
+                      <span className="px-3 py-2 bg-slate-100 dark:bg-slate-800 text-emerald-800 dark:text-emerald-300 font-mono font-black text-sm border-r border-stroke dark:border-strokedark select-none whitespace-nowrap min-w-[70px] text-center flex items-center justify-center">
+                        {currentPrefix || <span className="text-gray-400 font-normal text-xs">Prefix-</span>}
+                      </span>
+                      <input 
+                        type="text" 
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        name="invoiceNo" 
+                        placeholder={currentPrefix ? "e.g. 001 or 26388" : "Select salesman first"} 
+                        value={rawSuffix} 
+                        onKeyDown={(e) => {
+                          if (
+                            !/[\d]/.test(e.key) &&
+                            !['Backspace', 'Delete', 'ArrowLeft', 'ArrowRight', 'Tab', 'Enter'].includes(e.key) &&
+                            !e.ctrlKey &&
+                            !e.metaKey
+                          ) {
+                            e.preventDefault();
+                          }
+                        }}
+                        onChange={(e) => {
+                          const digitsOnly = e.target.value.replace(/\D/g, '');
+                          if (currentPrefix) {
+                            setFieldValue('invoiceNo', `${currentPrefix}${digitsOnly}`);
+                          } else {
+                            setFieldValue('invoiceNo', digitsOnly);
+                          }
+                        }} 
+                        className="w-full p-2 text-sm bg-transparent font-bold outline-none text-black dark:text-white placeholder:font-normal placeholder:text-xs placeholder:text-gray-400 font-mono" 
+                      />
+                    </div>
                     {hasAttempted && errors.invoiceNo && <p className="text-red-500 text-xs font-bold mt-1">{String(errors.invoiceNo)}</p>}
                   </div>
 
@@ -951,13 +1025,22 @@ const NewInvoice = () => {
                       <select
                         name="salesman"
                         value={values.salesman}
-                        onChange={handleChange}
+                        onChange={(e) => {
+                          const selectedSm = e.target.value;
+                          setFieldValue('salesman', selectedSm);
+                          const newPrefix = getSalesmanPrefix(selectedSm, salesmenList);
+                          if (rawSuffix) {
+                            setFieldValue('invoiceNo', newPrefix ? `${newPrefix}${rawSuffix}` : rawSuffix);
+                          } else {
+                            setFieldValue('invoiceNo', newPrefix ? `${newPrefix}` : '');
+                          }
+                        }}
                         className={`w-full rounded border p-2 text-sm bg-white dark:bg-boxdark font-bold outline-none text-black dark:text-white ${hasAttempted && errors.salesman ? 'border-red-500 bg-red-50/10' : 'border-stroke dark:border-strokedark focus:border-primary'}`}
                       >
                         <option value="">-- Select Officer --</option>
                         {salesmenList.map((s) => (
                           <option key={s.id} value={s.name}>
-                            {s.name}
+                            {s.name} {s.invoice_name ? `(${s.invoice_name})` : ''}
                           </option>
                         ))}
                       </select>
