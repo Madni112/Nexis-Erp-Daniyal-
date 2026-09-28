@@ -2521,6 +2521,7 @@ const SaleReportPrint = () => {
           }
           table {
             width: 100% !important;
+            table-layout: fixed !important;
             box-sizing: border-box !important;
             border-collapse: collapse !important;
             border: 1.5px solid black !important;
@@ -2528,26 +2529,31 @@ const SaleReportPrint = () => {
             break-inside: auto !important;
           }
           th {
-            font-size: 15px !important;
+            font-size: 13.5px !important;
             font-weight: 800 !important;
-            padding: 6px 6px !important;
+            padding: 5px 3px !important;
             color: #000000 !important;
             background-color: #f3f4f6 !important;
             border: 1px solid #000000 !important;
+            white-space: normal !important;
+            word-break: normal !important;
+            line-height: 1.2 !important;
+            vertical-align: middle !important;
           }
           td {
-            font-size: 14.5px !important;
+            font-size: 14px !important;
             font-weight: 700 !important;
-            padding: 6px 6px !important;
+            padding: 6px 4px !important;
             color: #000000 !important;
             border: 1px solid #374151 !important;
           }
           tfoot td {
-            font-size: 15.5px !important;
+            font-size: 14.5px !important;
             font-weight: 900 !important;
-            padding: 6px 6px !important;
+            padding: 6px 4px !important;
             color: #000000 !important;
             border: 1.5px solid #000000 !important;
+            white-space: nowrap !important;
           }
           tr {
             page-break-inside: avoid !important;
@@ -2558,11 +2564,6 @@ const SaleReportPrint = () => {
           .break-inside-avoid {
             break-inside: avoid !important;
             page-break-inside: avoid !important;
-          }
-          /* Eliminate double/overflow right borders */
-          .border-2.border-slate-900, .border-2 {
-            border: none !important;
-            box-shadow: none !important;
           }
         }
       `}} />
@@ -2631,11 +2632,53 @@ const SaleReportPrint = () => {
 
         {/* ── OFFICIAL CORPORATE REPORT HEADER ── */}
         <div className="relative text-center space-y-1.5 py-4 border-b border-double border-black">
-          {/* Top-Left ZAC Brand Icon Badge (Sidebar Style) */}
+          {/* ZAC Brand Icon Badge (Sidebar Style Option A) */}
           <div className="absolute left-2 top-2">
-            <div className="w-13 h-13 rounded-2xl bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-800 flex items-center justify-center shadow-lg shadow-emerald-600/30 border border-emerald-400/40 relative overflow-hidden select-none shrink-0">
-              <div className="absolute inset-0 bg-gradient-to-t from-transparent via-white/10 to-white/20" />
-              <span className="relative z-10 font-cinzel font-black tracking-widest text-[16px] text-white leading-none pl-0.5">
+            <div
+              style={{
+                width: '48px',
+                height: '48px',
+                minWidth: '48px',
+                minHeight: '48px',
+                maxWidth: '48px',
+                maxHeight: '48px',
+                borderRadius: '13px',
+                background: 'linear-gradient(135deg, #10b981 0%, #059669 50%, #115e59 100%)',
+                border: '1.5px solid rgba(52, 211, 153, 0.5)',
+                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.15)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                position: 'relative',
+                overflow: 'hidden',
+                WebkitPrintColorAdjust: 'exact',
+                printColorAdjust: 'exact',
+                flexShrink: 0
+              }}
+            >
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  background: 'linear-gradient(to top, transparent, rgba(255, 255, 255, 0.15))',
+                  pointerEvents: 'none'
+                }}
+              />
+              <span
+                style={{
+                  position: 'relative',
+                  zIndex: 10,
+                  fontFamily: 'Cinzel, Georgia, serif',
+                  fontWeight: 900,
+                  letterSpacing: '0.12em',
+                  fontSize: '15px',
+                  color: '#ffffff',
+                  lineHeight: 1,
+                  paddingLeft: '2px',
+                  WebkitPrintColorAdjust: 'exact',
+                  printColorAdjust: 'exact'
+                }}
+              >
                 ZAC
               </span>
             </div>
@@ -2861,56 +2904,69 @@ const SaleReportPrint = () => {
                   displayedRows.map((cat: any, cIdx: number) => {
                     const realIndex = isPrinting || pageSize === 'all' ? cIdx + 1 : (currentPage - 1) * (pageSize as number) + cIdx + 1;
                     return (
-                      <div key={cIdx} className="border-2 border-slate-900 print:border-none rounded-sm overflow-visible shadow-2xs print:shadow-none bg-white space-y-0">
+                      <div key={cIdx} className="border-2 border-slate-900 rounded-sm overflow-hidden shadow-2xs bg-white space-y-0">
                         {/* 🏷️ CATEGORY HEADER BANNER (WITH PARENT & SUB CATEGORY MENTIONED) */}
                         <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 text-white p-3.5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 font-mono text-sm border-b-2 border-slate-900">
-                          <div className="flex items-center gap-2.5 flex-wrap">
-                            <span className="bg-emerald-500 text-black px-2 py-0.5 rounded font-black text-sm">#{realIndex}</span>
-                            <span className="font-black font-sans text-base tracking-wide uppercase text-white flex items-center gap-1.5">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="bg-emerald-500 text-black px-2.5 py-0.5 rounded font-black text-sm print:text-sm">#{realIndex}</span>
+                            <span className="font-black font-sans text-base tracking-wide uppercase text-white flex items-center gap-1.5 print:text-[15px]">
                               🏷️ CATEGORY: {cat.category_name}
                             </span>
-                            <span className="bg-slate-800 text-slate-200 text-xs px-2 py-0.5 rounded border border-slate-700">
+                            <span className="bg-slate-800 text-slate-200 text-xs px-2 py-0.5 rounded border border-slate-700 print:text-xs">
                               📁 Parent: <b className="text-white font-sans">{cat.parent_name}</b>
                             </span>
-                            <span className="bg-slate-800 text-slate-200 text-xs px-2 py-0.5 rounded border border-slate-700">
+                            <span className="bg-slate-800 text-slate-200 text-xs px-2 py-0.5 rounded border border-slate-700 print:text-xs">
                               📂 Sub: <b className="text-white font-sans">{cat.sub_name}</b>
                             </span>
-                            <span className="bg-indigo-900/70 text-indigo-200 text-xs px-2 py-0.5 rounded border border-indigo-700">
+                            <span className="bg-indigo-900/70 text-indigo-200 text-xs px-2 py-0.5 rounded border border-indigo-700 print:text-xs">
                               {cat.products_count || (cat.products || []).length} Products
                             </span>
                           </div>
-                          <div className="text-right text-xs font-black font-mono flex items-center gap-2.5 flex-wrap">
-                            <span className="text-emerald-400">Sold: {Number(cat.gross_units || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                          <div className="text-right text-xs sm:text-sm print:text-[13.5px] font-black font-mono flex items-center gap-2 flex-wrap">
+                            <span className="text-emerald-400 font-extrabold whitespace-nowrap">Sold: {Number(cat.gross_units || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             <span className="text-slate-600">|</span>
-                            <span className="text-rose-400">Ret: {Number(cat.returned_units || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                            <span className="text-rose-400 font-extrabold whitespace-nowrap">Ret: {Number(cat.returned_units || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                             <span className="text-slate-600">|</span>
-                            <span className="text-emerald-300">Net: {Number(cat.net_units || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} Units</span>
+                            <span className="text-emerald-300 font-black whitespace-nowrap">Net: {Number(cat.net_units || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })} Units</span>
                             <span className="text-slate-600">|</span>
-                            <span className="text-amber-300 font-extrabold underline decoration-double">
+                            <span className="text-amber-300 font-black underline decoration-double whitespace-nowrap">
                               Net Rev: Rs. {Number(cat.net_revenue || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                             </span>
                             <span className="text-slate-600">|</span>
-                            <span className="bg-emerald-500/20 text-emerald-300 text-xs px-1.5 py-0.5 rounded border border-emerald-500/40">
+                            <span className="bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded border border-emerald-500/40 font-black whitespace-nowrap">
                               {Number(cat.contribution_pct || 0).toFixed(1)}% Share
                             </span>
                           </div>
                         </div>
 
                         {/* 📦 PRODUCTS TABLE DIRECTLY UNDER CATEGORY HEADER */}
-                        <table className="w-full table-auto border-collapse text-[11px] font-sans antialiased text-left print:w-full">
+                        <table className="w-full table-fixed border-collapse text-[11px] font-sans antialiased text-left print:w-full">
+                          <colgroup>
+                            <col style={{ width: '3%' }} />
+                            <col style={{ width: '22%' }} />
+                            <col style={{ width: '13%' }} />
+                            <col style={{ width: '4%' }} />
+                            <col style={{ width: '6.5%' }} />
+                            <col style={{ width: '5.5%' }} />
+                            <col style={{ width: '6.5%' }} />
+                            <col style={{ width: '13%' }} />
+                            <col style={{ width: '8.5%' }} />
+                            <col style={{ width: '13%' }} />
+                            <col style={{ width: '5%' }} />
+                          </colgroup>
                           <thead>
                             <tr className="bg-gray-100 border-b border-black font-black uppercase text-black font-mono text-[10px]">
-                              <th className="p-1.5 border border-black text-center w-8">S#</th>
-                              <th className="p-1.5 border border-black min-w-[180px]">Product / Item Name</th>
-                              <th className="p-1.5 border border-black whitespace-nowrap">SKU / Code</th>
-                              <th className="p-1.5 border border-black text-center w-12">UOM</th>
-                              <th className="p-1.5 border border-black text-right whitespace-nowrap">Gross Sold</th>
-                              <th className="p-1.5 border border-black text-right whitespace-nowrap">Ret Qty</th>
-                              <th className="p-1.5 border border-black text-right whitespace-nowrap">Net Qty</th>
-                              <th className="p-1.5 border border-black text-right whitespace-nowrap">Gross Sales (PKR)</th>
-                              <th className="p-1.5 border border-black text-right whitespace-nowrap">Ret Amount</th>
-                              <th className="p-1.5 border border-black text-right whitespace-nowrap pr-2">Net Rev (PKR)</th>
-                              <th className="p-1.5 border border-black text-center whitespace-nowrap px-1.5">% Share</th>
+                              <th className="p-1 border border-black text-center">S#</th>
+                              <th className="p-1 border border-black text-left">Product / Item Name</th>
+                              <th className="p-1 border border-black text-center">SKU / Code</th>
+                              <th className="p-1 border border-black text-center">UOM</th>
+                              <th className="p-1 border border-black text-right">Gross Sold</th>
+                              <th className="p-1 border border-black text-right">Ret Qty</th>
+                              <th className="p-1 border border-black text-right">Net Qty</th>
+                              <th className="p-1 border border-black text-right">Gross Sales (PKR)</th>
+                              <th className="p-1 border border-black text-right">Ret Amount</th>
+                              <th className="p-1 border border-black text-right">Net Rev (PKR)</th>
+                              <th className="p-1 border border-black text-center">% Share</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -2925,27 +2981,27 @@ const SaleReportPrint = () => {
                                 <tr key={pIdx} className="border-b border-gray-300 hover:bg-gray-50 font-semibold font-mono text-xs">
                                   <td className="p-1.5 border border-gray-300 text-center text-gray-500">{pIdx + 1}</td>
                                   <td className="p-1.5 border border-gray-300 font-sans font-bold text-black">{p.product_name}</td>
-                                  <td className="p-1.5 border border-gray-300 text-gray-600 text-[10px]">{p.sku || '-'}</td>
+                                  <td className="p-1.5 border border-gray-300 text-center text-gray-600 text-[10.5px] font-mono break-all">{p.sku || '-'}</td>
                                   <td className="p-1.5 border border-gray-300 text-center text-gray-700 font-bold">{p.uom}</td>
-                                  <td className="p-1.5 border border-gray-300 text-right text-black font-bold">
+                                  <td className="p-1.5 border border-gray-300 text-right text-black font-bold whitespace-nowrap">
                                     {Number(p.sold_qty || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                   </td>
-                                  <td className="p-1.5 border border-gray-300 text-right text-rose-700 font-bold">
+                                  <td className="p-1.5 border border-gray-300 text-right text-rose-700 font-bold whitespace-nowrap">
                                     {Number(p.returned_qty || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                   </td>
-                                  <td className="p-1.5 border border-gray-300 text-right text-primary font-black">
+                                  <td className="p-1.5 border border-gray-300 text-right text-primary font-black whitespace-nowrap">
                                     {Number(p.net_qty || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                   </td>
-                                  <td className="p-1.5 border border-gray-300 text-right text-gray-800">
+                                  <td className="p-1.5 border border-gray-300 text-right text-gray-800 font-bold whitespace-nowrap">
                                     Rs. {Number(p.gross_sales || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                   </td>
-                                  <td className="p-1.5 border border-gray-300 text-right text-rose-700 font-bold">
+                                  <td className="p-1.5 border border-gray-300 text-right text-rose-700 font-bold whitespace-nowrap">
                                     Rs. {Number(p.returned_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                   </td>
-                                  <td className="p-1.5 border border-gray-300 text-right pr-2 text-emerald-700 font-black">
+                                  <td className="p-1.5 border border-gray-300 text-right text-emerald-700 font-black whitespace-nowrap">
                                     Rs. {Number(p.final_net_sales || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                   </td>
-                                  <td className="p-1.5 border border-gray-300 text-right pr-1 text-purple-900 font-bold text-[10px]">
+                                  <td className="p-1.5 border border-gray-300 text-center text-purple-900 font-bold text-[10px] whitespace-nowrap">
                                     {Number(p.share_of_category || 0).toFixed(1)}%
                                   </td>
                                 </tr>
@@ -2954,28 +3010,28 @@ const SaleReportPrint = () => {
                           </tbody>
                           <tfoot>
                             <tr className="bg-gray-100 border-t-2 border-black font-black font-mono text-xs">
-                              <td colSpan={4} className="p-1.5 border border-black text-right uppercase tracking-wider text-gray-800">
+                              <td colSpan={4} className="p-1.5 border border-black text-right uppercase tracking-wider text-gray-800 truncate">
                                 Subtotal ({cat.category_name} : {(cat.products || []).length} Products):
                               </td>
-                              <td className="p-1.5 border border-black text-right font-bold text-black">
+                              <td className="p-1.5 border border-black text-right font-bold text-black whitespace-nowrap">
                                 {Number(cat.gross_units || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                               </td>
-                              <td className="p-1.5 border border-black text-right font-bold text-rose-700">
+                              <td className="p-1.5 border border-black text-right font-bold text-rose-700 whitespace-nowrap">
                                 {Number(cat.returned_units || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                               </td>
-                              <td className="p-1.5 border border-black text-right font-black text-primary">
+                              <td className="p-1.5 border border-black text-right font-black text-primary whitespace-nowrap">
                                 {Number(cat.net_units || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                               </td>
-                              <td className="p-1.5 border border-black text-right font-bold text-gray-900">
+                              <td className="p-1.5 border border-black text-right font-bold text-gray-900 whitespace-nowrap">
                                 Rs. {Number(cat.gross_sales || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                               </td>
-                              <td className="p-1.5 border border-black text-right font-bold text-rose-700">
+                              <td className="p-1.5 border border-black text-right font-bold text-rose-700 whitespace-nowrap">
                                 Rs. {Number(cat.returned_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                               </td>
-                              <td className="p-1.5 border border-black text-right pr-2 text-purple-900 font-black">
+                              <td className="p-1.5 border border-black text-right text-purple-900 font-black whitespace-nowrap">
                                 Rs. {Number(cat.net_revenue || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                               </td>
-                              <td className="p-1.5 border border-black text-center text-gray-400 font-bold text-[10px]">-</td>
+                              <td className="p-1.5 border border-black text-center text-gray-400 font-bold text-[10px] whitespace-nowrap">-</td>
                             </tr>
                           </tfoot>
                         </table>
@@ -3032,22 +3088,22 @@ const SaleReportPrint = () => {
                         {/* 🏢 TIER 1: PARENT CATEGORY HEADER BANNER */}
                         <div className="bg-gradient-to-r from-slate-950 via-slate-900 to-indigo-950 text-white p-3.5 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 font-mono text-xs border-b-2 border-slate-900">
                           <div className="flex items-center gap-2.5 flex-wrap">
-                            <span className="bg-amber-400 text-black px-2 py-0.5 rounded font-black text-xs">#{realParentIndex}</span>
-                            <span className="font-black font-sans text-sm tracking-wide uppercase text-white flex items-center gap-1.5">
+                            <span className="bg-amber-400 text-black px-2.5 py-0.5 rounded font-black text-xs print:text-xs">#{realParentIndex}</span>
+                            <span className="font-black font-sans text-sm tracking-wide uppercase text-white flex items-center gap-1.5 print:text-sm">
                               🏢 PARENT CATEGORY: {parent.parent_name}
                             </span>
-                            <span className="bg-slate-800 text-slate-300 text-[10px] px-2 py-0.5 rounded border border-slate-700">
+                            <span className="bg-slate-800 text-slate-300 text-[10px] px-2.5 py-0.5 rounded border border-slate-700 print:text-xs">
                               {parent.sub_categories?.length || 0} Sub-Categories
                             </span>
                           </div>
-                          <div className="text-right text-[11px] font-black font-mono flex items-center gap-2.5 flex-wrap">
-                            <span className="text-emerald-400">Sold: {Number(parent.gross_units || 0).toLocaleString()}</span>
+                          <div className="text-right text-xs sm:text-sm print:text-[13px] font-black font-mono flex items-center gap-2.5 flex-wrap">
+                            <span className="text-emerald-400 font-extrabold whitespace-nowrap">Sold: {Number(parent.gross_units || 0).toLocaleString()}</span>
                             <span className="text-slate-600">|</span>
-                            <span className="text-rose-400">Ret: {Number(parent.returned_units || 0).toLocaleString()}</span>
+                            <span className="text-rose-400 font-extrabold whitespace-nowrap">Ret: {Number(parent.returned_units || 0).toLocaleString()}</span>
                             <span className="text-slate-600">|</span>
-                            <span className="text-emerald-300">Net: {Number(parent.net_units || 0).toLocaleString()} Units</span>
+                            <span className="text-emerald-300 font-black whitespace-nowrap">Net: {Number(parent.net_units || 0).toLocaleString()} Units</span>
                             <span className="text-slate-600">|</span>
-                            <span className="text-amber-300 font-extrabold underline decoration-double">
+                            <span className="text-amber-300 font-black underline decoration-double whitespace-nowrap">
                               Net Revenue: Rs. {Number(parent.net_revenue || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                             </span>
                           </div>
@@ -3068,14 +3124,14 @@ const SaleReportPrint = () => {
                                     {sub.categories?.length || 0} Categories
                                   </span>
                                 </div>
-                                <div className="text-right text-[10px] font-black font-mono flex items-center gap-2 flex-wrap">
-                                  <span className="text-slate-700">Sold: {Number(sub.gross_units || 0).toLocaleString()}</span>
+                                <div className="text-right text-xs print:text-[12px] font-black font-mono flex items-center gap-2 flex-wrap">
+                                  <span className="text-slate-700 whitespace-nowrap">Sold: {Number(sub.gross_units || 0).toLocaleString()}</span>
                                   <span className="text-slate-400">|</span>
-                                  <span className="text-rose-700">Ret: {Number(sub.returned_units || 0).toLocaleString()}</span>
+                                  <span className="text-rose-700 whitespace-nowrap">Ret: {Number(sub.returned_units || 0).toLocaleString()}</span>
                                   <span className="text-slate-400">|</span>
-                                  <span className="text-emerald-800">Net: {Number(sub.net_units || 0).toLocaleString()} Units</span>
+                                  <span className="text-emerald-800 whitespace-nowrap">Net: {Number(sub.net_units || 0).toLocaleString()} Units</span>
                                   <span className="text-slate-400">|</span>
-                                  <span className="text-purple-900 font-extrabold">
+                                  <span className="text-purple-900 font-extrabold whitespace-nowrap">
                                     Sub Revenue: Rs. {Number(sub.net_revenue || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                                   </span>
                                 </div>

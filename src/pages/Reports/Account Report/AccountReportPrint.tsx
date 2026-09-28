@@ -1804,6 +1804,7 @@ const AccountReportPrint = () => {
           aside, header, nav, footer, .print-hidden-element, button { display: none !important; visibility: hidden !important; }
           table {
             width: 100% !important;
+            table-layout: fixed !important;
             box-sizing: border-box !important;
             border-collapse: collapse !important;
             border: 1.5px solid black !important;
@@ -1811,26 +1812,31 @@ const AccountReportPrint = () => {
             break-inside: auto !important;
           }
           th {
-            font-size: 15px !important;
+            font-size: 13.5px !important;
             font-weight: 800 !important;
-            padding: 6px 8px !important;
+            padding: 5px 3px !important;
             color: #000000 !important;
             background-color: #f3f4f6 !important;
             border: 1px solid #000000 !important;
+            white-space: normal !important;
+            word-break: normal !important;
+            line-height: 1.2 !important;
+            vertical-align: middle !important;
           }
           td {
-            font-size: 14.5px !important;
+            font-size: 14px !important;
             font-weight: 700 !important;
-            padding: 6px 8px !important;
+            padding: 6px 4px !important;
             color: #000000 !important;
             border: 1px solid #374151 !important;
           }
           tfoot td {
-            font-size: 16px !important;
+            font-size: 14.5px !important;
             font-weight: 900 !important;
-            padding: 7px 8px !important;
+            padding: 6px 4px !important;
             color: #000000 !important;
             border: 1.5px solid #000000 !important;
+            white-space: nowrap !important;
           }
           tr { page-break-inside: avoid !important; break-inside: avoid !important; }
           thead { display: table-header-group !important; }
@@ -1884,11 +1890,53 @@ const AccountReportPrint = () => {
                 </div>
 
                 <div className="relative text-center space-y-1.5 py-4 border-b border-double border-black">
-                    {/* Top-Left ZAC Brand Icon Badge (Sidebar Style) */}
+                    {/* ZAC Brand Icon Badge (Sidebar Style Option A) */}
                     <div className="absolute left-2 top-2">
-                        <div className="w-13 h-13 rounded-2xl bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-800 flex items-center justify-center shadow-lg shadow-emerald-600/30 border border-emerald-400/40 relative overflow-hidden select-none shrink-0">
-                            <div className="absolute inset-0 bg-gradient-to-t from-transparent via-white/10 to-white/20" />
-                            <span className="relative z-10 font-cinzel font-black tracking-widest text-[16px] text-white leading-none pl-0.5">
+                        <div
+                            style={{
+                                width: '48px',
+                                height: '48px',
+                                minWidth: '48px',
+                                minHeight: '48px',
+                                maxWidth: '48px',
+                                maxHeight: '48px',
+                                borderRadius: '13px',
+                                background: 'linear-gradient(135deg, #10b981 0%, #059669 50%, #115e59 100%)',
+                                border: '1.5px solid rgba(52, 211, 153, 0.5)',
+                                boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.15)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                position: 'relative',
+                                overflow: 'hidden',
+                                WebkitPrintColorAdjust: 'exact',
+                                printColorAdjust: 'exact',
+                                flexShrink: 0
+                            }}
+                        >
+                            <div
+                                style={{
+                                    position: 'absolute',
+                                    inset: 0,
+                                    background: 'linear-gradient(to top, transparent, rgba(255, 255, 255, 0.15))',
+                                    pointerEvents: 'none'
+                                }}
+                            />
+                            <span
+                                style={{
+                                    position: 'relative',
+                                    zIndex: 10,
+                                    fontFamily: 'Cinzel, Georgia, serif',
+                                    fontWeight: 900,
+                                    letterSpacing: '0.12em',
+                                    fontSize: '15px',
+                                    color: '#ffffff',
+                                    lineHeight: 1,
+                                    paddingLeft: '2px',
+                                    WebkitPrintColorAdjust: 'exact',
+                                    printColorAdjust: 'exact'
+                                }}
+                            >
                                 ZAC
                             </span>
                         </div>
