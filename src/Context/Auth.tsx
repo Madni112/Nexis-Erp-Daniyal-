@@ -303,21 +303,41 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const logout = async () => {
     try {
-      const userEmail = localStorage.getItem('zac_user_email') || 'User';
+      const savedEmail = userEmail || localStorage.getItem('zac_user_email') || 'User';
       await supabase.from('audit_logs').insert([{
         action_type: 'LOGOUT',
         table_name: 'auth_users',
-        performed_by: userEmail,
-        details: { email: userEmail, event: 'User logged out of ERP portal', timestamp: new Date().toISOString() }
+        performed_by: savedEmail,
+        details: { email: savedEmail, event: 'User logged out of ERP portal', timestamp: new Date().toISOString() }
       }]);
     } catch (_) {}
 
-    await supabase.auth.signOut();
-    localStorage.removeItem('zac_is_authenticated');
-    localStorage.removeItem('zac_user_role');
-    localStorage.removeItem('zac_user_email');
-    localStorage.removeItem('zac_user_modules');
-    navigate('/signin');
+    try {
+      await supabase.auth.signOut();
+    } catch (_) {}
+
+    setIsAuthenticated(false);
+    setCurrentUser(null);
+    setUserEmail(null);
+    setRole(null);
+    setTenantId(null);
+    setUserName(null);
+    setUserLocationId(null);
+    setUserLocationName(null);
+    setAllowedModules(null);
+
+    try {
+      localStorage.removeItem('zac_is_authenticated');
+      localStorage.removeItem('zac_user_role');
+      localStorage.removeItem('zac_user_email');
+      localStorage.removeItem('zac_user_name');
+      localStorage.removeItem('zac_user_modules');
+      localStorage.removeItem('zac_user_location_id');
+      localStorage.removeItem('zac_user_location_name');
+      sessionStorage.removeItem('nht_dev_auth_session');
+    } catch (_) {}
+
+    navigate('/signin', { replace: true });
   };
 
   const getRoleBasedRoutes = () => {

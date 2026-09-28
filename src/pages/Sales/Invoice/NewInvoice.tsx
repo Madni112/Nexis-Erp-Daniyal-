@@ -63,7 +63,7 @@ const NewInvoice = () => {
         setInitialLoading(true);
         const { data: cust } = await supabase.from('customers').select('id, customerName, primaryPhone');
         const { data: prod } = await supabase.from('products').select('id, product_name, current_stock, retail_price, item_sr_no, category, hs_code, uom, pieces_per_box, pcs_per_box, pieces_per_packing, product_description, bin, item_type, service_charges');
-        const { data: sm } = await supabase.from('salesmen').select('id, name, invoice_name, invoice_names');
+        const { data: sm } = await supabase.from('salesmen').select('id, name, invoice_name, invoice_names, linked_salesmen');
         const { data: trans } = await supabase.from('logistics_transportation').select('id, name, base_charges');
         const { data: locMaster } = await supabase.from('inventory_locations').select('name');
         const { data: wh } = await supabase.from('opening_stocks').select('location');
@@ -941,13 +941,38 @@ const NewInvoice = () => {
               rawSuffix = rawSuffix.slice(currentPrefix.length);
             }
 
-            // Auto-lock salesman value if logged in as salesman
+            // Find current salesman record to check for linked partner salesmen
+            const currentSalesmanObj = salesmenList.find(
+              (s) => (s.name || '').toLowerCase().trim() === (matchedSalesman || currentSalesmanName).toLowerCase().trim()
+            );
+            const partnerNames: string[] = (currentSalesmanObj && Array.isArray(currentSalesmanObj.linked_salesmen))
+              ? currentSalesmanObj.linked_salesmen
+              : [];
+            const isMergedSalesman = isSalesman && partnerNames.length > 0;
+
+            // Merged team salesmen list: current user + all linked partners
+            const allowedSalesmenList = isSalesman
+              ? (isMergedSalesman
+                  ? salesmenList.filter(s => s.name === currentSalesmanObj?.name || partnerNames.includes(s.name))
+                  : [])
+              : salesmenList;
+
+            // Auto-lock or initialize salesman value if logged in as salesman
             if (isSalesman && (matchedSalesman || currentSalesmanName)) {
               const currentOfficer = matchedSalesman || currentSalesmanName;
-              if (values.salesman !== currentOfficer) {
-                setTimeout(() => {
-                  setFieldValue('salesman', currentOfficer);
-                }, 0);
+              if (!isMergedSalesman) {
+                if (values.salesman !== currentOfficer) {
+                  setTimeout(() => {
+                    setFieldValue('salesman', currentOfficer);
+                  }, 0);
+                }
+              } else {
+                // If merged, initialize with current officer if empty or not in allowed list
+                if (!values.salesman || !allowedSalesmenList.some(s => s.name === values.salesman)) {
+                  setTimeout(() => {
+                    setFieldValue('salesman', currentOfficer);
+                  }, 0);
+                }
               }
             }
 
@@ -997,7 +1022,7 @@ const NewInvoice = () => {
                       type="date" 
                       name="saleDate" 
                       value={values.saleDate} 
-                      onChange={handleChange}
+                      onChange={handleChange} 
                       min={editData ? undefined : new Date(new Date().setDate(new Date().getDate() - 3)).toISOString().split('T')[0]}
                       max={new Date().toISOString().split('T')[0]}
                       className={`w-full rounded border p-2 text-sm bg-transparent font-bold outline-none text-black dark:text-white ${hasAttempted && errors.saleDate ? 'border-red-500 bg-red-50/10' : 'border-stroke dark:border-strokedark focus:border-primary'}`} 
@@ -1006,9 +1031,10 @@ const NewInvoice = () => {
 
                   <div>
                     <label className="block font-bold text-gray-500 mb-1">
-                      Assigned Salesman: * {isSalesman && <span className="text-[11px] text-emerald-600 font-semibold">(Locked)</span>}
+                      Assigned Salesman: * {isSalesman && !isMergedSalesman && <span className="text-[11px] text-emerald-600 font-semibold">(Locked)</span>}
+                      {isMergedSalesman && <span className="text-[11px] text-emerald-600 font-semibold">(Partner Team)</span>}
                     </label>
-                    {isSalesman ? (
+                    {isSalesman && !isMergedSalesman ? (
                       <div className="relative">
                         <input
                           type="text"
@@ -1020,6 +1046,30 @@ const NewInvoice = () => {
                         <div className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
                           🔒 Logged In
                         </div>
+                      </div>
+                    ) : isMergedSalesman ? (
+                      <div className="relative">
+                        <select
+                          name="salesman"
+                          value={values.salesman || currentSalesmanObj?.name}
+                          onChange={(e) => {
+                            const selectedSm = e.target.value;
+                            setFieldValue('salesman', selectedSm);
+                            const newPrefix = getSalesmanPrefix(selectedSm, salesmenList);
+                            if (rawSuffix) {
+                              setFieldValue('invoiceNo', newPrefix ? `${newPrefix}${rawSuffix}` : rawSuffix);
+                            } else {
+                              setFieldValue('invoiceNo', newPrefix ? `${newPrefix}` : '');
+                            }
+                          }}
+                          className={`w-full rounded border p-2 text-sm bg-white dark:bg-boxdark font-bold outline-none text-black dark:text-white ${hasAttempted && errors.salesman ? 'border-red-500 bg-red-50/10' : 'border-emerald-500 dark:border-emerald-600 focus:border-primary'}`}
+                        >
+                          {allowedSalesmenList.map((s) => (
+                            <option key={s.id} value={s.name}>
+                              {s.name} {s.invoice_name ? `(${s.invoice_name})` : ''} {s.name === currentSalesmanObj?.name ? '(My Account)' : '(Partner)'}
+                            </option>
+                          ))}
+                        </select>
                       </div>
                     ) : (
                       <select

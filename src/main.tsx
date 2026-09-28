@@ -75,11 +75,32 @@ class RootErrorBoundary extends React.Component<
                 color: '#64748B',
                 fontSize: '13px',
                 lineHeight: '1.6',
-                marginBottom: '24px',
+                marginBottom: '16px',
               }}
             >
               A view rendering error was caught safely. Click below to return to the Executive Dashboard.
             </p>
+            {this.state.error && (
+              <div
+                style={{
+                  textAlign: 'left',
+                  backgroundColor: '#FEF2F2',
+                  border: '1px solid #F87171',
+                  borderRadius: '8px',
+                  padding: '12px',
+                  marginBottom: '20px',
+                  color: '#991B1B',
+                  fontSize: '11px',
+                  fontFamily: 'monospace',
+                  maxHeight: '140px',
+                  overflowY: 'auto',
+                  wordBreak: 'break-word',
+                  whiteSpace: 'pre-wrap',
+                }}
+              >
+                <b>Error:</b> {String(this.state.error?.message || this.state.error)}
+              </div>
+            )}
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'center' }}>
               <button
                 onClick={() => {

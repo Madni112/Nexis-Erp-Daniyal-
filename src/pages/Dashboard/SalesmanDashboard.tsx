@@ -56,11 +56,14 @@ const SalesmanDashboard: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<'All' | 'Pending' | 'Dispatched'>('All');
   const [salesmanList, setSalesmanList] = useState<string[]>([]);
   const [selectedSalesman, setSelectedSalesman] = useState<string>('ALL');
+  const [partnerSalesmen, setPartnerSalesmen] = useState<string[]>([]);
 
   const isAdminOrSuper = useMemo(() => {
     const r = (role || '').toLowerCase();
     return r.includes('admin') || r.includes('owner') || r.includes('developer');
   }, [role]);
+
+  const isMergedSalesman = !isAdminOrSuper && partnerSalesmen.length > 0;
 
   // Load Salesman Dashboard Data
   const loadDashboardData = async () => {
@@ -83,9 +86,20 @@ const SalesmanDashboard: React.FC = () => {
       );
       setSalesmanList(uniqueSalesmen);
 
-      // If logged in user is a salesman, set their default filter
-      if (!isAdminOrSuper && userName) {
-        setSelectedSalesman(userName);
+      // Check if logged in user has linked partner salesmen
+      if (userName) {
+        const { data: smRow } = await supabase
+          .from('salesmen')
+          .select('name, linked_salesmen')
+          .ilike('name', userName.trim())
+          .maybeSingle();
+
+        if (smRow && Array.isArray(smRow.linked_salesmen) && smRow.linked_salesmen.length > 0) {
+          setPartnerSalesmen(smRow.linked_salesmen);
+          setSelectedSalesman('TEAM_ALL');
+        } else if (!isAdminOrSuper) {
+          setSelectedSalesman(userName);
+        }
       }
 
       // 2. Fetch Live Stock Balances
@@ -130,11 +144,34 @@ const SalesmanDashboard: React.FC = () => {
   // Filter invoices for current user or selected salesman
   const filteredInvoices = useMemo(() => {
     return invoices.filter((inv) => {
-      // Salesman filter
-      if (selectedSalesman !== 'ALL') {
-        const invSalesman = (inv.salesman || '').toLowerCase();
-        if (!invSalesman.includes(selectedSalesman.toLowerCase())) {
-          return false;
+      const invSalesman = (inv.salesman || '').toLowerCase().trim();
+
+      // Non-admin logic
+      if (!isAdminOrSuper) {
+        if (!isMergedSalesman) {
+          // Normal salesman: only see their own
+          const myName = (userName || '').toLowerCase().trim();
+          if (myName && !invSalesman.includes(myName)) return false;
+        } else {
+          // Merged salesman:
+          if (selectedSalesman === 'TEAM_ALL') {
+            const teamMembers = [userName, ...partnerSalesmen].map(n => n.toLowerCase().trim());
+            const matchAny = teamMembers.some(tm => tm && invSalesman.includes(tm));
+            if (!matchAny) return false;
+          } else if (selectedSalesman === 'MY_SALES' || selectedSalesman === userName) {
+            const myName = (userName || '').toLowerCase().trim();
+            if (myName && !invSalesman.includes(myName)) return false;
+          } else {
+            // Specific partner selected
+            if (!invSalesman.includes(selectedSalesman.toLowerCase().trim())) return false;
+          }
+        }
+      } else {
+        // Admin filter
+        if (selectedSalesman !== 'ALL') {
+          if (!invSalesman.includes(selectedSalesman.toLowerCase().trim())) {
+            return false;
+          }
         }
       }
 
@@ -154,7 +191,7 @@ const SalesmanDashboard: React.FC = () => {
 
       return true;
     });
-  }, [invoices, selectedSalesman, statusFilter, searchInvoice]);
+  }, [invoices, selectedSalesman, statusFilter, searchInvoice, isAdminOrSuper, isMergedSalesman, userName, partnerSalesmen]);
 
   // Metrics calculations
   const metrics = useMemo(() => {
@@ -164,10 +201,29 @@ const SalesmanDashboard: React.FC = () => {
 
     // Relevant pool for metrics
     const pool = invoices.filter((inv) => {
-      if (selectedSalesman !== 'ALL') {
-        return (inv.salesman || '').toLowerCase().includes(selectedSalesman.toLowerCase());
+      const invSalesman = (inv.salesman || '').toLowerCase().trim();
+
+      if (!isAdminOrSuper) {
+        if (!isMergedSalesman) {
+          const myName = (userName || '').toLowerCase().trim();
+          return myName ? invSalesman.includes(myName) : true;
+        } else {
+          if (selectedSalesman === 'TEAM_ALL') {
+            const teamMembers = [userName, ...partnerSalesmen].map(n => n.toLowerCase().trim());
+            return teamMembers.some(tm => tm && invSalesman.includes(tm));
+          } else if (selectedSalesman === 'MY_SALES' || selectedSalesman === userName) {
+            const myName = (userName || '').toLowerCase().trim();
+            return myName ? invSalesman.includes(myName) : true;
+          } else {
+            return invSalesman.includes(selectedSalesman.toLowerCase().trim());
+          }
+        }
+      } else {
+        if (selectedSalesman !== 'ALL') {
+          return invSalesman.includes(selectedSalesman.toLowerCase().trim());
+        }
+        return true;
       }
-      return true;
     });
 
     let todaySales = 0;
@@ -270,6 +326,30 @@ const SalesmanDashboard: React.FC = () => {
                   {salesmanList.map((s) => (
                     <option key={s} value={s} className="text-slate-800">
                       {s}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Salesman Filter for Merged Salesmen */}
+            {isMergedSalesman && (
+              <div className="flex items-center bg-white/15 border border-white/30 rounded-xl px-3 py-1.5 backdrop-blur-md shadow-sm">
+                <MdPerson className="text-yellow-300 mr-2 text-base" />
+                <select
+                  value={selectedSalesman}
+                  onChange={(e) => setSelectedSalesman(e.target.value)}
+                  className="bg-transparent text-white text-xs font-bold focus:outline-none cursor-pointer"
+                >
+                  <option value="TEAM_ALL" className="text-slate-900 font-bold">
+                    👥 Combined Team Sales ({1 + partnerSalesmen.length})
+                  </option>
+                  <option value="MY_SALES" className="text-slate-900">
+                    👤 My Sales ({userName})
+                  </option>
+                  {partnerSalesmen.map((pName) => (
+                    <option key={pName} value={pName} className="text-slate-900">
+                      🤝 Partner: {pName}
                     </option>
                   ))}
                 </select>

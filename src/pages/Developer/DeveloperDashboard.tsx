@@ -41,6 +41,9 @@ import {
   MdPerson,
   MdCode,
   MdInfoOutline,
+  MdLink,
+  MdGroup,
+  MdSwapHoriz,
 } from 'react-icons/md';
 import { ROLE_PRESETS, RolePreset, getModulesForRole } from '../../constant/roles';
 
@@ -361,7 +364,105 @@ const DeveloperDashboard: React.FC = () => {
   const [authError, setAuthError] = useState<string | null>(null);
 
   // Active Tab
-  const [activeTab, setActiveTab] = useState<'overview' | 'employees' | 'create' | 'logs'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'employees' | 'salesmen' | 'create' | 'logs'>('overview');
+
+  // Salesmen Linking State
+  const [salesmenList, setSalesmenList] = useState<any[]>([]);
+  const [salesmenLoading, setSalesmenLoading] = useState(false);
+  const [selectedSalesmanToLink, setSelectedSalesmanToLink] = useState<any | null>(null);
+  const [selectedPartnerNames, setSelectedPartnerNames] = useState<string[]>([]);
+  const [syncBidirectional, setSyncBidirectional] = useState(true);
+  const [savingLinks, setSavingLinks] = useState(false);
+
+  const fetchSalesmenData = async () => {
+    try {
+      setSalesmenLoading(true);
+      const { data, error } = await supabase
+        .from('salesmen')
+        .select('*')
+        .order('name', { ascending: true });
+
+      if (error) throw error;
+      setSalesmenList(data || []);
+    } catch (err: any) {
+      console.error('Failed to load salesmen:', err);
+    } finally {
+      setSalesmenLoading(false);
+    }
+  };
+
+  const handleOpenLinkModal = (salesman: any) => {
+    setSelectedSalesmanToLink(salesman);
+    const existing = Array.isArray(salesman.linked_salesmen) ? salesman.linked_salesmen : [];
+    setSelectedPartnerNames(existing);
+  };
+
+  const togglePartnerName = (name: string) => {
+    setSelectedPartnerNames(prev => {
+      if (prev.includes(name)) {
+        return prev.filter(n => n !== name);
+      } else {
+        return [...prev, name];
+      }
+    });
+  };
+
+  const handleSaveSalesmanLinks = async () => {
+    if (!selectedSalesmanToLink) return;
+    try {
+      setSavingLinks(true);
+      const targetName = selectedSalesmanToLink.name;
+      const targetId = selectedSalesmanToLink.id;
+      const cleanPartners = selectedPartnerNames.filter(n => n && n !== targetName);
+
+      // 1. Update the target salesman
+      const { error: primaryErr } = await supabase
+        .from('salesmen')
+        .update({ linked_salesmen: cleanPartners })
+        .eq('id', targetId);
+
+      if (primaryErr) throw primaryErr;
+
+      // 2. If syncBidirectional is true, update the linked partners as well
+      if (syncBidirectional) {
+        const fullGroup = Array.from(new Set([targetName, ...cleanPartners]));
+
+        for (const partnerName of cleanPartners) {
+          const otherMembers = fullGroup.filter(n => n !== partnerName);
+          await supabase
+            .from('salesmen')
+            .update({ linked_salesmen: otherMembers })
+            .ilike('name', partnerName.trim());
+        }
+
+        // Also clean up any unlinked partners that were previously linked
+        const previouslyLinked = Array.isArray(selectedSalesmanToLink.linked_salesmen) ? selectedSalesmanToLink.linked_salesmen : [];
+        const unlinked = previouslyLinked.filter((p: string) => !cleanPartners.includes(p));
+        for (const unlinkedName of unlinked) {
+          const { data: currentPartner } = await supabase
+            .from('salesmen')
+            .select('linked_salesmen')
+            .ilike('name', unlinkedName.trim())
+            .maybeSingle();
+          if (currentPartner && Array.isArray(currentPartner.linked_salesmen)) {
+            const updated = currentPartner.linked_salesmen.filter((n: string) => n !== targetName);
+            await supabase
+              .from('salesmen')
+              .update({ linked_salesmen: updated })
+              .ilike('name', unlinkedName.trim());
+          }
+        }
+      }
+
+      toast.success(`Linked partner salesmen for "${targetName}" updated successfully!`);
+      await fetchSalesmenData();
+      setSelectedSalesmanToLink(null);
+    } catch (err: any) {
+      toast.error('Failed to update salesman links: ' + err.message);
+    } finally {
+      setSavingLinks(false);
+    }
+  };
 
   // Audit Logs State
   const [logs, setLogs] = useState<any[]>([]);
@@ -426,12 +527,16 @@ const DeveloperDashboard: React.FC = () => {
     if (isDevAuthorized) {
       fetchDevData();
       fetchAuditLogs();
+      fetchSalesmenData();
     }
   }, [isDevAuthorized]);
 
   useEffect(() => {
     if (isDevAuthorized && activeTab === 'logs') {
       fetchAuditLogs();
+    }
+    if (isDevAuthorized && activeTab === 'salesmen') {
+      fetchSalesmenData();
     }
   }, [isDevAuthorized, activeTab]);
 
@@ -713,78 +818,10 @@ const DeveloperDashboard: React.FC = () => {
     }
   };
 
-  // IF NOT AUTHENTICATED AS DEVELOPER -> SHOW SECURE LOGIN FORM
-  if (!isDevAuthorized) {
-    return (
-      <div className="min-h-screen bg-gray-50 text-body dark:bg-boxdark-2 dark:text-bodydark flex flex-col items-center justify-center p-6 font-sans transition-colors duration-200">
-        
-        <div className="absolute top-6 right-6">
-          <ul className="flex items-center gap-2 list-none m-0">
-            <DarkModeSwitcher />
-          </ul>
-        </div>
-
-        <div className="w-full max-w-md bg-white dark:bg-boxdark border border-stroke dark:border-strokedark p-8 sm:p-10 rounded-3xl shadow-default space-y-6 transition-colors duration-200">
-          <div className="text-center space-y-2">
-            <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 mx-auto flex items-center justify-center text-3xl shadow-xs">
-              <MdSecurity />
-            </div>
-            <h2 className="text-2xl font-black tracking-tight text-black dark:text-white">Master Role & Dev Console</h2>
-            <p className="text-xs text-gray-500 dark:text-gray-400">Employee Access & Roles Control for Zoaib Ali & Company</p>
-          </div>
-
-          {authError && (
-            <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 text-danger text-xs p-3 rounded-lg flex items-center gap-2">
-              <MdLockOutline /> {authError}
-            </div>
-          )}
-
-          <form onSubmit={handleDevLogin} className="space-y-4">
-            <div>
-              <label className="block text-xs font-bold text-black dark:text-white mb-1.5">Master Developer Email</label>
-              <input
-                type="email"
-                required
-                value={emailInput}
-                onChange={e => setEmailInput(e.target.value)}
-                placeholder="developer@noorhorizontechnologies.com"
-                className="w-full bg-transparent dark:bg-form-input border border-stroke dark:border-form-strokedark rounded-xl p-3 text-xs text-black dark:text-white outline-none focus:border-emerald-500"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-black dark:text-white mb-1.5">Master Password</label>
-              <input
-                type="password"
-                required
-                value={passwordInput}
-                onChange={e => setPasswordInput(e.target.value)}
-                placeholder="••••••••••••"
-                className="w-full bg-transparent dark:bg-form-input border border-stroke dark:border-form-strokedark rounded-xl p-3 text-xs text-black dark:text-white outline-none focus:border-emerald-500"
-              />
-            </div>
-
-            <button
-              type="submit"
-              className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition shadow-md flex items-center justify-center gap-2 cursor-pointer"
-            >
-              <MdVpnKey /> Authenticate Role Console
-            </button>
-          </form>
-
-          <div className="pt-2 text-center">
-            <a href="/" className="text-[11px] text-gray-500 dark:text-gray-400 hover:text-emerald-600 transition">
-              ← Return to Main Application
-            </a>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   // Resolve employee friendly name, role, and avatar from performed_by identifier
-  const getEmployeeInfo = (performedBy?: string) => {
-    if (!performedBy || performedBy.toLowerCase() === 'system') {
+  const getEmployeeInfo = (performedBy?: any) => {
+    const raw = String(performedBy || '').trim();
+    if (!raw || raw.toLowerCase() === 'system') {
       return {
         name: 'System Automated',
         role: 'Background System',
@@ -794,7 +831,7 @@ const DeveloperDashboard: React.FC = () => {
         badgeColor: 'bg-gray-100 text-gray-700 dark:bg-meta-4 dark:text-gray-300 border-gray-300 dark:border-strokedark',
       };
     }
-    const lower = performedBy.toLowerCase();
+    const lower = raw.toLowerCase();
     if (
       lower.includes('admin') ||
       lower === 'system administrator' ||
@@ -804,51 +841,52 @@ const DeveloperDashboard: React.FC = () => {
       return {
         name: 'Zoaib Ali',
         role: 'Super Admin',
-        email: lower.includes('@') ? performedBy : DEV_EMAIL,
+        email: lower.includes('@') ? raw : DEV_EMAIL,
         initials: 'ZA',
         avatarBg: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300',
         badgeColor: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border-emerald-300 dark:border-emerald-800',
       };
     }
 
-    const matched = employees.find(
+    const matched = (employees || []).find(
       e =>
-        (e.email && e.email.toLowerCase() === lower) ||
-        (e.name && e.name.toLowerCase() === lower) ||
-        (e.slug && e.slug.toLowerCase() === lower)
+        (e?.email && String(e.email).toLowerCase() === lower) ||
+        (e?.name && String(e.name).toLowerCase() === lower) ||
+        (e?.slug && String(e.slug).toLowerCase() === lower)
     );
 
-    if (matched) {
-      const parts = matched.name.split(' ');
-      const initials = parts.length > 1 ? `${parts[0][0]}${parts[1][0]}`.toUpperCase() : parts[0].slice(0, 2).toUpperCase();
+    if (matched && matched.name) {
+      const parts = String(matched.name).trim().split(' ').filter(Boolean);
+      const initials = parts.length > 1 ? `${parts[0][0]}${parts[1][0]}`.toUpperCase() : (parts[0] ? parts[0].slice(0, 2).toUpperCase() : 'EM');
       return {
         name: matched.name,
         role: matched.role || 'Staff Member',
-        email: matched.email || performedBy,
+        email: matched.email || raw,
         initials,
         avatarBg: 'bg-blue-100 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300',
         badgeColor: 'bg-blue-50 text-blue-700 dark:bg-blue-950/50 dark:text-blue-300 border-blue-300 dark:border-blue-800',
       };
     }
 
-    if (performedBy.includes('@')) {
-      const username = performedBy.split('@')[0];
+    if (raw.includes('@')) {
+      const username = raw.split('@')[0] || 'User';
       const prettyName = username.charAt(0).toUpperCase() + username.slice(1);
       return {
         name: prettyName,
         role: 'Staff User',
-        email: performedBy,
+        email: raw,
         initials: prettyName.slice(0, 2).toUpperCase(),
         avatarBg: 'bg-purple-100 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300',
         badgeColor: 'bg-purple-50 text-purple-700 dark:bg-purple-950/50 dark:text-purple-300 border-purple-300 dark:border-purple-800',
       };
     }
 
+    const initials = raw.length > 1 ? raw.slice(0, 2).toUpperCase() : (raw.toUpperCase() || 'ST');
     return {
-      name: performedBy,
+      name: raw,
       role: 'Staff Member',
-      email: performedBy,
-      initials: performedBy.slice(0, 2).toUpperCase(),
+      email: raw,
+      initials,
       avatarBg: 'bg-gray-100 text-gray-700 dark:bg-meta-4 dark:text-gray-300',
       badgeColor: 'bg-gray-100 text-gray-700 dark:bg-meta-4 dark:text-gray-300 border-gray-300 dark:border-strokedark',
     };
@@ -1096,18 +1134,20 @@ const DeveloperDashboard: React.FC = () => {
     const list: { key: string; label: string }[] = [];
     const added = new Set<string>();
 
-    employees.forEach(emp => {
-      if (emp.name && !added.has(emp.name.toLowerCase())) {
-        added.add(emp.name.toLowerCase());
+    (employees || []).forEach(emp => {
+      if (emp?.name && !added.has(String(emp.name).toLowerCase())) {
+        added.add(String(emp.name).toLowerCase());
         list.push({ key: emp.name, label: `${emp.name} (${emp.role || 'Staff'})` });
       }
     });
 
-    logs.forEach(log => {
-      const info = getEmployeeInfo(log.performed_by);
-      if (info.name && !added.has(info.name.toLowerCase())) {
-        added.add(info.name.toLowerCase());
-        list.push({ key: info.name, label: `${info.name} (${info.role})` });
+    (logs || []).forEach(log => {
+      if (log) {
+        const info = getEmployeeInfo(log.performed_by);
+        if (info?.name && !added.has(String(info.name).toLowerCase())) {
+          added.add(String(info.name).toLowerCase());
+          list.push({ key: info.name, label: `${info.name} (${info.role})` });
+        }
       }
     });
 
@@ -1115,12 +1155,15 @@ const DeveloperDashboard: React.FC = () => {
   }, [employees, logs]);
 
   // Audit Logs computed filtering & pagination
-  const filteredLogs = logs.filter(log => {
+  const filteredLogs = (logs || []).filter(log => {
+    if (!log) return false;
+
     // Action filter
     if (logFilterAction !== 'ALL') {
+      const act = String(log.action_type || '').toUpperCase();
       if (logFilterAction === 'AUTH') {
-        if (log.action_type !== 'LOGIN' && log.action_type !== 'LOGOUT') return false;
-      } else if (log.action_type !== logFilterAction) {
+        if (act !== 'LOGIN' && act !== 'LOGOUT') return false;
+      } else if (act !== logFilterAction) {
         return false;
       }
     }
@@ -1128,9 +1171,10 @@ const DeveloperDashboard: React.FC = () => {
     // Employee filter
     if (logFilterEmployee !== 'ALL') {
       const empInfo = getEmployeeInfo(log.performed_by);
-      const matchesName = empInfo.name.toLowerCase() === logFilterEmployee.toLowerCase();
-      const matchesEmail = empInfo.email.toLowerCase() === logFilterEmployee.toLowerCase();
-      const matchesRaw = (log.performed_by || '').toLowerCase() === logFilterEmployee.toLowerCase();
+      const target = logFilterEmployee.toLowerCase();
+      const matchesName = String(empInfo.name || '').toLowerCase() === target;
+      const matchesEmail = String(empInfo.email || '').toLowerCase() === target;
+      const matchesRaw = String(log.performed_by || '').toLowerCase() === target;
       if (!matchesName && !matchesEmail && !matchesRaw) return false;
     }
 
@@ -1139,12 +1183,12 @@ const DeveloperDashboard: React.FC = () => {
       const q = logSearch.toLowerCase();
       const empInfo = getEmployeeInfo(log.performed_by);
       const activity = formatActivityEvent(log);
-      const matchAction = (log.action_type || '').toLowerCase().includes(q);
-      const matchCategory = activity.category.toLowerCase().includes(q);
-      const matchTitle = activity.title.toLowerCase().includes(q);
-      const matchSummary = activity.summary.toLowerCase().includes(q);
-      const matchEmpName = empInfo.name.toLowerCase().includes(q);
-      const matchEmpRole = empInfo.role.toLowerCase().includes(q);
+      const matchAction = String(log.action_type || '').toLowerCase().includes(q);
+      const matchCategory = String(activity.category || '').toLowerCase().includes(q);
+      const matchTitle = String(activity.title || '').toLowerCase().includes(q);
+      const matchSummary = String(activity.summary || '').toLowerCase().includes(q);
+      const matchEmpName = String(empInfo.name || '').toLowerCase().includes(q);
+      const matchEmpRole = String(empInfo.role || '').toLowerCase().includes(q);
       const matchDetails = JSON.stringify(log.details || {}).toLowerCase().includes(q);
       return matchAction || matchCategory || matchTitle || matchSummary || matchEmpName || matchEmpRole || matchDetails;
     }
@@ -1155,6 +1199,75 @@ const DeveloperDashboard: React.FC = () => {
   const pageSize = 15;
   const totalPages = Math.ceil(filteredLogs.length / pageSize) || 1;
   const paginatedLogs = filteredLogs.slice((logPage - 1) * pageSize, logPage * pageSize);
+
+  // IF NOT AUTHENTICATED AS DEVELOPER -> SHOW SECURE LOGIN FORM
+  if (!isDevAuthorized) {
+    return (
+      <div className="min-h-screen bg-gray-50 text-body dark:bg-boxdark-2 dark:text-bodydark flex flex-col items-center justify-center p-6 font-sans transition-colors duration-200">
+        
+        <div className="absolute top-6 right-6">
+          <ul className="flex items-center gap-2 list-none m-0">
+            <DarkModeSwitcher />
+          </ul>
+        </div>
+
+        <div className="w-full max-w-md bg-white dark:bg-boxdark border border-stroke dark:border-strokedark p-8 sm:p-10 rounded-3xl shadow-default space-y-6 transition-colors duration-200">
+          <div className="text-center space-y-2">
+            <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 mx-auto flex items-center justify-center text-3xl shadow-xs">
+              <MdSecurity />
+            </div>
+            <h2 className="text-2xl font-black tracking-tight text-black dark:text-white">Master Role & Dev Console</h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Employee Access & Roles Control for Zoaib Ali & Company</p>
+          </div>
+
+          {authError && (
+            <div className="bg-red-50 dark:bg-red-500/10 border border-red-200 dark:border-red-500/30 text-danger text-xs p-3 rounded-lg flex items-center gap-2">
+              <MdLockOutline /> {authError}
+            </div>
+          )}
+
+          <form onSubmit={handleDevLogin} className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-black dark:text-white mb-1.5">Master Developer Email</label>
+              <input
+                type="email"
+                required
+                value={emailInput}
+                onChange={e => setEmailInput(e.target.value)}
+                placeholder="developer@noorhorizontechnologies.com"
+                className="w-full bg-transparent dark:bg-form-input border border-stroke dark:border-form-strokedark rounded-xl p-3 text-xs text-black dark:text-white outline-none focus:border-emerald-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-black dark:text-white mb-1.5">Master Password</label>
+              <input
+                type="password"
+                required
+                value={passwordInput}
+                onChange={e => setPasswordInput(e.target.value)}
+                placeholder="••••••••••••"
+                className="w-full bg-transparent dark:bg-form-input border border-stroke dark:border-form-strokedark rounded-xl p-3 text-xs text-black dark:text-white outline-none focus:border-emerald-500"
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="w-full py-3 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs transition shadow-md flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <MdVpnKey /> Authenticate Role Console
+            </button>
+          </form>
+
+          <div className="pt-2 text-center">
+            <a href="/" className="text-[11px] text-gray-500 dark:text-gray-400 hover:text-emerald-600 transition">
+              ← Return to Main Application
+            </a>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50 text-body dark:bg-boxdark-2 dark:text-bodydark font-sans p-6 md:p-10 flex flex-col items-center transition-colors duration-200">
@@ -1196,6 +1309,14 @@ const DeveloperDashboard: React.FC = () => {
               }`}
             >
               <MdPeople /> Employee Accounts ({employees.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('salesmen')}
+              className={`py-1.5 px-3 rounded-lg transition flex items-center gap-1.5 cursor-pointer ${
+                activeTab === 'salesmen' ? 'bg-emerald-600 text-white shadow-xs font-bold' : 'text-gray-600 dark:text-gray-400 hover:text-black dark:hover:text-white'
+              }`}
+            >
+              <MdLink /> Merge / Link Salesmen ({salesmenList.length})
             </button>
             <button
               onClick={() => setActiveTab('create')}
@@ -1363,6 +1484,113 @@ const DeveloperDashboard: React.FC = () => {
                 </tbody>
               </table>
             </div>
+          </div>
+        )}
+
+        {/* TAB: SALESMEN LINKING & MERGING */}
+        {activeTab === 'salesmen' && (
+          <div className="bg-white dark:bg-boxdark rounded-2xl border border-stroke dark:border-strokedark shadow-default overflow-hidden transition-colors duration-200">
+            <div className="p-6 border-b border-stroke dark:border-strokedark flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+              <div>
+                <h3 className="text-lg font-bold text-black dark:text-white flex items-center gap-2">
+                  <MdLink className="text-emerald-600 text-xl" />
+                  <span>Salesmen Multi-Account Linking & Merging Manager</span>
+                </h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  Merge 2 or more salesmen so they can create invoices on behalf of each other and view each other's sales in their dashboards.
+                </p>
+              </div>
+              <button
+                onClick={fetchSalesmenData}
+                className="bg-slate-100 hover:bg-slate-200 dark:bg-meta-4 dark:hover:bg-meta-4/80 text-black dark:text-white font-bold text-xs py-2 px-3.5 rounded-xl flex items-center gap-1.5 transition cursor-pointer"
+              >
+                <MdRefresh /> Refresh
+              </button>
+            </div>
+
+            {salesmenLoading ? (
+              <div className="p-12 flex justify-center items-center">
+                <Spinner color="border-emerald-600" size="w-8 h-8" />
+              </div>
+            ) : salesmenList.length === 0 ? (
+              <div className="p-12 text-center text-xs text-gray-400">
+                No salesmen registered in the database yet.
+              </div>
+            ) : (
+              <div className="max-w-full overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-gray-100 dark:bg-meta-4/30 text-gray-600 dark:text-gray-300 font-bold uppercase tracking-wider border-b border-stroke dark:border-strokedark">
+                      <th className="p-4">Salesman Name</th>
+                      <th className="p-4">Invoice Prefix</th>
+                      <th className="p-4">Phone / Area</th>
+                      <th className="p-4">Linked Partner Salesmen</th>
+                      <th className="p-4 text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stroke dark:divide-strokedark">
+                    {salesmenList.map((sm: any) => {
+                      const partners: string[] = Array.isArray(sm.linked_salesmen) ? sm.linked_salesmen : [];
+                      const hasPartners = partners.length > 0;
+
+                      return (
+                        <tr key={sm.id} className="hover:bg-gray-50 dark:hover:bg-meta-4/20 transition">
+                          <td className="p-4 font-bold text-black dark:text-white">
+                            <div className="flex items-center gap-2">
+                              <span className="w-7 h-7 rounded-lg bg-emerald-500/10 text-emerald-600 flex items-center justify-center font-black text-xs">
+                                {sm.name ? sm.name.charAt(0).toUpperCase() : 'S'}
+                              </span>
+                              <span>{sm.name}</span>
+                            </div>
+                          </td>
+                          <td className="p-4 font-mono font-bold text-emerald-700 dark:text-emerald-400">
+                            {sm.invoice_name || (sm.invoice_names && sm.invoice_names[0]) ? (
+                              <span className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 px-2 py-0.5 rounded text-[11px]">
+                                {sm.invoice_name || sm.invoice_names[0]}-
+                              </span>
+                            ) : (
+                              <span className="text-gray-400 font-normal">—</span>
+                            )}
+                          </td>
+                          <td className="p-4 text-gray-600 dark:text-gray-400">
+                            <div>{sm.phone || '—'}</div>
+                            <div className="text-[10px] text-gray-400">{sm.area || 'General'}</div>
+                          </td>
+                          <td className="p-4">
+                            {hasPartners ? (
+                              <div className="flex flex-wrap items-center gap-1.5">
+                                {partners.map((pName: string, idx: number) => (
+                                  <span
+                                    key={idx}
+                                    className="bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200/80 dark:border-blue-800/80 px-2 py-0.5 rounded-md text-[11px] font-bold flex items-center gap-1"
+                                  >
+                                    <MdGroup className="text-xs" />
+                                    {pName}
+                                  </span>
+                                ))}
+                              </div>
+                            ) : (
+                              <span className="text-gray-400 text-[11px] italic">
+                                Single / Unlinked
+                              </span>
+                            )}
+                          </td>
+                          <td className="p-4 text-center">
+                            <button
+                              onClick={() => handleOpenLinkModal(sm)}
+                              className="inline-flex items-center gap-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition shadow-xs"
+                            >
+                              <MdLink className="text-sm" />
+                              <span>{hasPartners ? `Edit Links (${partners.length})` : 'Link Partners'}</span>
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         )}
 
@@ -2116,6 +2344,138 @@ const DeveloperDashboard: React.FC = () => {
           </div>
         );
       })()}
+
+      {/* 🌟 MODAL: LINK / MERGE PARTNER SALESMEN */}
+      {selectedSalesmanToLink && (
+        <div className="fixed inset-0 z-99999 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4">
+          <div className="bg-white dark:bg-boxdark rounded-2xl border border-stroke dark:border-strokedark shadow-2xl max-w-xl w-full p-6 space-y-5 transition-colors duration-200">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-stroke dark:border-strokedark">
+              <div className="flex items-center gap-2.5">
+                <span className="p-2 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                  <MdLink size={20} />
+                </span>
+                <div>
+                  <h3 className="font-bold text-base text-black dark:text-white">
+                    Link Partner Salesmen with: <span className="text-emerald-600 dark:text-emerald-400 font-extrabold">{selectedSalesmanToLink.name}</span>
+                  </h3>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                    Select the other salesmen who can create invoices on behalf of {selectedSalesmanToLink.name} and share dashboard views.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setSelectedSalesmanToLink(null)}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-black dark:hover:text-white hover:bg-gray-100 dark:hover:bg-meta-4 transition cursor-pointer"
+              >
+                <MdClose size={18} />
+              </button>
+            </div>
+
+            {/* Checklist of other salesmen */}
+            <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+              <span className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400 block mb-2">
+                Choose Partner Salesmen (Select Multiple):
+              </span>
+
+              {salesmenList
+                .filter((s: any) => s.id !== selectedSalesmanToLink.id && s.name !== selectedSalesmanToLink.name)
+                .map((candidate: any) => {
+                  const isChecked = selectedPartnerNames.includes(candidate.name);
+
+                  return (
+                    <label
+                      key={candidate.id}
+                      onClick={() => togglePartnerName(candidate.name)}
+                      className={`flex items-center justify-between p-3 rounded-xl border transition cursor-pointer select-none ${
+                        isChecked
+                          ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-400 dark:border-emerald-600 text-black dark:text-white'
+                          : 'bg-gray-50 dark:bg-meta-4/20 border-stroke dark:border-strokedark text-gray-700 dark:text-gray-300 hover:border-gray-300'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => {}}
+                          className="w-4 h-4 text-emerald-600 rounded border-gray-300 focus:ring-emerald-500 cursor-pointer"
+                        />
+                        <div>
+                          <div className="font-bold text-xs">{candidate.name}</div>
+                          <div className="text-[10px] text-gray-400 font-mono">
+                            Prefix: <b className="text-emerald-700 dark:text-emerald-300">{candidate.invoice_name || (candidate.invoice_names && candidate.invoice_names[0]) || 'N/A'}-</b> | {candidate.phone || 'No Phone'}
+                          </div>
+                        </div>
+                      </div>
+
+                      {isChecked && (
+                        <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-900/50 px-2 py-0.5 rounded-full flex items-center gap-1">
+                          <MdCheck /> Linked
+                        </span>
+                      )}
+                    </label>
+                  );
+                })}
+
+              {salesmenList.filter((s: any) => s.id !== selectedSalesmanToLink.id).length === 0 && (
+                <div className="text-xs text-gray-400 text-center py-6">
+                  No other salesmen registered to link with.
+                </div>
+              )}
+            </div>
+
+            {/* Sync Bidirectional Option */}
+            <div className="p-3.5 bg-slate-50 dark:bg-meta-4/30 rounded-xl border border-stroke dark:border-strokedark">
+              <label className="flex items-start gap-2.5 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={syncBidirectional}
+                  onChange={e => setSyncBidirectional(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 text-emerald-600 rounded border-gray-300 focus:ring-emerald-500 cursor-pointer"
+                />
+                <div>
+                  <span className="text-xs font-bold text-black dark:text-white flex items-center gap-1">
+                    <MdSwapHoriz className="text-emerald-600 text-sm" /> Automatically Sync Bidirectional Links (Recommended)
+                  </span>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
+                    When enabled, linking {selectedSalesmanToLink.name} with selected partners will also automatically add {selectedSalesmanToLink.name} to each partner's list so they can all see each other.
+                  </p>
+                </div>
+              </label>
+            </div>
+
+            {/* Footer Buttons */}
+            <div className="flex items-center justify-between pt-3 border-t border-stroke dark:border-strokedark">
+              <button
+                type="button"
+                onClick={() => setSelectedPartnerNames([])}
+                className="text-xs text-red-500 hover:text-red-700 font-bold transition cursor-pointer"
+              >
+                Clear All Links
+              </button>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedSalesmanToLink(null)}
+                  className="px-4 py-2 text-xs font-bold rounded-xl bg-gray-100 dark:bg-meta-4 hover:bg-gray-200 dark:hover:bg-meta-4/80 text-black dark:text-white transition cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveSalesmanLinks}
+                  disabled={savingLinks}
+                  className="px-5 py-2 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white transition flex items-center gap-1.5 shadow-xs cursor-pointer disabled:opacity-50"
+                >
+                  {savingLinks ? <Spinner color="border-white" size="w-3.5 h-3.5" /> : <MdCheck />}
+                  <span>Save Partner Links ({selectedPartnerNames.length})</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
