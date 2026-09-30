@@ -72,6 +72,16 @@ const CustomerHistory = () => {
     return `1020-${String(maxNum + 1).padStart(3, '0')}`;
   };
 
+  const getLinkedLiabilityCode = (assetCode: string) => {
+    const clean = assetCode.trim();
+    const match = clean.match(/1020-(\d+)/);
+    if (match && match[1]) {
+      return `2020-${match[1]}`;
+    }
+    const cleanDigits = clean.replace(/^[^\d]*/, '');
+    return cleanDigits ? `2020-${cleanDigits}` : `2020-${clean}`;
+  };
+
   const handleOpenAccountModal = (cust: any) => {
     setSelectedCustomer(cust);
     const existingCOA = getCustomerCOA(cust);
@@ -112,6 +122,8 @@ const CustomerHistory = () => {
       }
 
       const customerName = (selectedCustomer.customerName || '').trim();
+
+      // 1. Create or Update Asset Receivable Account (1020-xxx)
       const coaPayload: any = {
         category_code: '1. ASSETS',
         sub_category_code: 'Current Assets',
@@ -132,6 +144,33 @@ const CustomerHistory = () => {
           .from('chart_of_accounts')
           .insert([coaPayload]);
         if (error) throw error;
+      }
+
+      // 2. Auto-Create or Update Linked Customer Freight Liability Account (2020-xxx)
+      const liabilityCode = getLinkedLiabilityCode(cleanCode);
+      const existingLiabilityCOA = coaAccounts.find(a => 
+        String(a.account_code).trim().toLowerCase() === liabilityCode.toLowerCase() ||
+        (a.control_code === 'Customer Freight Liability' && (a.account_title || '').toLowerCase() === `${customerName.toLowerCase()} - freight liability`)
+      );
+
+      const liabilityPayload: any = {
+        category_code: '2. LIABILITIES',
+        sub_category_code: 'Current Liabilities',
+        control_code: 'Customer Freight Liability',
+        account_code: liabilityCode,
+        account_title: `${customerName} - Freight Liability`,
+        notes: `Customer freight charges payable liability for ${customerName}`
+      };
+
+      if (existingLiabilityCOA?.id) {
+        await supabase
+          .from('chart_of_accounts')
+          .update(liabilityPayload)
+          .eq('id', existingLiabilityCOA.id);
+      } else {
+        await supabase
+          .from('chart_of_accounts')
+          .insert([liabilityPayload]);
       }
 
       // Record Opening Balance in financial_vouchers if opening balance > 0
@@ -155,7 +194,7 @@ const CustomerHistory = () => {
 
       // Try updating customer record with account_code and currentBalance
       try {
-        const custUpdates: any = { account_code: cleanCode };
+        const custUpdates: any = { account_code: cleanCode, freight_account_code: liabilityCode };
         if (openingBalanceInput) {
           const bal = Number(openingBalanceInput);
           custUpdates.currentBalance = balanceNatureInput === 'Debit' ? bal : -bal;
@@ -173,7 +212,7 @@ const CustomerHistory = () => {
         } catch (_) {}
       }
 
-      toast.success(`Chart of Account for "${selectedCustomer.customerName}" assigned successfully!`);
+      toast.success(`Asset (${cleanCode}) & Freight Liability (${liabilityCode}) accounts assigned for "${selectedCustomer.customerName}"!`);
       setShowAccountModal(false);
       await fetchCustomersAndCOA();
     } catch (err: any) {
@@ -476,9 +515,12 @@ const CustomerHistory = () => {
                   required
                   className="w-full rounded border border-stroke dark:border-strokedark px-3 h-10 bg-transparent font-mono font-bold text-sm text-black dark:text-white outline-none focus:border-primary"
                 />
-                <p className="text-[11px] text-gray-400 mt-1">
-                  Auto-suggested prefix <code className="font-mono text-emerald-600">1020-xxx</code>. You can also customize this code.
-                </p>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px] text-gray-500 dark:text-gray-400 mt-1.5 bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800/60 p-2 rounded">
+                  <span>
+                    Linked Freight Liability: <strong className="font-mono text-purple-700 dark:text-purple-300 font-bold">{getLinkedLiabilityCode(accountCodeInput || '1020-001')}</strong>
+                  </span>
+                  <span className="text-[10px] text-gray-400 font-medium">(Auto-creates in 2. LIABILITIES)</span>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">

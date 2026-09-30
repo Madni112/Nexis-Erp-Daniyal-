@@ -777,6 +777,84 @@ const NewInvoice = () => {
         }
         toast.success('Sales Invoice & Delivery Challan(s) logged successfully!');
       }
+
+      // ── SYNC FREIGHT CHARGES TO CUSTOMER FREIGHT LIABILITY (2020-xxx) ──
+      try {
+        const totalFreight = Number(values.additionalCharges || 0) + Number(values.transportCharges || 0);
+        const formattedInvCode = values.invoiceNo;
+        const freightVoucherNo = `FRT-${formattedInvCode}`;
+
+        // Remove any previous freight voucher for this invoice when editing/updating
+        await supabase.from('financial_vouchers').delete().eq('voucher_no', freightVoucherNo);
+
+        if (totalFreight > 0 && customerFinalName && customerFinalName.toLowerCase() !== 'walk-in customer') {
+          // Find customer's freight liability account code
+          const { data: matchedCust } = await supabase
+            .from('customers')
+            .select('id, customerName, account_code, freight_account_code')
+            .ilike('customerName', customerFinalName.trim())
+            .maybeSingle();
+
+          let liabilityCode = matchedCust?.freight_account_code;
+          if (!liabilityCode && matchedCust?.account_code) {
+            const clean = String(matchedCust.account_code).trim();
+            const match = clean.match(/1020-(\d+)/);
+            liabilityCode = match ? `2020-${match[1]}` : `2020-${clean}`;
+          }
+
+          if (!liabilityCode) {
+            // Lookup from chart_of_accounts
+            const { data: coaFound } = await supabase
+              .from('chart_of_accounts')
+              .select('account_code')
+              .eq('control_code', 'Customer Freight Liability')
+              .ilike('account_title', `%${customerFinalName.trim()}%`)
+              .maybeSingle();
+            if (coaFound) liabilityCode = coaFound.account_code;
+          }
+
+          // If not yet present, auto-create under 2. LIABILITIES -> Customer Freight Liability
+          if (!liabilityCode) {
+            const { data: allLiab } = await supabase
+              .from('chart_of_accounts')
+              .select('account_code')
+              .ilike('account_code', '2020-%');
+            let maxNum = 0;
+            (allLiab || []).forEach((a: any) => {
+              const m = String(a.account_code || '').match(/2020-(\d+)/);
+              if (m && m[1]) {
+                const num = parseInt(m[1], 10);
+                if (num > maxNum) maxNum = num;
+              }
+            });
+            liabilityCode = `2020-${String(maxNum + 1).padStart(3, '0')}`;
+
+            await supabase.from('chart_of_accounts').insert([{
+              category_code: '2. LIABILITIES',
+              sub_category_code: 'Current Liabilities',
+              control_code: 'Customer Freight Liability',
+              account_code: liabilityCode,
+              account_title: `${customerFinalName.trim()} - Freight Liability`,
+              notes: `Customer freight charges payable liability for ${customerFinalName.trim()}`
+            }]);
+          }
+
+          // Post Credit entry in financial_vouchers
+          await supabase.from('financial_vouchers').insert([{
+            voucher_no: freightVoucherNo,
+            voucher_type: 'CRV',
+            voucher_date: values.saleDate || new Date().toISOString().split('T')[0],
+            account_code: liabilityCode,
+            account_title: `${customerFinalName.trim()} - Freight Liability`,
+            credit: totalFreight,
+            debit: 0,
+            narration: `Freight / Delivery charges collected on Invoice #${formattedInvCode} for ${customerFinalName.trim()}`
+          }]);
+        }
+      } catch (freightSyncErr: any) {
+        console.error('Customer freight liability sync notice:', freightSyncErr);
+      }
+
       setShowCustomerModal(false);
       if (submitAction === 'print' && finalInvoiceId) {
         navigate(`${tenantId ? `/${tenantId}` : ''}/sales/invoice/print/${finalInvoiceId}`);
