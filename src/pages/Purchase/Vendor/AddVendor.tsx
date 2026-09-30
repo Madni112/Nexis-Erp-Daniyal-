@@ -47,6 +47,8 @@ const AddVendor = () => {
         <Formik
           initialValues={{
             vendorName: editData?.vendor_name || editData?.name || '',
+            vendor_code: editData?.vendor_code || editData?.vendorCode || '',
+            page_no: editData?.page_no || editData?.pageNo || '',
             contactName: editData?.contact_name || '',
             cellNo: editData?.cell_no || editData?.phone || '',
             phoneNo: editData?.phone_no || '',
@@ -62,6 +64,10 @@ const AddVendor = () => {
               const databasePayload = {
                 vendor_name: values.vendorName.trim(),
                 name: values.vendorName.trim(),
+                vendor_code: values.vendor_code ? values.vendor_code.trim() : null,
+                vendorCode: values.vendor_code ? values.vendor_code.trim() : null,
+                page_no: values.page_no ? String(values.page_no).trim() : null,
+                pageNo: values.page_no ? String(values.page_no).trim() : null,
                 contact_name: values.contactName.trim() || null,
                 cell_no: values.cellNo.trim() || null,
                 phone: values.cellNo.trim() || null,
@@ -88,7 +94,7 @@ const AddVendor = () => {
           {({ handleChange, values, errors, touched }) => (
             <Form className="p-6 space-y-5">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-                <div className="md:col-span-2">
+                <div>
                   <label className="block text-gray-500 mb-1.5 font-bold uppercase tracking-wide">Vendor Corporate Name: *</label>
                   <input
                     type="text"
@@ -99,6 +105,31 @@ const AddVendor = () => {
                     placeholder="e.g., Master Tiles & Ceramics / Sonex Sanitary"
                   />
                   {touched.vendorName && errors.vendorName && <p className="text-red-500 font-bold text-[10px] mt-1">{String(errors.vendorName)}</p>}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-gray-500 mb-1.5 font-bold uppercase tracking-wide">Vendor Code (Optional):</label>
+                    <input
+                      type="text"
+                      name="vendor_code"
+                      onChange={handleChange}
+                      value={values.vendor_code}
+                      className="w-full rounded border border-stroke dark:border-strokedark px-3 h-10 bg-white dark:bg-boxdark text-xs font-mono font-bold text-black dark:text-white outline-none focus:border-primary"
+                      placeholder="e.g., VEND-001 or V01"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-gray-500 mb-1.5 font-bold uppercase tracking-wide">Page # (Optional):</label>
+                    <input
+                      type="text"
+                      name="page_no"
+                      onChange={handleChange}
+                      value={values.page_no}
+                      className="w-full rounded border border-stroke dark:border-strokedark px-3 h-10 bg-white dark:bg-boxdark text-xs font-mono font-bold text-black dark:text-white outline-none focus:border-primary"
+                      placeholder="e.g., 142 or Pg-12"
+                    />
+                  </div>
                 </div>
 
                 <div>

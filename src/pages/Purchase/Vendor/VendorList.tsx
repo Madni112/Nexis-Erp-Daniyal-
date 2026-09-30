@@ -195,6 +195,8 @@ const VendorList = () => {
 
     const filteredVendors = vendors.filter(v =>
         (v.vendor_name || v.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (v.vendor_code || v.vendorCode || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (v.page_no || v.pageNo || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         (v.contact_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         (v.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
         (v.cell_no || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -254,7 +256,7 @@ const VendorList = () => {
                             type="text"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            placeholder="Search vendor name, phone, account code..."
+                            placeholder="Search vendor name, code, page #, phone..."
                             className="w-full sm:w-64 rounded border border-stroke py-1.5 px-3 bg-transparent dark:border-strokedark outline-none text-black dark:text-white text-xs font-semibold"
                         />
                     </div>
@@ -264,7 +266,8 @@ const VendorList = () => {
                     <table className="w-full table-auto border-collapse">
                         <thead>
                             <tr className="bg-gray-2 text-left dark:bg-meta-4 text-xs font-bold uppercase tracking-wider text-black dark:text-white border-b border-stroke dark:border-strokedark">
-                                <th className="py-4 px-4 font-semibold w-16">S#</th>
+                                <th className="py-4 px-4 font-semibold min-w-[80px]">Page #</th>
+                                <th className="py-4 px-4 font-semibold min-w-[100px]">Code</th>
                                 <th className="py-4 px-4 font-semibold min-w-[180px]">Vendor / Business Name</th>
                                 <th className="py-4 px-4 font-semibold min-w-[140px]">Contact Person</th>
                                 <th className="py-4 px-4 font-semibold min-w-[120px]">Mobile / Phone</th>
@@ -276,17 +279,40 @@ const VendorList = () => {
                         </thead>
                         <tbody>
                             {loading ? (
-                                <tr><td colSpan={8} className="text-center py-12 text-sm"><Spinner /></td></tr>
+                                <tr><td colSpan={9} className="text-center py-12 text-sm"><Spinner /></td></tr>
                             ) : paginatedVendors.length === 0 ? (
-                                <tr><td colSpan={8} className="text-center py-10 text-sm text-gray-500 dark:text-gray-400 italic">No business merchant vendors registered yet.</td></tr>
+                                <tr><td colSpan={9} className="text-center py-10 text-sm text-gray-500 dark:text-gray-400 italic">No business merchant vendors registered yet.</td></tr>
                             ) : (
-                                paginatedVendors.map((vendor, idx) => {
-                                    const serialNumber = startIndex + idx + 1;
+                                paginatedVendors.map((vendor) => {
                                     const coa = getVendorCOA(vendor);
+                                    const vendCode = vendor.vendor_code || vendor.vendorCode;
+                                    const pageNo = vendor.page_no || vendor.pageNo;
 
                                     return (
                                         <tr key={vendor.id} className="border-b border-stroke dark:border-strokedark hover:bg-slate-50 dark:hover:bg-meta-4/10 duration-150 font-semibold text-black dark:text-white text-xs">
-                                             <td className="py-3.5 px-4 text-gray-400">{serialNumber}</td>
+                                            {/* 1. Page # */}
+                                            <td className="py-3.5 px-4">
+                                                {pageNo ? (
+                                                    <span className="font-mono font-bold text-[11px] text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/50 border border-purple-200 dark:border-purple-800 px-2 py-0.5 rounded">
+                                                        {pageNo}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-gray-400 font-mono text-xs">-</span>
+                                                )}
+                                            </td>
+
+                                            {/* 2. Code */}
+                                            <td className="py-3.5 px-4">
+                                                {vendCode ? (
+                                                    <span className="font-mono font-bold text-[11px] text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 px-2 py-0.5 rounded">
+                                                        {vendCode}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-gray-400 font-mono text-xs">-</span>
+                                                )}
+                                            </td>
+
+                                            {/* 3. Vendor Name */}
                                             <td className="py-3.5 px-4 font-bold text-primary dark:text-white">
                                                 <div className="flex items-center gap-1.5">
                                                     <MdBusiness className="text-gray-400 shrink-0" size={16} />
