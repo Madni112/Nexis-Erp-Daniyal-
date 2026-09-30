@@ -203,9 +203,12 @@ const CustomerHistory = () => {
     c.customerCode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     c.page_no?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     c.pageNo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    c.address?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    c.province?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     c.company?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     c.ntnNo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     c.primaryPhone?.includes(searchTerm) ||
+    c.phone?.includes(searchTerm) ||
     c.account_code?.includes(searchTerm)
   );
 
@@ -236,7 +239,7 @@ const CustomerHistory = () => {
           + Add New Customer
         </button> 
       </div> 
-
+      
       {/* Datatable Filter Control Header Line */}
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-4">
         <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
@@ -259,7 +262,7 @@ const CustomerHistory = () => {
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search name, code, page #, phone, NTN..."
+            placeholder="Search name, code, page #, phone, address..."
             className="w-full sm:w-64 rounded border border-stroke py-1.5 px-3 bg-transparent dark:border-strokedark outline-none focus:border-primary text-sm text-black dark:text-white"
           />
         </div>
@@ -270,12 +273,12 @@ const CustomerHistory = () => {
         <table className="w-full table-auto border-collapse"> 
           <thead> 
             <tr className="bg-gray-2 text-left dark:bg-meta-4"> 
-              <th className="py-4 px-4 font-medium text-black dark:text-white text-sm w-16">S#</th>
+              <th className="min-w-[80px] py-4 px-4 font-medium text-black dark:text-white text-sm">Page #</th>
+              <th className="min-w-[100px] py-4 px-4 font-medium text-black dark:text-white text-sm">Code</th> 
               <th className="min-w-[180px] py-4 px-4 font-medium text-black dark:text-white text-sm">Name</th> 
-              <th className="min-w-[140px] py-4 px-4 font-medium text-black dark:text-white text-sm">NTN / CNIC</th> 
-              <th className="min-w-[110px] py-4 px-4 font-medium text-black dark:text-white text-sm">Phone</th> 
-              <th className="min-w-[100px] py-4 px-4 font-medium text-black dark:text-white text-sm">Province</th> 
               <th className="min-w-[160px] py-4 px-4 font-medium text-black dark:text-white text-sm">Accounts</th> 
+              <th className="min-w-[110px] py-4 px-4 font-medium text-black dark:text-white text-sm">Phone</th> 
+              <th className="min-w-[180px] py-4 px-4 font-medium text-black dark:text-white text-sm">Address</th> 
               <th className="py-4 px-4 font-medium text-black dark:text-white text-sm text-center w-28">Actions</th> 
             </tr> 
           </thead> 
@@ -285,38 +288,42 @@ const CustomerHistory = () => {
             ) : paginatedCustomers.length === 0 ? ( 
               <tr><td colSpan={7} className="text-center py-10 text-sm text-gray-500 dark:text-gray-400">No matching customer entries found.</td></tr> 
             ) : ( 
-              paginatedCustomers.map((c, idx) => {
-                const serialNumber = startIndex + idx + 1;
+              paginatedCustomers.map((c) => {
                 const coa = getCustomerCOA(c);
                 const custCode = c.customer_code || c.customerCode;
                 const pageNo = c.page_no || c.pageNo;
 
                 return ( 
                   <tr key={c.id} className="border-b border-stroke dark:border-strokedark hover:bg-slate-50 dark:hover:bg-meta-4/10 duration-150"> 
-                    <td className="py-3.5 px-4 text-sm text-black dark:text-white">{serialNumber}</td>
+                    {/* 1. Page # */}
+                    <td className="py-3.5 px-4 text-sm">
+                      {pageNo ? (
+                        <span className="font-mono font-bold text-[11px] text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/50 border border-purple-200 dark:border-purple-800 px-2 py-0.5 rounded">
+                          {pageNo}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400 font-mono text-xs">-</span>
+                      )}
+                    </td>
+
+                    {/* 2. Code */}
+                    <td className="py-3.5 px-4 text-sm">
+                      {custCode ? (
+                        <span className="font-mono font-bold text-[11px] text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 px-2 py-0.5 rounded">
+                          {custCode}
+                        </span>
+                      ) : (
+                        <span className="text-gray-400 font-mono text-xs">-</span>
+                      )}
+                    </td>
+
+                    {/* 3. Name */}
                     <td className="py-3.5 px-4 text-sm"> 
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        {custCode && (
-                          <span className="font-mono font-bold text-[11px] text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 px-1.5 py-0.5 rounded" title="Customer Code">
-                            {custCode}
-                          </span>
-                        )}
-                        {pageNo && (
-                          <span className="font-mono font-bold text-[11px] text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/50 border border-purple-200 dark:border-purple-800 px-1.5 py-0.5 rounded" title="Ledger Page Number">
-                            Pg. #{pageNo}
-                          </span>
-                        )}
-                        <span className="font-medium text-black dark:text-white">{c.customerName}</span>
-                      </div>
+                      <span className="font-medium text-black dark:text-white">{c.customerName}</span>
                       <p className="text-xs text-gray-500 dark:text-gray-400">{c.company || 'Private Customer'}</p> 
                     </td> 
-                    <td className="py-3.5 px-4 text-sm"> 
-                      <p className="text-black dark:text-white font-mono text-xs">NTN: {c.ntnNo || 'N/A'}</p> 
-                      {c.stRegNo && <p className="text-[11px] text-primary font-mono font-semibold">STRN: {c.stRegNo}</p>}
-                      <p className="text-xs text-gray-500 dark:text-gray-400 font-mono">CNIC: {c.cnicNo || 'N/A'}</p> 
-                    </td> 
-                    <td className="py-3.5 px-4 text-sm text-black dark:text-white"><p>{c.primaryPhone || 'N/A'}</p></td> 
-                    <td className="py-3.5 px-4 text-sm text-black dark:text-white"><p>{c.province || 'N/A'}</p></td> 
+
+                    {/* 4. Accounts */}
                     <td className="py-3.5 px-4 text-sm">
                       {coa ? (
                         <div className="flex items-center gap-1.5 flex-wrap">
@@ -342,6 +349,25 @@ const CustomerHistory = () => {
                         </button>
                       )}
                     </td>
+
+                    {/* 5. Phone */}
+                    <td className="py-3.5 px-4 text-sm text-black dark:text-white">
+                      <p className="font-mono text-xs">{c.primaryPhone || c.phone || 'N/A'}</p>
+                    </td> 
+
+                    {/* 6. Address & Province */}
+                    <td className="py-3.5 px-4 text-sm">
+                      {c.address ? (
+                        <p className="text-black dark:text-white text-xs font-normal leading-snug">{c.address}</p>
+                      ) : (
+                        <p className="text-gray-400 text-xs">N/A</p>
+                      )}
+                      <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5 font-medium">
+                        Province: {c.province || 'Sindh'}
+                      </p>
+                    </td>
+
+                    {/* 7. Actions */}
                     <td className="py-3.5 px-4 text-center"> 
                       <TableActions
                         onEdit={() => navigate(`${tenantId ? `/${tenantId}` : ''}/Customers/customer-details`, { state: { customer: c } })}
