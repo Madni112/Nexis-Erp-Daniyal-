@@ -201,6 +201,8 @@ const CustomerHistory = () => {
     c.customerName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     c.customer_code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     c.customerCode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    c.page_no?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    c.pageNo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     c.company?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     c.ntnNo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     c.primaryPhone?.includes(searchTerm) ||
@@ -257,7 +259,7 @@ const CustomerHistory = () => {
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search name, code, phone, NTN..."
+            placeholder="Search name, code, page #, phone, NTN..."
             className="w-full sm:w-64 rounded border border-stroke py-1.5 px-3 bg-transparent dark:border-strokedark outline-none focus:border-primary text-sm text-black dark:text-white"
           />
         </div>
@@ -287,6 +289,7 @@ const CustomerHistory = () => {
                 const serialNumber = startIndex + idx + 1;
                 const coa = getCustomerCOA(c);
                 const custCode = c.customer_code || c.customerCode;
+                const pageNo = c.page_no || c.pageNo;
 
                 return ( 
                   <tr key={c.id} className="border-b border-stroke dark:border-strokedark hover:bg-slate-50 dark:hover:bg-meta-4/10 duration-150"> 
@@ -294,8 +297,13 @@ const CustomerHistory = () => {
                     <td className="py-3.5 px-4 text-sm"> 
                       <div className="flex items-center gap-1.5 flex-wrap">
                         {custCode && (
-                          <span className="font-mono font-bold text-[11px] text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 px-1.5 py-0.5 rounded">
+                          <span className="font-mono font-bold text-[11px] text-blue-700 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/50 border border-blue-200 dark:border-blue-800 px-1.5 py-0.5 rounded" title="Customer Code">
                             {custCode}
+                          </span>
+                        )}
+                        {pageNo && (
+                          <span className="font-mono font-bold text-[11px] text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/50 border border-purple-200 dark:border-purple-800 px-1.5 py-0.5 rounded" title="Ledger Page Number">
+                            Pg. #{pageNo}
                           </span>
                         )}
                         <span className="font-medium text-black dark:text-white">{c.customerName}</span>

@@ -59,6 +59,7 @@ const AddCustomer = () => {
         customerName: values.customerName.trim(),
         customer_code: values.customer_code ? values.customer_code.trim() : (values.customerCode ? values.customerCode.trim() : ''),
         customerCode: values.customer_code ? values.customer_code.trim() : (values.customerCode ? values.customerCode.trim() : ''),
+        page_no: values.page_no ? String(values.page_no).trim() : '',
         ntnNo: values.ntnNo ? values.ntnNo.trim() : '',
         cnicNo: values.cnicNo ? values.cnicNo.trim() : '',
         stRegNo: values.stRegNo ? values.stRegNo.trim() : '',
@@ -107,9 +108,11 @@ const AddCustomer = () => {
           initialValues={editData ? {
             ...editData,
             customer_code: editData.customer_code || editData.customerCode || '',
+            page_no: editData.page_no || editData.pageNo || editData.page_number || '',
           } : {
             customerName: '',
             customer_code: '',
+            page_no: '',
             registrationType: 'Retail / General',
             ntnNo: '',
             cnicNo: '',
@@ -147,17 +150,31 @@ const AddCustomer = () => {
                   )}
                 </div>
 
-                <div>
-                  <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-black dark:text-white">
-                    Customer Code (Optional)
-                  </label>
-                  <input
-                    name="customer_code"
-                    onChange={handleChange}
-                    value={values.customer_code || values.customerCode || ''}
-                    placeholder="e.g. CUST-001 or 1020-001"
-                    className="w-full rounded border border-stroke dark:border-strokedark bg-transparent text-black dark:text-white p-3 outline-none text-xs font-mono focus:border-primary"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-black dark:text-white">
+                      Customer Code (Optional)
+                    </label>
+                    <input
+                      name="customer_code"
+                      onChange={handleChange}
+                      value={values.customer_code || values.customerCode || ''}
+                      placeholder="e.g. CUST-001 or 1020-001"
+                      className="w-full rounded border border-stroke dark:border-strokedark bg-transparent text-black dark:text-white p-3 outline-none text-xs font-mono focus:border-primary"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-2 block text-xs font-bold uppercase tracking-wider text-black dark:text-white">
+                      Page # (Optional)
+                    </label>
+                    <input
+                      name="page_no"
+                      onChange={handleChange}
+                      value={values.page_no || ''}
+                      placeholder="e.g. 142 or Pg-12"
+                      className="w-full rounded border border-stroke dark:border-strokedark bg-transparent text-black dark:text-white p-3 outline-none text-xs font-mono focus:border-primary"
+                    />
+                  </div>
                 </div>
 
                 <div>

@@ -58,8 +58,12 @@ const SalesmanDashboard: React.FC = () => {
   const [selectedSalesman, setSelectedSalesman] = useState<string>('ALL');
   const [partnerSalesmen, setPartnerSalesmen] = useState<string[]>([]);
 
+  const [effectiveSalesmanName, setEffectiveSalesmanName] = useState<string>(() => {
+    return userName || localStorage.getItem('zac_user_name') || '';
+  });
+
   const isAdminOrSuper = useMemo(() => {
-    const r = (role || '').toLowerCase();
+    const r = (role || localStorage.getItem('zac_user_role') || '').toLowerCase();
     return r.includes('admin') || r.includes('owner') || r.includes('developer');
   }, [role]);
 
@@ -69,12 +73,46 @@ const SalesmanDashboard: React.FC = () => {
   const loadDashboardData = async () => {
     setLoading(true);
     try {
+      // Resolve active salesman identity if not yet in state
+      let activeName = userName || effectiveSalesmanName;
+      if (!activeName) {
+        const { data: sessionData } = await supabase.auth.getSession();
+        const userEmail = sessionData?.session?.user?.email;
+        if (userEmail) {
+          const { data: tRow } = await supabase
+            .from('tenants')
+            .select('name, business_activity')
+            .ilike('email', userEmail.trim())
+            .maybeSingle();
+          if (tRow?.name) {
+            activeName = tRow.name;
+            setEffectiveSalesmanName(tRow.name);
+          }
+        }
+      }
+
+      // Check if logged in user has linked partner salesmen
+      if (activeName) {
+        const { data: smRow } = await supabase
+          .from('salesmen')
+          .select('name, linked_salesmen')
+          .ilike('name', activeName.trim())
+          .maybeSingle();
+
+        if (smRow && Array.isArray(smRow.linked_salesmen) && smRow.linked_salesmen.length > 0) {
+          setPartnerSalesmen(smRow.linked_salesmen);
+          setSelectedSalesman('TEAM_ALL');
+        } else if (!isAdminOrSuper) {
+          setSelectedSalesman(activeName);
+        }
+      }
+
       // 1. Fetch Sales Invoices
       const { data: invoiceData, error: invError } = await supabase
         .from('sales_invoices')
         .select('*')
         .order('id', { ascending: false })
-        .limit(200);
+        .limit(300);
 
       if (invError) throw invError;
       const invList: SalesInvoiceItem[] = invoiceData || [];
@@ -85,22 +123,6 @@ const SalesmanDashboard: React.FC = () => {
         new Set(invList.map((i) => (i.salesman || '').trim()).filter(Boolean))
       );
       setSalesmanList(uniqueSalesmen);
-
-      // Check if logged in user has linked partner salesmen
-      if (userName) {
-        const { data: smRow } = await supabase
-          .from('salesmen')
-          .select('name, linked_salesmen')
-          .ilike('name', userName.trim())
-          .maybeSingle();
-
-        if (smRow && Array.isArray(smRow.linked_salesmen) && smRow.linked_salesmen.length > 0) {
-          setPartnerSalesmen(smRow.linked_salesmen);
-          setSelectedSalesman('TEAM_ALL');
-        } else if (!isAdminOrSuper) {
-          setSelectedSalesman(userName);
-        }
-      }
 
       // 2. Fetch Live Stock Balances
       const { data: stockData, error: stockErr } = await supabase
@@ -139,31 +161,39 @@ const SalesmanDashboard: React.FC = () => {
 
   useEffect(() => {
     loadDashboardData();
-  }, []);
+  }, [userName, role]);
 
   // Filter invoices for current user or selected salesman
   const filteredInvoices = useMemo(() => {
+    const activeName = (userName || effectiveSalesmanName || '').toLowerCase().trim();
+
     return invoices.filter((inv) => {
       const invSalesman = (inv.salesman || '').toLowerCase().trim();
+      const invNo = (inv.invoice_no || '').toLowerCase().trim();
 
-      // Non-admin logic
+      // Non-admin logic: MUST ONLY show invoices of the current salesman or linked partners
       if (!isAdminOrSuper) {
+        if (!activeName) return false; // Safety: Never leak all invoices if identity not resolved yet
+
         if (!isMergedSalesman) {
-          // Normal salesman: only see their own
-          const myName = (userName || '').toLowerCase().trim();
-          if (myName && !invSalesman.includes(myName)) return false;
+          // Normal unmerged salesman: only see their own
+          const matchMySales = invSalesman.includes(activeName) || (activeName && invNo.startsWith(activeName.split(' ')[0]));
+          if (!matchMySales) return false;
         } else {
-          // Merged salesman:
+          // Merged salesman (e.g. Ahmed Ali + Juned):
+          const myTeam = [activeName, ...partnerSalesmen.map(p => p.toLowerCase().trim())].filter(Boolean);
+
           if (selectedSalesman === 'TEAM_ALL') {
-            const teamMembers = [userName, ...partnerSalesmen].map(n => n.toLowerCase().trim());
-            const matchAny = teamMembers.some(tm => tm && invSalesman.includes(tm));
+            const matchAny = myTeam.some(tm => invSalesman.includes(tm) || invNo.startsWith(tm.split(' ')[0]));
             if (!matchAny) return false;
-          } else if (selectedSalesman === 'MY_SALES' || selectedSalesman === userName) {
-            const myName = (userName || '').toLowerCase().trim();
-            if (myName && !invSalesman.includes(myName)) return false;
+          } else if (selectedSalesman === 'MY_SALES' || selectedSalesman.toLowerCase().trim() === activeName) {
+            const matchMySales = invSalesman.includes(activeName) || invNo.startsWith(activeName.split(' ')[0]);
+            if (!matchMySales) return false;
           } else {
-            // Specific partner selected
-            if (!invSalesman.includes(selectedSalesman.toLowerCase().trim())) return false;
+            // Specific partner selected (e.g. Juned)
+            const targetPartner = selectedSalesman.toLowerCase().trim();
+            const matchPartner = invSalesman.includes(targetPartner) || invNo.startsWith(targetPartner.split(' ')[0]);
+            if (!matchPartner) return false;
           }
         }
       } else {
