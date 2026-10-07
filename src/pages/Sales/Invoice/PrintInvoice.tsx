@@ -130,12 +130,23 @@ const PrintInvoice = () => {
     const rate = Number(item.rp ?? item.mrp ?? item.rate ?? item.price ?? 0);
     const grossAmount = rate * qty;
 
-    const discountPer = Number(item.discountPer ?? item.discount ?? 0);
-    const discountAmt = Number(item.discountAmt ?? ((grossAmount * discountPer) / 100));
+    const discountAmt = Number(item.discountAmt ?? item.discount_amt ?? ((grossAmount * Number(item.discountPer ?? item.discount_per ?? 0)) / 100));
+    const discountPer = Number(
+      item.discountPer ??
+      item.discount_per ??
+      (grossAmount > 0 && discountAmt > 0 ? (discountAmt / grossAmount) * 100 : 0)
+    );
     const afterDiscount = Math.max(0, grossAmount - discountAmt);
 
-    const gstRate = Number(item.gstRate ?? item.gst_rate ?? 0);
-    const fTaxPer = Number(item.fTaxPer ?? item.f_tax_per ?? 0);
+    const isTaxScenario = Boolean(
+      invoice.scenario_type &&
+      invoice.scenario_type !== 'Standard Retail Sale (No Tax)' &&
+      invoice.scenario_type !== 'Exempt Goods Sale' &&
+      invoice.scenario_type !== 'Zero Rated Sale'
+    );
+
+    const gstRate = isTaxScenario ? Number(item.gstRate ?? item.gst_rate ?? 0) : 0;
+    const fTaxPer = isTaxScenario ? Number(item.fTaxPer ?? item.f_tax_per ?? 0) : 0;
     const gstAmount = (afterDiscount * gstRate) / 100;
     const fTaxAmount = (afterDiscount * fTaxPer) / 100;
     const netTotal = afterDiscount + gstAmount + fTaxAmount;
@@ -150,18 +161,29 @@ const PrintInvoice = () => {
       const boxes = Math.floor(qty);
       const loose = Math.round((qty - boxes) * pcsPerBox);
 
-      let tileWidthCm = 60;
-      let tileHeightCm = 60;
-      const desc = prodMeta?.product_description || '';
-      const sku = prodMeta?.item_sr_no || item.skuCode || '';
-      const sizeMatch = desc.match(/Size:\s*(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)\s*cm/i) ||
+      const sqmBoxMatch = desc.match(/(\d+(?:\.\d+)?)\s*sq\.m\s*\/\s*box/i);
+      if (sqmBoxMatch) {
+        perBoxSqm = Number(sqmBoxMatch[1]);
+        perPieceSqm = pcsPerBox > 0 ? perBoxSqm / pcsPerBox : 0;
+      } else {
+        const inMatch = desc.match(/Size:\s*(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)\s*in/i);
+        const cmMatch = desc.match(/Size:\s*(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)\s*cm/i) ||
                         sku.match(/(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)/i);
-      if (sizeMatch) {
-        tileHeightCm = Number(sizeMatch[1]) || 60;
-        tileWidthCm = Number(sizeMatch[2]) || 60;
+        if (inMatch) {
+          const hIn = Number(inMatch[1]) || 24;
+          const wIn = Number(inMatch[2]) || 24;
+          perPieceSqm = (hIn * 0.025) * (wIn * 0.025);
+          perBoxSqm = perPieceSqm * pcsPerBox;
+        } else if (cmMatch) {
+          const hCm = Number(cmMatch[1]) || 60;
+          const wCm = Number(cmMatch[2]) || 60;
+          perPieceSqm = (hCm * wCm) / 10000;
+          perBoxSqm = perPieceSqm * pcsPerBox;
+        } else {
+          perPieceSqm = (24 * 0.025) * (24 * 0.025);
+          perBoxSqm = perPieceSqm * pcsPerBox;
+        }
       }
-      perPieceSqm = (tileHeightCm * tileWidthCm) / 10000;
-      perBoxSqm = perPieceSqm * pcsPerBox;
       totalLineSqm = (boxes * perBoxSqm) + (loose * perPieceSqm);
 
       if (boxes > 0 && loose > 0) {
@@ -206,7 +228,14 @@ const PrintInvoice = () => {
 
   const freightCharges = Number(invoice.transport_charges || 0);
   const additionalCharges = Number(invoice.additional_charges || 0);
-  const grandTotal = computedTotalNet + freightCharges + additionalCharges;
+  const parsedItemsList = Array.isArray(invoice.items) ? invoice.items : (typeof invoice.items === 'string' ? JSON.parse(invoice.items || '[]') : []);
+  const overallDiscount = Number(
+    (invoice as any).overall_discount ||
+    (invoice as any).discount_amount ||
+    parsedItemsList.find((i: any) => i._overallDiscount !== undefined)?._overallDiscount ||
+    0
+  );
+  const grandTotal = Math.max(0, computedTotalNet + freightCharges + additionalCharges - overallDiscount);
   const cashPaid = Number(invoice.cash_amount_paid || 0);
   const bankPaid = Number(invoice.bank_amount || 0);
   const totalPaid = (cashPaid > 0 && bankPaid > 0) ? (cashPaid + bankPaid) : (cashPaid > 0 ? cashPaid : (bankPaid > 0 ? bankPaid : Number(invoice.cash_amount_paid || invoice.bank_amount || 0)));
@@ -241,7 +270,7 @@ const PrintInvoice = () => {
         @media print {
           @page {
             size: A4 portrait;
-            margin: 8mm 10mm;
+            margin: 12mm 14mm;
           }
           aside, nav, header, .no-print, button {
             display: none !important;
@@ -251,7 +280,7 @@ const PrintInvoice = () => {
           body {
             background: white !important;
             color: #0f172a !important;
-            font-size: 14px !important;
+            font-size: 10.5px !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
@@ -261,7 +290,6 @@ const PrintInvoice = () => {
             padding: 0 !important;
             margin: 0 !important;
             width: 100% !important;
-            font-size: 14px !important;
           }
           table {
             width: 100% !important;
@@ -270,14 +298,6 @@ const PrintInvoice = () => {
           th {
             background-color: #0f172a !important;
             color: white !important;
-            font-size: 14px !important;
-            font-weight: 800 !important;
-            padding: 5px 6px !important;
-          }
-          td {
-            font-size: 13.5px !important;
-            font-weight: 600 !important;
-            padding: 5px 6px !important;
           }
         }
       `}</style>
@@ -424,7 +444,16 @@ const PrintInvoice = () => {
                   </td>
                   {computedTotalDiscount > 0 && (
                     <td className="py-2 px-2 text-right font-mono text-amber-700 whitespace-nowrap">
-                      {item.discountAmt > 0 ? `Rs. ${item.discountAmt.toLocaleString()}` : '-'}
+                      {item.discountAmt > 0 ? (
+                        <div>
+                          <div className="font-semibold">Rs. {item.discountAmt.toLocaleString()}</div>
+                          {item.discountPer > 0 && (
+                            <div className="text-[9.5px] text-amber-600 font-sans font-medium">
+                              ({Number(item.discountPer.toFixed(2)) === Math.round(item.discountPer) ? Math.round(item.discountPer) : item.discountPer.toFixed(1)}%)
+                            </div>
+                          )}
+                        </div>
+                      ) : '-'}
                     </td>
                   )}
                   {computedTotalGst > 0 && (
@@ -478,8 +507,15 @@ const PrintInvoice = () => {
 
             {computedTotalDiscount > 0 && (
               <div className="flex justify-between text-amber-700 font-semibold">
-                <span>Total Discount Allowed:</span>
+                <span>Item Discounts Allowed:</span>
                 <span>- Rs. {computedTotalDiscount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+              </div>
+            )}
+
+            {overallDiscount > 0 && (
+              <div className="flex justify-between text-amber-700 font-bold">
+                <span>Overall Bill Discount:</span>
+                <span>- Rs. {overallDiscount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
               </div>
             )}
 

@@ -88,6 +88,14 @@ import StockReportPrint from '../pages/Reports/Stock Report/StockReportPrint';
 import AccountReportPrint from '../pages/Reports/Account Report/AccountReportPrint';
 import BalanceSheet from '../pages/Reports/BalanceSheet';
 import DedicatedReportFilter from '../pages/Reports/DedicatedReportFilter';
+import { EmployeesPage } from '../pages/Human Resources/Employees';
+import AddEmployee from '../pages/Human Resources/AddEmployee';
+import { AttendanceSheetPage } from '../pages/Human Resources/AttendanceSheet';
+import { SalarySheetPage } from '../pages/Human Resources/SalarySheet';
+import { SalaryStructurePage } from '../pages/Human Resources/SalaryStructure';
+import { PayHeadsPage } from '../pages/Human Resources/PayHeads';
+import { LeavePage } from '../pages/Human Resources/Leave';
+import { LoansPage } from '../pages/Human Resources/Loans';
 
 export const adminRoutes = [
   {
@@ -328,6 +336,42 @@ export const adminRoutes = [
     ]
   },
   {
+    label: 'Human Resource',
+    icon: MdBadge,
+    children: [
+      {
+        label: 'Employees',
+        path: '/Human-Resources/Employees',
+        component: <EmployeesPage />,
+        icon: MdPeople
+      },
+      {
+        label: 'Attendance Sheet',
+        path: '/Human-Resources/Attendance',
+        component: <AttendanceSheetPage />,
+        icon: MdClass
+      },
+      {
+        label: 'Salary Sheet (Payroll)',
+        path: '/Human-Resources/Salary-Sheet',
+        component: <SalarySheetPage />,
+        icon: MdPayment
+      },
+      {
+        label: 'Leaves',
+        path: '/Human-Resources/Leaves',
+        component: <LeavePage />,
+        icon: MdAssignmentReturn
+      },
+      {
+        label: 'Loans & Advances',
+        path: '/Human-Resources/Loans',
+        component: <LoansPage />,
+        icon: MdAccountBalanceWallet
+      }
+    ]
+  },
+  {
     label: 'Reports',
     path: '/Reports/Reports-Dashboard',
     component: <ReportDashboard />,
@@ -471,6 +515,18 @@ export const adminRoutes = [
     hideFromSidebar: true
   },
   {
+    path: '/Sales/Invoice/edit/:id',
+    component: <NewInvoice />,
+    label: 'Edit Invoice',
+    hideFromSidebar: true
+  },
+  {
+    path: '/sales/invoice/edit/:id',
+    component: <NewInvoice />,
+    label: 'Edit Invoice',
+    hideFromSidebar: true
+  },
+  {
     path: '/sales/invoice/list',
     component: <SalesHistory />,
     hideFromSidebar: true
@@ -593,6 +649,26 @@ export const adminRoutes = [
   {
     path: '/Customers/list',
     component: <CustomerHistory />,
+    hideFromSidebar: true
+  },
+  {
+    path: '/Human-Resources/Employees/Add',
+    component: <AddEmployee />,
+    hideFromSidebar: true
+  },
+  {
+    path: '/Human-Resources/Employees/add',
+    component: <AddEmployee />,
+    hideFromSidebar: true
+  },
+  {
+    path: '/Human-Resources/Employees/employee-details',
+    component: <AddEmployee />,
+    hideFromSidebar: true
+  },
+  {
+    path: '/Human-Resources/Employees/Edit',
+    component: <AddEmployee />,
     hideFromSidebar: true
   },
   {

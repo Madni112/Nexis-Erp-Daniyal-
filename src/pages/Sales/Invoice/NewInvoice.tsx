@@ -9,6 +9,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { FiPrinter, FiSave, FiCheck, FiX, FiUserCheck, FiTrash2, FiUser } from 'react-icons/fi';
 import { SearchableDropdown } from '../../../components/SearchableDropdown';
 import { useAuth } from '../../../Context/Auth';
+import { logActivity } from '../../../service/auditLogger';
 
 const NewInvoice = () => {
   const navigate = useNavigate();
@@ -48,6 +49,7 @@ const NewInvoice = () => {
   const [recordWalkinCustomer, setRecordWalkinCustomer] = useState<boolean>(true);
   const [selectedRecordedCustomer, setSelectedRecordedCustomer] = useState<string>('');
   const [pendingFormValues, setPendingFormValues] = useState<any>(null);
+  const [isOpeningCustomerModal, setIsOpeningCustomerModal] = useState<boolean>(false);
   const [serverToday, setServerToday] = useState<Date | null>(null);
 
   useEffect(() => {
@@ -61,14 +63,26 @@ const NewInvoice = () => {
     const fetchCompleteEnterpriseCatalog = async () => {
       try {
         setInitialLoading(true);
-        const { data: cust } = await supabase.from('customers').select('id, customerName, primaryPhone');
+        const { data: rawCust } = await supabase.from('customers').select('*');
         const { data: prod } = await supabase.from('products').select('id, product_name, current_stock, retail_price, item_sr_no, category, hs_code, uom, pieces_per_box, pcs_per_box, pieces_per_packing, product_description, bin, item_type, service_charges');
-        const { data: sm } = await supabase.from('salesmen').select('id, name, invoice_name, invoice_names, linked_salesmen');
+        const { data: sm } = await supabase.from('salesmen').select('id, name, invoice_name, invoice_names');
         const { data: trans } = await supabase.from('logistics_transportation').select('id, name, base_charges');
         const { data: locMaster } = await supabase.from('inventory_locations').select('name');
         const { data: wh } = await supabase.from('opening_stocks').select('location');
         const { data: invWh } = await supabase.from('warehouse_inventory').select('warehouse_name');
-        const { data: bnk } = await supabase.from('banks').select('id, bankName, accountTitle');
+        const { data: rawBnk } = await supabase.from('banks').select('*');
+
+        const cust = (rawCust || []).map((c: any) => ({
+          ...c,
+          customerName: c.customerName || c.customername || c.name || '',
+          primaryPhone: c.primaryPhone || c.primaryphone || c.phone || '',
+          customer_code: c.customer_code || c.customerCode || c.customercode || ''
+        }));
+        const bnk = (rawBnk || []).map((b: any) => ({
+          ...b,
+          bankName: b.bankName || b.bankname || '',
+          accountTitle: b.accountTitle || b.accounttitle || b.account_title || ''
+        }));
 
         // Load the stock ledger snapshot once (reused for every row's availability check)
         fetchStockDataset().then(setStockDataset).catch(() => setStockDataset(null));
@@ -167,6 +181,10 @@ const NewInvoice = () => {
         })(),
         shippingAddress: editData.shipping_address || '',
         showDiscount: parsedItems.some((i: any) => Number(i.discountAmt || i.discount_amt || i.discount || 0) > 0),
+        showOverallDiscount: Number(editData.overall_discount || editData.discount_amount || parsedItems.find((i: any) => i._overallDiscount !== undefined)?._overallDiscount || 0) > 0,
+        overallDiscount: Number(editData.overall_discount || editData.discount_amount || parsedItems.find((i: any) => i._overallDiscount !== undefined)?._overallDiscount || 0),
+        showAdditionalCharges: Number(editData.additional_charges || 0) > 0,
+        additionalCharges: Number(editData.additional_charges || 0),
         items: parsedItems.map((it: any) => ({
           ...it,
           warehouse: it.warehouse || editData.dispatch_warehouse || '',
@@ -177,7 +195,7 @@ const NewInvoice = () => {
     }
     return {
       invoiceNo: '', customerName: '', saleDate: new Date().toISOString().split('T')[0], paymentTerm: 'Cash',
-      dispatchWarehouse: '', applyFbrTax: false, showDiscount: false, showAdditionalCharges: false, additionalCharges: 0, taxScenario: 'Goods at Standard Rate to Registered Buyers',
+      dispatchWarehouse: '', applyFbrTax: false, showDiscount: false, showOverallDiscount: false, overallDiscount: 0, showAdditionalCharges: false, additionalCharges: 0, taxScenario: 'Goods at Standard Rate to Registered Buyers',
       salesman: isSalesman ? (matchedSalesman || currentSalesmanName) : '',
       transportType: 'No Transport (Handover)', transportCharges: 0, settlementMode: 'Cash',
       selectedBankTitle: '', cashAmountPaid: 0, bankAmountPaid: 0,
@@ -413,8 +431,14 @@ const NewInvoice = () => {
     try {
       setLoading(true);
       
-      // STRICT VALIDATION: Block if quantity exceeds available stock
-      for (const item of values.items) {
+      // STRICT VALIDATION: Block if quantity exceeds available stock across all rows
+      const consumedInInvoice: Record<string, number> = {};
+      for (let i = 0; i < values.items.length; i++) {
+        const item = values.items[i];
+        if (!item.itemName) continue;
+        const wh = String(item.warehouse || values.dispatchWarehouse || 'Main Warehouse').trim().toLowerCase();
+        const itemKey = `${String(item.skuCode || item.itemName).trim().toLowerCase()}_${wh}`;
+
         let maxAllowed = Number(item.availableQty || 0);
         if (editData && editData.items) {
            const oldItems = typeof editData.items === 'string' ? JSON.parse(editData.items || '[]') : (editData.items || []);
@@ -423,16 +447,25 @@ const NewInvoice = () => {
               maxAllowed += Number(original.qty || 0);
            }
         }
-        if (item.itemName && Number(item.qty) > maxAllowed) {
-          toast.error(`Insufficient stock for ${item.itemName}. Max Available: ${maxAllowed.toLocaleString()}, Requested: ${Number(item.qty).toLocaleString()}`);
+
+        const priorUsed = consumedInInvoice[itemKey] || 0;
+        const availableForRow = Math.max(0, maxAllowed - priorUsed);
+
+        if (Number(item.qty) > availableForRow) {
+          toast.error(`Insufficient stock for ${item.itemName} (Row #${i + 1}). Max Available: ${availableForRow.toLocaleString()}, Requested: ${Number(item.qty).toLocaleString()}`);
           setLoading(false);
           return;
         }
+
+        consumedInInvoice[itemKey] = priorUsed + Number(item.qty || 0);
       }
 
-      let calculatedGrandTotal = values.items.reduce((acc: number, item: any) => {
-        return acc + calculateLineTotals(item, values.taxScenario, values.applyFbrTax).netTotal;
-      }, 0) + Number(values.transportCharges || 0) + Number(values.additionalCharges || 0);
+      let calculatedGrandTotal = Math.max(
+        0,
+        values.items.reduce((acc: number, item: any) => {
+          return acc + calculateLineTotals(item, values.taxScenario, values.applyFbrTax).netTotal;
+        }, 0) + Number(values.transportCharges || 0) + Number(values.additionalCharges || 0) - Number(values.overallDiscount || 0)
+      );
 
       let paidCash = 0;
       let paidBank = 0;
@@ -456,6 +489,18 @@ const NewInvoice = () => {
       }
       const runningBalanceTerm = totalPaidCombined >= calculatedGrandTotal ? 'Cash' : 'Credit';
 
+      const itemsToSave = (values.items || []).map((it: any, idx: number) => {
+        const cleanItem = {
+          ...it,
+          gstRate: values.applyFbrTax ? Number(it.gstRate || 0) : 0,
+          fTaxPer: values.applyFbrTax ? Number(it.fTaxPer || 0) : 0
+        };
+        if (idx === 0) {
+          return { ...cleanItem, _overallDiscount: Number(values.overallDiscount || 0) };
+        }
+        return cleanItem;
+      });
+
       const databasePayload = {
         invoice_no: values.invoiceNo,
         customer_name: customerFinalName,
@@ -474,7 +519,7 @@ const NewInvoice = () => {
         sale_status: 'Confirm',
         shipping_address: values.shippingAddress,
         gate_pass_no: Object.entries(values.gatePasses || {}).map(([k, v]) => `${k}: ${v}`).join(' | '),
-        items: values.items,
+        items: itemsToSave,
         scenario_type: values.applyFbrTax ? values.taxScenario : 'Standard Retail Sale (No Tax)'
       };
 
@@ -491,10 +536,11 @@ const NewInvoice = () => {
         
         if (dcErr) throw dcErr;
 
-        const activeDCs = (dcs || []).filter(dc => dc.status !== 'Pending Approval');
-        const pendingDCs = (dcs || []).filter(dc => dc.status === 'Pending Approval');
+        const isPendingStatus = (st: string) => /pending/i.test(st || '');
+        const activeDCs = (dcs || []).filter(dc => !isPendingStatus(dc.status));
+        const pendingDCs = (dcs || []).filter(dc => isPendingStatus(dc.status));
 
-        // Track covered quantities by sku_warehouse
+        // Track covered quantities by sku_warehouse from already approved DCs
         const coveredQtys: Record<string, number> = {};
         activeDCs.forEach(dc => {
           (dc.items || []).forEach((i: any) => {
@@ -521,7 +567,7 @@ const NewInvoice = () => {
           return displayQty;
         };
 
-        // 2. Validate
+        // 2. Validate against approved DCs
         for (const item of values.items) {
           const wh = (item.warehouse || values.dispatchWarehouse || 'Main Warehouse').trim();
           const key = `${item.skuCode}_${wh}`;
@@ -552,8 +598,22 @@ const NewInvoice = () => {
 
         if (invoiceUpdateError) throw invoiceUpdateError;
 
+        logActivity({
+          action: 'UPDATE',
+          tableName: 'sales_invoices',
+          details: {
+            id: editData.id,
+            invoice_number: editData.invoice_no || values.invoiceNo,
+            customer_name: customerFinalName,
+            total_amount: calculatedGrandTotal,
+            item_count: (values.items || []).length,
+            payment_term: runningBalanceTerm,
+            warehouse: values.dispatchWarehouse,
+            event: `Updated sales invoice ${editData.invoice_no || values.invoiceNo} for ${customerFinalName}`
+          }
+        });
+
         // 4. Update products.current_stock (Restore old, Deduct new)
-        // warehouse_inventory is no longer the source of truth — formula-based
         const oldItems = typeof editData.items === 'string' ? JSON.parse(editData.items || '[]') : (editData.items || []);
         for (const oldItem of oldItems) {
           const { data: prod } = await supabase.from('products').select('id, current_stock').ilike('product_name', oldItem.itemName).maybeSingle();
@@ -564,14 +624,8 @@ const NewInvoice = () => {
           if (prod) await supabase.from('products').update({ current_stock: Number(prod.current_stock) - Number(newItem.qty || 0) }).eq('id', prod.id);
         }
 
-        // 5. Sync DCs (Delete pending, create new for remaining quantities)
-        if (pendingDCs.length > 0) {
-          const pendingIds = pendingDCs.map(d => d.id);
-          const { error: delErr } = await supabase.from('delivery_challans').delete().in('id', pendingIds);
-          if (delErr) console.error('Error deleting pending DCs:', delErr);
-        }
-
-        const itemsByWarehouse: Record<string, any[]> = {};
+        // 5. Sync DCs (Recalculate remaining uncovered quantities, delete old pending, create new only if needed)
+        const remainingItemsByWarehouse: Record<string, any[]> = {};
         for (const item of values.items) {
           const wh = (item.warehouse || values.dispatchWarehouse || 'Main Warehouse').trim();
           const key = `${item.skuCode}_${wh}`;
@@ -579,13 +633,13 @@ const NewInvoice = () => {
           const remaining = Number(item.qty) - covered;
 
           if (remaining > 0) {
-            if (!itemsByWarehouse[wh]) itemsByWarehouse[wh] = [];
+            if (!remainingItemsByWarehouse[wh]) remainingItemsByWarehouse[wh] = [];
             
             // Prorate discount if any
             const origQty = Number(item.qty) || 1;
             const proratedDisAmt = (Number(item.discountAmt) || 0) * (remaining / origQty);
 
-            itemsByWarehouse[wh].push({
+            remainingItemsByWarehouse[wh].push({
               poNoSub: values.clientPoNumber || '',
               pDescription: item.itemName || 'Product',
               skuCode: item.skuCode || '',
@@ -600,55 +654,69 @@ const NewInvoice = () => {
           }
         }
 
-        const { data: existingDcs } = await supabase
+        // Delete old pending DCs so they are replaced cleanly with the adjusted lines (or removed entirely if items deleted)
+        if (pendingDCs.length > 0) {
+          const pendingIds = pendingDCs.map(d => d.id);
+          const { error: delErr } = await supabase.from('delivery_challans').delete().in('id', pendingIds);
+          if (delErr) console.error('Error deleting pending DCs:', delErr);
+        }
+
+        // Check current active DCs to compute appropriate challan code
+        const { data: currentActiveDcs } = await supabase
           .from('delivery_challans')
           .select('id, challan_no, dispatch_warehouse')
           .eq('invoice_no', formattedInvCode)
           .order('id', { ascending: true });
 
-        for (const [whName, whItems] of Object.entries(itemsByWarehouse)) {
+        for (const [whName, whItems] of Object.entries(remainingItemsByWarehouse)) {
+          if (whItems.length === 0) continue;
           const whQty = whItems.reduce((acc, i) => acc + Number(i.qty || 0), 0);
+          if (whQty <= 0) continue;
+
           const whBaseAmt = whItems.reduce((acc, i) => acc + (Number(i.rate || 0) * Number(i.qty || 0)), 0);
           const whDiscAmt = whItems.reduce((acc, i) => acc + Number(i.disAmt || 0), 0);
           const whNetAmt = whBaseAmt - whDiscAmt;
 
           let nextChallanNo = undefined;
-          if (existingDcs && existingDcs.length > 0) {
-            const whDcs = existingDcs.filter(dc => dc.dispatch_warehouse === whName);
-            if (whDcs.length > 0) {
-              const baseDc = whDcs[0];
-              const baseCode = (baseDc.challan_no || `DC-${String(baseDc.id).padStart(4, '0')}`).replace(/-[A-Z]+$/, '');
-              const existingSubCount = existingDcs.filter(c => (c.challan_no || `DC-${String(c.id).padStart(4, '0')}`).startsWith(baseCode)).length;
-              let nextLetter = '';
-              if (existingSubCount < 26) {
-                nextLetter = String.fromCharCode(65 + existingSubCount);
-              } else {
-                nextLetter = String.fromCharCode(65 + (existingSubCount % 26)).repeat(Math.floor(existingSubCount / 26) + 1);
-              }
-              nextChallanNo = `${baseCode}-${nextLetter}`;
+          const activeWhDcs = (currentActiveDcs || []).filter(dc => dc.dispatch_warehouse === whName);
+          if (activeWhDcs.length > 0) {
+            const baseDc = activeWhDcs[0];
+            const baseCode = (baseDc.challan_no || `DC-${String(baseDc.id).padStart(4, '0')}`).replace(/-[A-Z]+$/, '');
+            const existingSubCount = (currentActiveDcs || []).filter(c => (c.challan_no || `DC-${String(c.id).padStart(4, '0')}`).startsWith(baseCode)).length;
+            let nextLetter = '';
+            if (existingSubCount < 26) {
+              nextLetter = String.fromCharCode(65 + existingSubCount);
+            } else {
+              nextLetter = String.fromCharCode(65 + (existingSubCount % 26)).repeat(Math.floor(existingSubCount / 26) + 1);
             }
+            nextChallanNo = `${baseCode}-${nextLetter}`;
           }
 
           if (!nextChallanNo) {
-            const safePrefix = whName.toUpperCase().replace(/[^A-Z0-9]/g, '');
-            const { data: allDcs } = await supabase
-              .from('delivery_challans')
-              .select('challan_no')
-              .ilike('challan_no', `${safePrefix}-%`);
+            const prevPending = pendingDCs.find(d => d.dispatch_warehouse === whName);
+            if (prevPending && prevPending.challan_no && !activeWhDcs.length) {
+              nextChallanNo = prevPending.challan_no.replace(/-[A-Z]+$/, '');
+            } else {
+              const safePrefix = whName.toUpperCase().replace(/[^A-Z0-9]/g, '');
+              const { data: allDcs } = await supabase
+                .from('delivery_challans')
+                .select('challan_no')
+                .ilike('challan_no', `${safePrefix}-%`);
 
-            let nextNum = 1;
-            if (allDcs && allDcs.length > 0) {
-              const maxNum = allDcs.reduce((max, dc) => {
-                const match = (dc.challan_no || '').match(new RegExp(`^${safePrefix}-(\\d+)`));
-                if (match && match[1]) {
-                  const num = parseInt(match[1], 10);
-                  return num > max ? num : max;
-                }
-                return max;
-              }, 0);
-              nextNum = maxNum + 1;
+              let nextNum = 1;
+              if (allDcs && allDcs.length > 0) {
+                const maxNum = allDcs.reduce((max, dc) => {
+                  const match = (dc.challan_no || '').match(new RegExp(`^${safePrefix}-(\\d+)`));
+                  if (match && match[1]) {
+                    const num = parseInt(match[1], 10);
+                    return num > max ? num : max;
+                  }
+                  return max;
+                }, 0);
+                nextNum = maxNum + 1;
+              }
+              nextChallanNo = `${safePrefix}-${String(nextNum).padStart(4, '0')}`;
             }
-            nextChallanNo = `${safePrefix}-${String(nextNum).padStart(4, '0')}`;
           }
 
           await supabase.from('delivery_challans').insert([{
@@ -668,7 +736,7 @@ const NewInvoice = () => {
             total_amount: whBaseAmt,
             total_discount: whDiscAmt,
             total_net_amount: whNetAmt,
-            status: 'Pending Approval',
+            status: 'Pending',
             items: whItems.map(i => ({
               ...i,
               orderQty: Number(i.qty || 0),
@@ -690,6 +758,21 @@ const NewInvoice = () => {
 
         finalInvoiceId = insertedInvoice?.id;
         const formattedInvCode = values.invoiceNo;
+
+        logActivity({
+          action: 'INSERT',
+          tableName: 'sales_invoices',
+          details: {
+            id: insertedInvoice?.id,
+            invoice_number: values.invoiceNo,
+            customer_name: customerFinalName,
+            total_amount: calculatedGrandTotal,
+            item_count: (values.items || []).length,
+            payment_term: runningBalanceTerm,
+            warehouse: values.dispatchWarehouse,
+            event: `Created sales invoice ${values.invoiceNo} for ${customerFinalName}`
+          }
+        });
 
         // ── AUTO-CREATE DELIVERY CHALLANS PER UNIQUE WAREHOUSE ──
         try {
@@ -756,7 +839,7 @@ const NewInvoice = () => {
               total_amount: whBaseAmt,
               total_discount: whDiscAmt,
               total_net_amount: whNetAmt,
-              status: 'Pending Approval',
+              status: 'Pending',
               items: whItems.map(i => ({
                 ...i,
                 orderQty: Number(i.qty || 0),
@@ -777,84 +860,6 @@ const NewInvoice = () => {
         }
         toast.success('Sales Invoice & Delivery Challan(s) logged successfully!');
       }
-
-      // ── SYNC FREIGHT CHARGES TO CUSTOMER FREIGHT LIABILITY (2020-xxx) ──
-      try {
-        const totalFreight = Number(values.additionalCharges || 0) + Number(values.transportCharges || 0);
-        const formattedInvCode = values.invoiceNo;
-        const freightVoucherNo = `FRT-${formattedInvCode}`;
-
-        // Remove any previous freight voucher for this invoice when editing/updating
-        await supabase.from('financial_vouchers').delete().eq('voucher_no', freightVoucherNo);
-
-        if (totalFreight > 0 && customerFinalName && customerFinalName.toLowerCase() !== 'walk-in customer') {
-          // Find customer's freight liability account code
-          const { data: matchedCust } = await supabase
-            .from('customers')
-            .select('id, customerName, account_code, freight_account_code')
-            .ilike('customerName', customerFinalName.trim())
-            .maybeSingle();
-
-          let liabilityCode = matchedCust?.freight_account_code;
-          if (!liabilityCode && matchedCust?.account_code) {
-            const clean = String(matchedCust.account_code).trim();
-            const match = clean.match(/1020-(\d+)/);
-            liabilityCode = match ? `2020-${match[1]}` : `2020-${clean}`;
-          }
-
-          if (!liabilityCode) {
-            // Lookup from chart_of_accounts
-            const { data: coaFound } = await supabase
-              .from('chart_of_accounts')
-              .select('account_code')
-              .eq('control_code', 'Customer Freight Liability')
-              .ilike('account_title', `%${customerFinalName.trim()}%`)
-              .maybeSingle();
-            if (coaFound) liabilityCode = coaFound.account_code;
-          }
-
-          // If not yet present, auto-create under 2. LIABILITIES -> Customer Freight Liability
-          if (!liabilityCode) {
-            const { data: allLiab } = await supabase
-              .from('chart_of_accounts')
-              .select('account_code')
-              .ilike('account_code', '2020-%');
-            let maxNum = 0;
-            (allLiab || []).forEach((a: any) => {
-              const m = String(a.account_code || '').match(/2020-(\d+)/);
-              if (m && m[1]) {
-                const num = parseInt(m[1], 10);
-                if (num > maxNum) maxNum = num;
-              }
-            });
-            liabilityCode = `2020-${String(maxNum + 1).padStart(3, '0')}`;
-
-            await supabase.from('chart_of_accounts').insert([{
-              category_code: '2. LIABILITIES',
-              sub_category_code: 'Current Liabilities',
-              control_code: 'Customer Freight Liability',
-              account_code: liabilityCode,
-              account_title: `${customerFinalName.trim()} - Freight Liability`,
-              notes: `Customer freight charges payable liability for ${customerFinalName.trim()}`
-            }]);
-          }
-
-          // Post Credit entry in financial_vouchers
-          await supabase.from('financial_vouchers').insert([{
-            voucher_no: freightVoucherNo,
-            voucher_type: 'CRV',
-            voucher_date: values.saleDate || new Date().toISOString().split('T')[0],
-            account_code: liabilityCode,
-            account_title: `${customerFinalName.trim()} - Freight Liability`,
-            credit: totalFreight,
-            debit: 0,
-            narration: `Freight / Delivery charges collected on Invoice #${formattedInvCode} for ${customerFinalName.trim()}`
-          }]);
-        }
-      } catch (freightSyncErr: any) {
-        console.error('Customer freight liability sync notice:', freightSyncErr);
-      }
-
       setShowCustomerModal(false);
       if (submitAction === 'print' && finalInvoiceId) {
         navigate(`${tenantId ? `/${tenantId}` : ''}/sales/invoice/print/${finalInvoiceId}`);
@@ -871,6 +876,20 @@ const NewInvoice = () => {
   const handleFinalCustomerModalSubmit = async () => {
     if (!pendingFormValues) return;
 
+    // Calculate if sale is on credit
+    const currentSubtotal = Math.max(
+      0,
+      (pendingFormValues.items || []).reduce((acc: number, item: any) => {
+        return acc + calculateLineTotals(item, pendingFormValues.taxScenario, pendingFormValues.applyFbrTax).netTotal;
+      }, 0) + Number(pendingFormValues.transportCharges || 0) + Number(pendingFormValues.additionalCharges || 0) - Number(pendingFormValues.overallDiscount || 0)
+    );
+
+    const totalPaidNow = pendingFormValues.settlementMode === 'Cash'
+      ? Number(pendingFormValues.cashAmountPaid || 0)
+      : (pendingFormValues.settlementMode === 'Bank' ? Number(pendingFormValues.bankAmountPaid || 0) : (Number(pendingFormValues.cashAmountPaid || 0) + Number(pendingFormValues.bankAmountPaid || 0)));
+    const remainingBal = Math.max(0, currentSubtotal - totalPaidNow);
+    const isOnCredit = remainingBal > 0.01;
+
     let finalCustomerName = '';
 
     if (customerModalType === 'recorded') {
@@ -880,11 +899,18 @@ const NewInvoice = () => {
       }
       finalCustomerName = selectedRecordedCustomer;
     } else {
-      const cleanName = walkinName.trim() || 'Walk-in Customer';
+      const cleanName = walkinName.trim();
       const cleanPhone = walkinPhone.trim();
-      finalCustomerName = cleanName;
 
-      if (recordWalkinCustomer && cleanName && cleanName.toLowerCase() !== 'walk-in customer') {
+      if (isOnCredit && (!cleanName || cleanName.toLowerCase() === 'walk-in customer')) {
+        toast.error(`Customer Name is required for credit sales (Outstanding balance: Rs. ${remainingBal.toLocaleString()}) to maintain customer directory record.`);
+        return;
+      }
+
+      finalCustomerName = cleanName || 'Walk-in Customer';
+
+      // If user specified a custom walk-in customer name
+      if ((recordWalkinCustomer || isOnCredit) && cleanName && cleanName.toLowerCase() !== 'walk-in customer') {
         try {
           const { data: existing } = await supabase
             .from('customers')
@@ -895,9 +921,10 @@ const NewInvoice = () => {
           if (!existing) {
             const { error: custErr } = await supabase.from('customers').insert([{
               customerName: cleanName,
-              customername: cleanName,
-              primaryPhone: cleanPhone || 'N/A',
-              phone: cleanPhone || 'N/A',
+              customer_code: null,
+              customercode: null,
+              primaryphone: cleanPhone || '-',
+              phone: cleanPhone || '-',
               company: 'Retail Walk-in'
             }]);
 
@@ -910,6 +937,33 @@ const NewInvoice = () => {
         } catch (e: any) {
           console.error('Customer registration error:', e);
         }
+      } 
+      // If user did not provide a custom name, auto-create / link to unified "Walk-in Customer" profile
+      else if (!cleanName || cleanName.toLowerCase() === 'walk-in customer') {
+        try {
+          const { data: existingWalkin } = await supabase
+            .from('customers')
+            .select('id')
+            .ilike('customerName', 'Walk-in Customer')
+            .maybeSingle();
+
+          if (!existingWalkin) {
+            const { error: walkinErr } = await supabase.from('customers').insert([{
+              customerName: 'Walk-in Customer',
+              customer_code: 'WALK-IN',
+              customercode: 'WALK-IN',
+              primaryphone: '-',
+              phone: '-',
+              company: 'Counter Walk-in / Direct Retail'
+            }]);
+
+            if (walkinErr) {
+              console.error('Walk-in Customer profile auto-creation warning:', walkinErr);
+            }
+          }
+        } catch (e: any) {
+          console.error('Walk-in customer lookup error:', e);
+        }
       }
     }
 
@@ -921,49 +975,131 @@ const NewInvoice = () => {
   return (
     <div className="mx-auto max-w-7xl text-black dark:text-bodydark text-xs font-sans relative">
       {/* CUSTOMER CHECKOUT MODAL */}
-      {showCustomerModal && (
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-          <div className="bg-white dark:bg-boxdark w-full max-w-lg rounded-2xl shadow-2xl p-6 border border-stroke dark:border-strokedark animate-in fade-in zoom-in duration-200">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-lg font-bold text-black dark:text-white flex items-center gap-2"><FiUserCheck className="text-emerald-500" /> Checkout Customer</h2>
-              <button onClick={() => setShowCustomerModal(false)}><FiX className="text-xl text-gray-400 hover:text-black dark:hover:text-white" /></button>
-            </div>
+      {showCustomerModal && (() => {
+        const modalSubtotal = pendingFormValues ? Math.max(
+          0,
+          (pendingFormValues.items || []).reduce((acc: number, item: any) => {
+            return acc + calculateLineTotals(item, pendingFormValues.taxScenario, pendingFormValues.applyFbrTax).netTotal;
+          }, 0) + Number(pendingFormValues.transportCharges || 0) + Number(pendingFormValues.additionalCharges || 0) - Number(pendingFormValues.overallDiscount || 0)
+        ) : 0;
 
-            <div className="flex gap-2 mb-6 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
-              <button onClick={() => setCustomerModalType('walkin')} className={`flex-1 py-2 text-xs font-bold rounded-md transition ${customerModalType === 'walkin' ? 'bg-white dark:bg-boxdark shadow-sm text-primary' : 'text-gray-500'}`}>Walk-in Sale</button>
-              <button onClick={() => setCustomerModalType('recorded')} className={`flex-1 py-2 text-xs font-bold rounded-md transition ${customerModalType === 'recorded' ? 'bg-white dark:bg-boxdark shadow-sm text-primary' : 'text-gray-500'}`}>Recorded Client</button>
-            </div>
+        const modalPaid = pendingFormValues ? (
+          pendingFormValues.settlementMode === 'Cash'
+            ? Number(pendingFormValues.cashAmountPaid || 0)
+            : (pendingFormValues.settlementMode === 'Bank' ? Number(pendingFormValues.bankAmountPaid || 0) : (Number(pendingFormValues.cashAmountPaid || 0) + Number(pendingFormValues.bankAmountPaid || 0)))
+        ) : 0;
 
-            {customerModalType === 'walkin' ? (
-              <div className="space-y-4">
-                <input type="text" placeholder="Customer Name (Optional)" value={walkinName} onChange={(e) => setWalkinName(e.target.value)} className="w-full p-3 border rounded-lg bg-transparent dark:border-strokedark" />
-                <input type="text" placeholder="Phone Number (Optional)" value={walkinPhone} onChange={(e) => setWalkinPhone(e.target.value)} className="w-full p-3 border rounded-lg bg-transparent dark:border-strokedark" />
-                <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-600 dark:text-slate-400">
-                  <input type="checkbox" checked={recordWalkinCustomer} onChange={(e) => setRecordWalkinCustomer(e.target.checked)} />
-                  Save this customer to directory
-                </label>
+        const modalRemainingBal = Math.max(0, modalSubtotal - modalPaid);
+        const isModalOnCredit = modalRemainingBal > 0.01;
+
+        return (
+          <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+            <div className="bg-white dark:bg-boxdark w-full max-w-lg rounded-2xl shadow-2xl p-6 border border-stroke dark:border-strokedark animate-in fade-in zoom-in duration-200">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-lg font-bold text-black dark:text-white flex items-center gap-2">
+                  <FiUserCheck className="text-emerald-500" /> Checkout Customer
+                </h2>
+                <button onClick={() => setShowCustomerModal(false)}>
+                  <FiX className="text-xl text-gray-400 hover:text-black dark:hover:text-white" />
+                </button>
               </div>
-            ) : (
-              <select value={selectedRecordedCustomer} onChange={(e) => setSelectedRecordedCustomer(e.target.value)} className="w-full p-3 border rounded-lg bg-transparent dark:border-strokedark">
-                <option value="">-- Search Customer --</option>
-                {customersList.map(c => {
-                  const code = c.customer_code || c.customerCode;
-                  return (
-                    <option key={c.id} value={c.customerName}>
-                      {code ? `[${code}] ${c.customerName}` : c.customerName}
-                    </option>
-                  );
-                })}
-              </select>
-            )}
 
-            <div className="mt-8 flex gap-3">
-              <button onClick={() => setShowCustomerModal(false)} className="flex-1 py-2.5 rounded-lg border border-stroke font-bold text-xs hover:bg-slate-50 dark:hover:bg-slate-800">Cancel</button>
-              <button onClick={handleFinalCustomerModalSubmit} disabled={loading} className="flex-1 py-2.5 rounded-lg bg-primary text-white font-bold text-xs shadow-lg shadow-primary/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"><FiCheck /> {loading ? 'Processing...' : 'Finalize & Log'}</button>
+              {isModalOnCredit && (
+                <div className="mb-4 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 text-xs flex items-center gap-2">
+                  <span>ℹ️</span>
+                  <span>
+                    <strong>Credit Sale (Remaining: Rs. {modalRemainingBal.toLocaleString(undefined, { minimumFractionDigits: 2 })}):</strong> Customer account will be saved to directory.
+                  </span>
+                </div>
+              )}
+
+              <div className="flex gap-2 mb-6 bg-slate-100 dark:bg-slate-800 p-1 rounded-lg">
+                <button 
+                  type="button"
+                  onClick={() => setCustomerModalType('walkin')} 
+                  className={`flex-1 py-2 text-xs font-bold rounded-md transition ${customerModalType === 'walkin' ? 'bg-white dark:bg-boxdark shadow-sm text-primary dark:text-teal-400' : 'text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white'}`}
+                >
+                  Walk-in Sale
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setCustomerModalType('recorded')} 
+                  className={`flex-1 py-2 text-xs font-bold rounded-md transition ${customerModalType === 'recorded' ? 'bg-white dark:bg-boxdark shadow-sm text-primary dark:text-teal-400' : 'text-gray-500 dark:text-gray-400 hover:text-black dark:hover:text-white'}`}
+                >
+                  Recorded Client
+                </button>
+              </div>
+
+              {customerModalType === 'walkin' ? (
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">
+                      Customer Name {isModalOnCredit ? <span className="text-red-500 font-extrabold">*</span> : '(Optional)'}
+                    </label>
+                    <input 
+                      type="text" 
+                      placeholder={isModalOnCredit ? "Customer Name *" : "Customer Name (Optional)"} 
+                      value={walkinName} 
+                      onChange={(e) => setWalkinName(e.target.value)} 
+                      className={`w-full p-3 border rounded-lg bg-white dark:bg-boxdark dark:border-strokedark outline-none text-xs font-bold text-black dark:text-white ${
+                        isModalOnCredit && !walkinName.trim() ? 'border-amber-500 focus:border-amber-600 bg-amber-50/5' : 'focus:border-primary'
+                      }`} 
+                    />
+                    {isModalOnCredit && !walkinName.trim() && (
+                      <p className="text-amber-600 dark:text-amber-400 text-[10px] font-semibold mt-1">
+                        * Required for credit sale
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400 mb-1">Phone Number (Optional)</label>
+                    <input 
+                      type="text" 
+                      placeholder="Phone Number (Optional)" 
+                      value={walkinPhone} 
+                      onChange={(e) => setWalkinPhone(e.target.value)} 
+                      className="w-full p-3 border rounded-lg bg-white dark:bg-boxdark dark:border-strokedark outline-none text-xs text-black dark:text-white focus:border-primary" 
+                    />
+                  </div>
+                  <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-600 dark:text-slate-400">
+                    <input 
+                      type="checkbox" 
+                      checked={recordWalkinCustomer || isModalOnCredit} 
+                      disabled={isModalOnCredit}
+                      onChange={(e) => setRecordWalkinCustomer(e.target.checked)} 
+                    />
+                    <span>Save this customer to directory {isModalOnCredit && <span className="text-[10px] text-amber-600 dark:text-amber-400 font-normal">(Auto-enabled for credit)</span>}</span>
+                  </label>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <label className="block text-[11px] font-bold text-slate-500 dark:text-slate-400">Select Customer Profile</label>
+                  <select 
+                    value={selectedRecordedCustomer} 
+                    onChange={(e) => setSelectedRecordedCustomer(e.target.value)} 
+                    className="w-full p-3 border rounded-lg bg-white dark:bg-boxdark dark:border-strokedark outline-none text-xs font-bold text-black dark:text-white focus:border-primary"
+                  >
+                    <option value="" className="bg-white dark:bg-boxdark text-black dark:text-white">-- Search Customer --</option>
+                    {customersList.map(c => {
+                      const code = c.customer_code || c.customerCode;
+                      return (
+                        <option key={c.id} value={c.customerName} className="bg-white dark:bg-boxdark text-black dark:text-white">
+                          {code ? `[${code}] ${c.customerName}` : c.customerName}
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+              )}
+
+              <div className="mt-8 flex gap-3">
+                <button type="button" onClick={() => setShowCustomerModal(false)} className="flex-1 py-2.5 rounded-lg border border-stroke dark:border-strokedark font-bold text-xs text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800">Cancel</button>
+                <button type="button" onClick={handleFinalCustomerModalSubmit} disabled={loading} className="flex-1 py-2.5 rounded-lg bg-primary text-white font-bold text-xs shadow-lg shadow-primary/20 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"><FiCheck /> {loading ? 'Processing...' : 'Finalize & Log'}</button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       <div className="rounded-sm border border-stroke bg-white shadow-default dark:border-strokedark dark:bg-boxdark p-6">
         <div className="flex items-center justify-between border-b border-stroke pb-4 mb-6 dark:border-strokedark">
@@ -1002,14 +1138,21 @@ const NewInvoice = () => {
               setWalkinPhone('');
               setRecordWalkinCustomer(true);
             }
+            setIsOpeningCustomerModal(false);
             setShowCustomerModal(true);
           }}
         >
-          {({ values, handleChange, setFieldValue, errors, touched, submitCount, submitForm }) => {
+          {({ values, handleChange, setFieldValue, errors, touched, submitCount, submitForm, isSubmitting, isValidating }) => {
             const hasAttempted = submitCount > 0;
-            const currentSubtotalValue = values.items.reduce((acc: number, item: any) => {
+            const isModalLoading = isOpeningCustomerModal || isSubmitting || isValidating;
+            const grossSubtotalValue = values.items.reduce((acc: number, item: any) => {
               return acc + calculateLineTotals(item, values.taxScenario, values.applyFbrTax).netTotal;
             }, 0) + Number(values.transportCharges || 0) + Number(values.additionalCharges || 0);
+
+            const currentSubtotalValue = Math.max(
+              0,
+              grossSubtotalValue - Number(values.overallDiscount || 0)
+            );
 
             const currentPrefix = getSalesmanPrefix(values.salesman, salesmenList);
 
@@ -1019,48 +1162,23 @@ const NewInvoice = () => {
               rawSuffix = rawSuffix.slice(currentPrefix.length);
             }
 
-            // Find current salesman record to check for linked partner salesmen
-            const currentSalesmanObj = salesmenList.find(
-              (s) => (s.name || '').toLowerCase().trim() === (matchedSalesman || currentSalesmanName).toLowerCase().trim()
-            );
-            const partnerNames: string[] = (currentSalesmanObj && Array.isArray(currentSalesmanObj.linked_salesmen))
-              ? currentSalesmanObj.linked_salesmen
-              : [];
-            const isMergedSalesman = isSalesman && partnerNames.length > 0;
-
-            // Merged team salesmen list: current user + all linked partners
-            const allowedSalesmenList = isSalesman
-              ? (isMergedSalesman
-                  ? salesmenList.filter(s => s.name === currentSalesmanObj?.name || partnerNames.includes(s.name))
-                  : [])
-              : salesmenList;
-
-            // Auto-lock or initialize salesman value if logged in as salesman
+            // Auto-lock salesman value if logged in as salesman
             if (isSalesman && (matchedSalesman || currentSalesmanName)) {
               const currentOfficer = matchedSalesman || currentSalesmanName;
-              if (!isMergedSalesman) {
-                if (values.salesman !== currentOfficer) {
-                  setTimeout(() => {
-                    setFieldValue('salesman', currentOfficer);
-                  }, 0);
-                }
-              } else {
-                // If merged, initialize with current officer if empty or not in allowed list
-                if (!values.salesman || !allowedSalesmenList.some(s => s.name === values.salesman)) {
-                  setTimeout(() => {
-                    setFieldValue('salesman', currentOfficer);
-                  }, 0);
-                }
+              if (values.salesman !== currentOfficer) {
+                setTimeout(() => {
+                  setFieldValue('salesman', currentOfficer);
+                }, 0);
               }
             }
 
             return (
               <Form className="space-y-6">
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 bg-gray-50 dark:bg-meta-4/5 p-4 rounded-sm border border-stroke dark:border-strokedark">
-                  <div>
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 bg-gray-50 dark:bg-meta-4/5 p-4 rounded-sm border border-stroke dark:border-strokedark">
+                  <div className="md:col-span-5">
                     <label className="block font-bold text-gray-500 mb-1">Invoice Number #: *</label>
                     <div className={`flex items-center rounded border overflow-hidden bg-white dark:bg-boxdark ${hasAttempted && errors.invoiceNo ? 'border-red-500 bg-red-50/10' : 'border-stroke dark:border-strokedark focus-within:border-primary'}`}>
-                      <span className="px-3 py-2 bg-slate-100 dark:bg-slate-800 text-emerald-800 dark:text-emerald-300 font-mono font-black text-sm border-r border-stroke dark:border-strokedark select-none whitespace-nowrap min-w-[70px] text-center flex items-center justify-center">
+                      <span className="px-3 py-2 bg-slate-100 dark:bg-slate-800 text-emerald-800 dark:text-emerald-300 font-mono font-black text-xs sm:text-sm border-r border-stroke dark:border-strokedark select-none whitespace-nowrap shrink-0 flex items-center justify-center">
                         {currentPrefix || <span className="text-gray-400 font-normal text-xs">Prefix-</span>}
                       </span>
                       <input 
@@ -1088,31 +1206,30 @@ const NewInvoice = () => {
                             setFieldValue('invoiceNo', digitsOnly);
                           }
                         }} 
-                        className="w-full p-2 text-sm bg-transparent font-bold outline-none text-black dark:text-white placeholder:font-normal placeholder:text-xs placeholder:text-gray-400 font-mono" 
+                        className="w-full min-w-0 p-2 text-sm bg-transparent font-bold outline-none text-black dark:text-white placeholder:font-normal placeholder:text-xs placeholder:text-gray-400 font-mono" 
                       />
                     </div>
                     {hasAttempted && errors.invoiceNo && <p className="text-red-500 text-xs font-bold mt-1">{String(errors.invoiceNo)}</p>}
                   </div>
 
-                  <div>
+                  <div className="md:col-span-3">
                     <label className="block font-bold text-gray-500 mb-1">Billing Date: *</label>
                     <input 
                       type="date" 
                       name="saleDate" 
                       value={values.saleDate} 
-                      onChange={handleChange} 
+                      onChange={handleChange}
                       min={editData ? undefined : new Date(new Date().setDate(new Date().getDate() - 3)).toISOString().split('T')[0]}
                       max={new Date().toISOString().split('T')[0]}
                       className={`w-full rounded border p-2 text-sm bg-transparent font-bold outline-none text-black dark:text-white ${hasAttempted && errors.saleDate ? 'border-red-500 bg-red-50/10' : 'border-stroke dark:border-strokedark focus:border-primary'}`} 
                     />
                   </div>
 
-                  <div>
+                  <div className="md:col-span-4">
                     <label className="block font-bold text-gray-500 mb-1">
-                      Assigned Salesman: * {isSalesman && !isMergedSalesman && <span className="text-[11px] text-emerald-600 font-semibold">(Locked)</span>}
-                      {isMergedSalesman && <span className="text-[11px] text-emerald-600 font-semibold">(Partner Team)</span>}
+                      Assigned Salesman: * {isSalesman && <span className="text-[11px] text-emerald-600 font-semibold">(Locked)</span>}
                     </label>
-                    {isSalesman && !isMergedSalesman ? (
+                    {isSalesman ? (
                       <div className="relative">
                         <input
                           type="text"
@@ -1124,30 +1241,6 @@ const NewInvoice = () => {
                         <div className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-200 dark:border-emerald-800 flex items-center gap-1">
                           🔒 Logged In
                         </div>
-                      </div>
-                    ) : isMergedSalesman ? (
-                      <div className="relative">
-                        <select
-                          name="salesman"
-                          value={values.salesman || currentSalesmanObj?.name}
-                          onChange={(e) => {
-                            const selectedSm = e.target.value;
-                            setFieldValue('salesman', selectedSm);
-                            const newPrefix = getSalesmanPrefix(selectedSm, salesmenList);
-                            if (rawSuffix) {
-                              setFieldValue('invoiceNo', newPrefix ? `${newPrefix}${rawSuffix}` : rawSuffix);
-                            } else {
-                              setFieldValue('invoiceNo', newPrefix ? `${newPrefix}` : '');
-                            }
-                          }}
-                          className={`w-full rounded border p-2 text-sm bg-white dark:bg-boxdark font-bold outline-none text-black dark:text-white ${hasAttempted && errors.salesman ? 'border-red-500 bg-red-50/10' : 'border-emerald-500 dark:border-emerald-600 focus:border-primary'}`}
-                        >
-                          {allowedSalesmenList.map((s) => (
-                            <option key={s.id} value={s.name}>
-                              {s.name} {s.invoice_name ? `(${s.invoice_name})` : ''} {s.name === currentSalesmanObj?.name ? '(My Account)' : '(Partner)'}
-                            </option>
-                          ))}
-                        </select>
                       </div>
                     ) : (
                       <select
@@ -1234,6 +1327,22 @@ const NewInvoice = () => {
                       }`}
                     >
                       Discounts
+                    </div>
+
+                    {/* Overall Bill Discount Toggle */}
+                    <div
+                      onClick={() => {
+                        const isChecked = !values.showOverallDiscount;
+                        setFieldValue('showOverallDiscount', isChecked);
+                        if (!isChecked) setFieldValue('overallDiscount', 0);
+                      }}
+                      className={`cursor-pointer px-3 py-1.5 text-xs font-bold rounded-full transition select-none flex items-center justify-center border ${
+                        values.showOverallDiscount
+                          ? 'bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-900/40 dark:text-amber-400 dark:border-amber-800'
+                          : 'bg-white text-slate-500 border-stroke dark:bg-boxdark dark:text-slate-400 dark:border-strokedark hover:bg-slate-50 dark:hover:bg-meta-4'
+                      }`}
+                    >
+                      Overall Discount
                     </div>
 
                     {/* Freight Charges Toggle */}
@@ -1333,7 +1442,24 @@ const NewInvoice = () => {
                                      effectiveAvailStock += Number(original.qty || 0);
                                   }
                                 }
-                                const totalAvailStock = effectiveAvailStock;
+
+                                // Deduct quantities already allocated to prior rows in this invoice
+                                const priorConsumed = values.items.slice(0, idx).reduce((sum: number, prev: any) => {
+                                  const prevName = String(prev.itemName || '').trim().toLowerCase();
+                                  const currName = String(item.itemName || '').trim().toLowerCase();
+                                  const prevSku = String(prev.skuCode || '').trim().toLowerCase();
+                                  const currSku = String(item.skuCode || '').trim().toLowerCase();
+                                  const prevWh = String(prev.warehouse || values.dispatchWarehouse || 'Main Warehouse').trim().toLowerCase();
+                                  const currWh = String(item.warehouse || values.dispatchWarehouse || 'Main Warehouse').trim().toLowerCase();
+                                  
+                                  const isMatch = (currName && prevName === currName) || (currSku && prevSku === currSku);
+                                  if (isMatch && prevWh === currWh) {
+                                    return sum + (Number(prev.qty) || 0);
+                                  }
+                                  return sum;
+                                }, 0);
+
+                                const totalAvailStock = Math.max(0, effectiveAvailStock - priorConsumed);
                                 const totalPieces = isTile && pcsPerBox > 1 ? Math.round(totalAvailStock * pcsPerBox) : 0;
                                 const availBoxes = isTile && pcsPerBox > 1 ? Math.floor(totalPieces / pcsPerBox) : Math.floor(totalAvailStock);
                                 const availLoosePcs = isTile && pcsPerBox > 1 ? (totalPieces % pcsPerBox) : 0;
@@ -2008,7 +2134,7 @@ const NewInvoice = () => {
                           <div className="p-2 bg-gray-50/10 dark:bg-meta-4/10 border-t border-stroke dark:border-strokedark text-left">
                             <button
                               type="button"
-                              onClick={() => push({ itemName: '', skuCode: '', qty: 1, rp: 0, discountPer: 0, discountAmt: 0, gstRate: 18, fTaxPer: 0, amount: 0, availableQty: 0 })}
+                              onClick={() => push({ itemName: '', skuCode: '', qty: 1, rp: 0, discountPer: 0, discountAmt: 0, gstRate: 0, fTaxPer: 0, amount: 0, availableQty: 0 })}
                               className="text-success font-bold hover:underline cursor-pointer"
                             >
                               + Append Item Row
@@ -2177,8 +2303,34 @@ const NewInvoice = () => {
                   <div className="w-full md:w-1/3 space-y-2 font-mono font-bold text-xs text-black dark:text-white">
                     <div className="flex justify-between border-b pb-1 dark:border-strokedark">
                       <span>Net Invoice Value Total:</span>
-                      <span>Rs. {currentSubtotalValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                      <span>Rs. {grossSubtotalValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
                     </div>
+
+                    {values.showOverallDiscount && (
+                      <div className="flex justify-between items-center border-b pb-1 dark:border-strokedark text-amber-600 dark:text-amber-400">
+                        <span className="text-xs">Overall Discount (PKR):</span>
+                        <input
+                          type="number"
+                          min="0"
+                          onKeyDown={blockInvalidChar}
+                          name="overallDiscount"
+                          value={values.overallDiscount === 0 ? '' : values.overallDiscount}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setFieldValue('overallDiscount', val === '' ? 0 : Math.max(0, Number(val) || 0));
+                          }}
+                          placeholder="0.00"
+                          className="w-28 text-right font-black bg-amber-50/40 dark:bg-amber-900/10 border border-amber-300 dark:border-amber-700 rounded p-1 text-xs outline-none focus:border-amber-500 text-amber-700 dark:text-amber-300"
+                        />
+                      </div>
+                    )}
+
+                    {values.showOverallDiscount && (
+                      <div className="flex justify-between border-b pb-1 dark:border-strokedark text-green-600 dark:text-green-400 font-black">
+                        <span>Net Invoice Total (After Discount):</span>
+                        <span>Rs. {currentSubtotalValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    )}
 
                     {values.showAdditionalCharges && (
                       <div className="flex justify-between items-center border-b pb-1 dark:border-strokedark text-blue-600 dark:text-blue-400">
@@ -2186,9 +2338,13 @@ const NewInvoice = () => {
                         <input
                           type="number"
                           min="0"
+                          onKeyDown={blockInvalidChar}
                           name="additionalCharges"
-                          value={values.additionalCharges}
-                          onChange={handleChange}
+                          value={values.additionalCharges === 0 ? '' : values.additionalCharges}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setFieldValue('additionalCharges', val === '' ? 0 : Math.max(0, Number(val) || 0));
+                          }}
                           placeholder="0.00"
                           className="w-28 text-right font-black bg-blue-50/40 dark:bg-blue-900/10 border border-blue-300 dark:border-blue-700 rounded p-1 text-xs outline-none focus:border-blue-500 text-blue-700 dark:text-blue-300"
                         />
@@ -2258,14 +2414,26 @@ const NewInvoice = () => {
                               return;
                             }
                             setSubmitAction('print');
-                            submitForm();
+                            setIsOpeningCustomerModal(true);
+                            submitForm().finally(() => {
+                              setTimeout(() => setIsOpeningCustomerModal(false), 1200);
+                            });
                           }}
-                          disabled={loading || isOverpaid}
+                          disabled={loading || isModalLoading || isOverpaid}
                           className={`rounded-xl py-3 px-6 font-bold text-white transition shadow-md text-xs cursor-pointer flex items-center gap-2 ${
-                            isOverpaid ? 'bg-gray-400 cursor-not-allowed opacity-50' : 'bg-teal-600 hover:bg-teal-700'
+                            isOverpaid || isModalLoading ? 'bg-gray-400 cursor-not-allowed opacity-75' : 'bg-teal-600 hover:bg-teal-700'
                           }`}
                         >
-                          <FiPrinter size={15} /> <span>Save & Print</span>
+                          {isModalLoading && submitAction === 'print' ? (
+                            <>
+                              <Spinner color="border-white" size="w-4 h-4" />
+                              <span>Validating...</span>
+                            </>
+                          ) : (
+                            <>
+                              <FiPrinter size={15} /> <span>Save & Print</span>
+                            </>
+                          )}
                         </button>
 
                         <button
@@ -2276,19 +2444,43 @@ const NewInvoice = () => {
                               return;
                             }
                             setSubmitAction('save');
-                            submitForm();
+                            setIsOpeningCustomerModal(true);
+                            submitForm().finally(() => {
+                              setTimeout(() => setIsOpeningCustomerModal(false), 1200);
+                            });
                           }}
-                          disabled={loading || isOverpaid}
+                          disabled={loading || isModalLoading || isOverpaid}
                           className={`rounded-xl py-3 px-8 font-bold text-white transition shadow-md text-xs cursor-pointer flex items-center gap-2 ${
-                            isOverpaid ? 'bg-gray-400 cursor-not-allowed opacity-50' : 'bg-emerald-600 hover:bg-emerald-700'
+                            isOverpaid || isModalLoading ? 'bg-gray-400 cursor-not-allowed opacity-75' : 'bg-emerald-600 hover:bg-emerald-700'
                           }`}
                         >
-                          {loading ? <Spinner color="border-white" size="w-4 h-4" /> : <><FiCheck size={15} /> <span>{editData ? 'Apply Updates' : 'Log Invoice'}</span></>}
+                          {isModalLoading && submitAction === 'save' ? (
+                            <>
+                              <Spinner color="border-white" size="w-4 h-4" />
+                              <span>Validating...</span>
+                            </>
+                          ) : loading ? (
+                            <Spinner color="border-white" size="w-4 h-4" />
+                          ) : (
+                            <>
+                              <FiCheck size={15} /> <span>{editData ? 'Apply Updates' : 'Log Invoice'}</span>
+                            </>
+                          )}
                         </button>
                       </>
                     );
                   })()}
                 </div>
+
+                {/* MODAL OPENING TOAST INDICATOR */}
+                {isModalLoading && !showCustomerModal && (
+                  <div className="fixed bottom-6 right-6 z-[9998] flex items-center gap-3 bg-white dark:bg-boxdark border border-teal-500/40 shadow-2xl py-3 px-5 rounded-xl animate-fade-in pointer-events-none">
+                    <Spinner color="border-teal-600" size="w-4 h-4" />
+                    <span className="text-xs font-bold text-slate-800 dark:text-white">
+                      Validating invoice & opening client checkout...
+                    </span>
+                  </div>
+                )}
               </Form>
             );
           }}

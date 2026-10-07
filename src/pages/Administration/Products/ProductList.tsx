@@ -7,8 +7,11 @@ import { MdSearch, MdAdd, MdWarning, MdClose, MdInfoOutline } from 'react-icons/
 import TableActions from '../../../ui/TableActions';
 import SearchableDropdown from '../../../components/SearchableDropdown';
 import { getDetailedBreakdown } from '../../../utils/stockCalculator';
+import { useAuth } from '../../../Context/Auth';
+import { logActivity } from '../../../service/auditLogger';
 
 const ProductList = () => {
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -94,7 +97,20 @@ const ProductList = () => {
         const { data: sReturns } = await supabase.from('sales_returns').select('*');
         const { data: pReturns } = await supabase.from('purchase_returns').select('*');
         const { data: deliveryChallans } = await supabase.from('delivery_challans').select('*').order('created_at', { ascending: false });
-        const { data: grnReceipts } = await supabase.from('grn_receipts').select('*, grn_items(*)');
+        const [ { data: rData }, { data: iData } ] = await Promise.all([
+          supabase.from('grn_receipts').select('*'),
+          supabase.from('grn_items').select('*')
+        ]);
+        const itemsByGrn: Record<string, any[]> = {};
+        (iData || []).forEach((it: any) => {
+          const gId = String(it.grn_id || '');
+          if (!itemsByGrn[gId]) itemsByGrn[gId] = [];
+          itemsByGrn[gId].push(it);
+        });
+        const grnReceipts = (rData || []).map((g: any) => ({
+          ...g,
+          grn_items: itemsByGrn[String(g.id)] || []
+        }));
         const { data: stockTransfers } = await supabase.from('stock_transfers').select('items, from_location, to_location, status');
         const { data: locationsMaster } = await supabase.from('inventory_locations').select('name');
 
@@ -468,8 +484,22 @@ const ProductList = () => {
   const handleDeleteProduct = async (id: string | number) => {
     if (!window.confirm('Are you certain you want to delete this product catalog entry?')) return;
     try {
+      const targetProd = products.find((p) => String(p.id) === String(id));
       const { error } = await supabase.from('products').delete().eq('id', id);
       if (error) throw error;
+
+      logActivity({
+        action: 'DELETE',
+        tableName: 'products',
+        details: {
+          product_name: targetProd?.product_name || id,
+          item_code: targetProd?.item_sr_no,
+          category: targetProd?.category,
+          event: 'Deleted Product Master'
+        },
+        performedBy: user?.name || user?.email || 'User'
+      });
+
       toast.success('Product removed from database catalog successfully.');
       if (serverMode) {
         const remainingOnPage = products.length - 1;
@@ -538,7 +568,18 @@ const ProductList = () => {
   const serviceItems = paginatedProducts.filter(p => p.item_type === 'service');
 
   const renderProductRow = (product: any, serialNumber: number) => {
-    const isLowStock = Number(product.current_stock) <= Number(product.min_stock_alert || 0);
+    const currentStock = Number(product.current_stock || 0);
+    const minAlert = Number(product.min_stock_alert ?? product.min_stock ?? 0);
+    const isZeroStock = currentStock <= 0;
+    const isLowStock = minAlert > 0 && currentStock <= minAlert && !isZeroStock;
+
+    let badgeClass = 'bg-green-500/15 text-green-600 dark:bg-green-950/40 dark:text-green-400 border border-green-500/30';
+    if (isZeroStock) {
+      badgeClass = 'bg-red-600/20 text-red-700 dark:bg-red-950/60 dark:text-red-400 border border-red-600/40 font-black';
+    } else if (isLowStock) {
+      badgeClass = 'bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 border border-amber-300 dark:border-amber-700 font-bold';
+    }
+
     return (
       <tr
         key={product.id}
@@ -561,16 +602,15 @@ const ProductList = () => {
             {product.uom}
           </span>
         </td>
-        <td className="py-3.5 px-4 text-right font-mono font-semibold text-emerald-600 dark:text-emerald-400">
+        <td className="py-3.5 px-4 text-right font-mono font-semibold text-slate-800 dark:text-slate-200">
           {Number(product.retail_price || product.mrp || 0).toFixed(2)}
         </td>
         <td className="py-3.5 px-4 text-center">
-          <span className={`font-black text-xs px-2.5 py-0.5 rounded-full ${isLowStock ? 'bg-rose-50 text-rose-600 dark:bg-rose-900/20 dark:text-rose-400' : 'bg-emerald-50 text-emerald-600 dark:bg-emerald-900/20 dark:text-emerald-400'
-            }`}>
-            {Number(product.current_stock || 0).toLocaleString()} {product.uom || 'PCS'}
+          <span className={`font-black text-xs px-2.5 py-0.5 rounded-full inline-flex items-center gap-1 ${badgeClass}`}>
+            {currentStock.toLocaleString()} {product.uom || 'PCS'}
+            {isLowStock && <MdWarning size={14} className="text-amber-600 dark:text-amber-400 inline shrink-0" />}
           </span>
-          {isLowStock && <MdWarning size={14} className="text-rose-500 inline ml-1" />}
-          <button onClick={() => handleOpenBreakdown(product)} className="text-[9px] font-sans text-emerald-600 hover:underline cursor-pointer block mx-auto mt-0.5">View Breakdown</button>
+          <button onClick={() => handleOpenBreakdown(product)} className="text-[9px] font-sans text-green-600 dark:text-green-400 hover:underline cursor-pointer block mx-auto mt-0.5">View Breakdown</button>
         </td>
         <td className="py-3.5 px-4 text-center">
           <TableActions

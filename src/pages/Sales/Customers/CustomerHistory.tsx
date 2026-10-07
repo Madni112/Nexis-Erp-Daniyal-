@@ -5,7 +5,7 @@ import { toast } from 'react-hot-toast';
 import Spinner from '../../../ui/Spinner'; 
 import TableActions from '../../../ui/TableActions';
 import { useAuth } from '../../../Context/Auth';
-import { MdAccountBalanceWallet, MdAdd, MdEdit, MdClose, MdCheckCircle } from 'react-icons/md';
+import { MdAccountBalanceWallet, MdAdd, MdEdit, MdClose, MdCheckCircle, MdArrowUpward, MdArrowDownward } from 'react-icons/md';
 
 const CustomerHistory = () => { 
   const { tenantId } = useAuth();
@@ -22,10 +22,11 @@ const CustomerHistory = () => {
   const [balanceNatureInput, setBalanceNatureInput] = useState<'Debit' | 'Credit'>('Debit');
   const [savingAccount, setSavingAccount] = useState(false);
 
-  // Datatable search and pagination trackers
+  // Datatable search, sorting, and pagination trackers
   const [searchTerm, setSearchTerm] = useState('');
   const [pageSize, setPageSize] = useState(10);
   const [currentPage, setCurrentPage] = useState(1);
+  const [pageSortOrder, setPageSortOrder] = useState<'asc' | 'desc' | null>('asc');
 
   useEffect(() => { 
     fetchCustomersAndCOA(); 
@@ -236,20 +237,62 @@ const CustomerHistory = () => {
   }; 
 
   // Live filter query filter condition evaluation
-  const filteredCustomers = customers.filter(c => 
-    c.customerName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.customer_code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.customerCode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.page_no?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.pageNo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.address?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.province?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.company?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.ntnNo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    c.primaryPhone?.includes(searchTerm) ||
-    c.phone?.includes(searchTerm) ||
-    c.account_code?.includes(searchTerm)
-  );
+  const parsePageNumber = (val?: string | null): number | null => {
+    if (!val) return null;
+    const match = String(val).match(/\d+/);
+    return match ? parseInt(match[0], 10) : null;
+  };
+
+  // Live filter and natural page # sort
+  const filteredCustomers = customers
+    .filter(c => 
+      c.customerName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.customer_code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.customerCode?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.page_no?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.pageNo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.address?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.province?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.company?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.ntnNo?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      c.primaryPhone?.includes(searchTerm) ||
+      c.phone?.includes(searchTerm) ||
+      c.account_code?.includes(searchTerm)
+    )
+    .sort((a, b) => {
+      if (!pageSortOrder) {
+        return (a.customerName || '').localeCompare(b.customerName || '');
+      }
+
+      const pageA = a.page_no || a.pageNo;
+      const pageB = b.page_no || b.pageNo;
+      const numA = parsePageNumber(pageA);
+      const numB = parsePageNumber(pageB);
+
+      // If both have numeric pages
+      if (numA !== null && numB !== null) {
+        if (numA !== numB) {
+          return pageSortOrder === 'asc' ? numA - numB : numB - numA;
+        }
+        return String(pageA).localeCompare(String(pageB), undefined, { numeric: true });
+      }
+
+      // If only one has a page
+      if (numA !== null && numB === null) return pageSortOrder === 'asc' ? -1 : 1;
+      if (numA === null && numB !== null) return pageSortOrder === 'asc' ? 1 : -1;
+
+      // If both have text/alphanumeric
+      if (pageA && pageB) {
+        return pageSortOrder === 'asc' 
+          ? String(pageA).localeCompare(String(pageB), undefined, { numeric: true })
+          : String(pageB).localeCompare(String(pageA), undefined, { numeric: true });
+      }
+      if (pageA && !pageB) return pageSortOrder === 'asc' ? -1 : 1;
+      if (!pageA && pageB) return pageSortOrder === 'asc' ? 1 : -1;
+
+      // Fallback secondary sort: alphabetical by customer name
+      return (a.customerName || '').localeCompare(b.customerName || '');
+    });
 
   // Pagination calculation vectors
   const totalEntries = filteredCustomers.length;
@@ -260,7 +303,7 @@ const CustomerHistory = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, pageSize]);
+  }, [searchTerm, pageSize, pageSortOrder]);
 
   return ( 
     <div className="rounded-sm border border-stroke bg-white px-5 pt-6 pb-6 shadow-default dark:border-strokedark dark:bg-boxdark sm:px-7.5"> 
@@ -312,7 +355,18 @@ const CustomerHistory = () => {
         <table className="w-full table-auto border-collapse"> 
           <thead> 
             <tr className="bg-gray-2 text-left dark:bg-meta-4"> 
-              <th className="min-w-[80px] py-4 px-4 font-medium text-black dark:text-white text-sm">Page #</th>
+              <th 
+                onClick={() => setPageSortOrder(prev => prev === 'asc' ? 'desc' : prev === 'desc' ? null : 'asc')}
+                className="min-w-[95px] py-4 px-4 font-medium text-black dark:text-white text-sm cursor-pointer select-none hover:text-primary transition"
+                title="Click to toggle Page # sorting"
+              >
+                <div className="flex items-center gap-1">
+                  <span>Page #</span>
+                  {pageSortOrder === 'asc' && <MdArrowUpward size={14} className="text-primary font-bold" />}
+                  {pageSortOrder === 'desc' && <MdArrowDownward size={14} className="text-primary font-bold" />}
+                  {!pageSortOrder && <span className="text-[10px] text-gray-400 font-normal">⇅</span>}
+                </div>
+              </th>
               <th className="min-w-[100px] py-4 px-4 font-medium text-black dark:text-white text-sm">Code</th> 
               <th className="min-w-[180px] py-4 px-4 font-medium text-black dark:text-white text-sm">Name</th> 
               <th className="min-w-[160px] py-4 px-4 font-medium text-black dark:text-white text-sm">Accounts</th> 

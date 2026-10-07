@@ -4,7 +4,7 @@ import { supabase } from '../../../Context/supabaseClient';
 import { toast } from 'react-hot-toast';
 import Spinner from '../../../ui/Spinner';
 import TableActions from '../../../ui/TableActions';
-import { MdEdit, MdDelete, MdMoreVert, MdEmail, MdPhone, MdPerson, MdBusiness, MdAccountBalanceWallet, MdAdd, MdClose, MdCheckCircle } from 'react-icons/md';
+import { MdEdit, MdDelete, MdMoreVert, MdEmail, MdPhone, MdPerson, MdBusiness, MdAccountBalanceWallet, MdAdd, MdClose, MdCheckCircle, MdArrowUpward, MdArrowDownward } from 'react-icons/md';
 
 const VendorList = () => {
     const navigate = useNavigate();
@@ -23,6 +23,7 @@ const VendorList = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [pageSize, setPageSize] = useState(10);
     const [currentPage, setCurrentPage] = useState(1);
+    const [pageSortOrder, setPageSortOrder] = useState<'asc' | 'desc' | null>('asc');
 
     const fetchRegisteredVendorsAndCOA = async () => {
         try {
@@ -193,18 +194,59 @@ const VendorList = () => {
         }
     };
 
-    const filteredVendors = vendors.filter(v =>
-        (v.vendor_name || v.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (v.vendor_code || v.vendorCode || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (v.page_no || v.pageNo || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (v.contact_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (v.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (v.cell_no || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (v.phone_no || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (v.phone || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (v.address || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (v.account_code || '').includes(searchTerm)
-    );
+    const parsePageNumber = (val?: string | null): number | null => {
+        if (!val) return null;
+        const match = String(val).match(/\d+/);
+        return match ? parseInt(match[0], 10) : null;
+    };
+
+    const filteredVendors = vendors
+        .filter(v =>
+            (v.vendor_name || v.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (v.vendor_code || v.vendorCode || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (v.page_no || v.pageNo || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (v.contact_name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (v.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (v.cell_no || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (v.phone_no || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (v.phone || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (v.address || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
+            (v.account_code || '').includes(searchTerm)
+        )
+        .sort((a, b) => {
+            if (!pageSortOrder) {
+                return (a.vendor_name || a.name || '').localeCompare(b.vendor_name || b.name || '');
+            }
+
+            const pageA = a.page_no || a.pageNo;
+            const pageB = b.page_no || b.pageNo;
+            const numA = parsePageNumber(pageA);
+            const numB = parsePageNumber(pageB);
+
+            // If both have numeric page numbers
+            if (numA !== null && numB !== null) {
+                if (numA !== numB) {
+                    return pageSortOrder === 'asc' ? numA - numB : numB - numA;
+                }
+                return String(pageA).localeCompare(String(pageB), undefined, { numeric: true });
+            }
+
+            // If only one has a page number
+            if (numA !== null && numB === null) return pageSortOrder === 'asc' ? -1 : 1;
+            if (numA === null && numB !== null) return pageSortOrder === 'asc' ? 1 : -1;
+
+            // If both have text/alphanumeric page numbers
+            if (pageA && pageB) {
+                return pageSortOrder === 'asc'
+                    ? String(pageA).localeCompare(String(pageB), undefined, { numeric: true })
+                    : String(pageB).localeCompare(String(pageA), undefined, { numeric: true });
+            }
+            if (pageA && !pageB) return pageSortOrder === 'asc' ? -1 : 1;
+            if (!pageA && pageB) return pageSortOrder === 'asc' ? 1 : -1;
+
+            // Fallback secondary sort: alphabetical by vendor name
+            return (a.vendor_name || a.name || '').localeCompare(b.vendor_name || b.name || '');
+        });
 
     const totalEntries = filteredVendors.length;
     const totalPages = Math.ceil(totalEntries / pageSize);
@@ -214,7 +256,7 @@ const VendorList = () => {
 
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchTerm, pageSize]);
+    }, [searchTerm, pageSize, pageSortOrder]);
 
     return (
         <div className="mx-auto max-w-7xl flex flex-col gap-6 relative text-black dark:text-bodydark text-xs">
@@ -266,7 +308,18 @@ const VendorList = () => {
                     <table className="w-full table-auto border-collapse">
                         <thead>
                             <tr className="bg-gray-2 text-left dark:bg-meta-4 text-xs font-bold uppercase tracking-wider text-black dark:text-white border-b border-stroke dark:border-strokedark">
-                                <th className="py-4 px-4 font-semibold min-w-[80px]">Page #</th>
+                                <th 
+                                    onClick={() => setPageSortOrder(prev => prev === 'asc' ? 'desc' : prev === 'desc' ? null : 'asc')}
+                                    className="py-4 px-4 font-semibold min-w-[95px] cursor-pointer select-none hover:text-primary transition"
+                                    title="Click to toggle Page # sorting"
+                                >
+                                    <div className="flex items-center gap-1">
+                                        <span>Page #</span>
+                                        {pageSortOrder === 'asc' && <MdArrowUpward size={14} className="text-primary font-bold" />}
+                                        {pageSortOrder === 'desc' && <MdArrowDownward size={14} className="text-primary font-bold" />}
+                                        {!pageSortOrder && <span className="text-[10px] text-gray-400 font-normal">⇅</span>}
+                                    </div>
+                                </th>
                                 <th className="py-4 px-4 font-semibold min-w-[100px]">Code</th>
                                 <th className="py-4 px-4 font-semibold min-w-[180px]">Vendor / Business Name</th>
                                 <th className="py-4 px-4 font-semibold min-w-[140px]">Contact Person</th>

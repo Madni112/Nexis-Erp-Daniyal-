@@ -137,18 +137,11 @@ const PrintChallan = () => {
             table-layout: auto !important;
             border-collapse: collapse !important;
             margin-top: 15px !important;
-          th {
-            padding: 8px 8px !important;
-            border: 1px solid #000000 !important;
-            font-size: 14.5px !important;
-            font-weight: 800 !important;
-            text-align: center !important;
           }
-          td {
-            padding: 8px 8px !important;
+          th, td {
+            padding: 10px 8px !important;
             border: 1px solid #000000 !important;
-            font-size: 14px !important;
-            font-weight: 600 !important;
+            font-size: 13px !important;
             text-align: center !important;
           }
         }
@@ -162,7 +155,12 @@ const PrintChallan = () => {
           ← Return to History
         </button>
         <button
-          onClick={() => window.print()}
+          onClick={async () => {
+            if (challan?.id && !challan.is_printed) {
+              await supabase.from('delivery_challans').update({ is_printed: true }).eq('id', challan.id);
+            }
+            window.print();
+          }}
           className="flex items-center gap-2 rounded bg-emerald-600 py-2 px-5 text-sm font-bold text-white hover:bg-emerald-700 transition shadow-sm cursor-pointer"
         >
           🖨️ Print Gate Pass Document
@@ -185,30 +183,30 @@ const PrintChallan = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 border-b border-gray-300 pb-4 mb-6 text-xs uppercase tracking-wider font-semibold">
-            <div>
-              <span className="text-gray-500 block mb-0.5">System DC #:</span>
-              <strong className="text-sm font-black text-black font-mono">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 border-b border-gray-300 pb-4 mb-6 text-xs uppercase tracking-wider font-semibold">
+            <div className="min-w-0 pr-2">
+              <span className="text-gray-500 block mb-0.5 text-[11px]">System DC #:</span>
+              <strong className="text-xs font-black text-black font-mono break-all block leading-tight">
                 {challanTitle}
               </strong>
             </div>
-            <div>
-              <span className="text-gray-500 block mb-0.5">Gate Pass #:</span>
-              <strong className="text-sm font-black text-emerald-800 font-mono">
+            <div className="min-w-0 pr-2">
+              <span className="text-gray-500 block mb-0.5 text-[11px]">Gate Pass #:</span>
+              <strong className="text-xs font-black text-emerald-800 font-mono break-all block leading-tight">
                 {challan.gate_pass_no || challanTitle}
               </strong>
             </div>
-            <div>
-              <span className="text-gray-500 block mb-0.5">Linked Invoice:</span>
-              <span className="text-red-600 text-sm font-mono font-black">{challan.invoice_no || 'N/A'}</span>
+            <div className="min-w-0 pr-2">
+              <span className="text-gray-500 block mb-0.5 text-[11px]">Linked Invoice:</span>
+              <span className="text-red-600 text-xs font-mono font-black break-all block leading-tight">{challan.invoice_no || 'N/A'}</span>
             </div>
-            <div>
-              <span className="text-gray-500 block mb-0.5">Dispatch Date:</span>
-              <span className="text-black text-sm font-bold">{formatPrintDate(challan.dc_date || challan.created_at)}</span>
+            <div className="min-w-0 pr-2">
+              <span className="text-gray-500 block mb-0.5 text-[11px]">Dispatch Date:</span>
+              <span className="text-black text-xs font-bold block leading-tight">{formatPrintDate(challan.dc_date || challan.created_at)}</span>
             </div>
-            <div>
-              <span className="text-gray-500 block mb-0.5">Vehicle Plate:</span>
-              <strong className="text-black text-sm font-bold">{challan.vehicle_no || 'Direct Handover'}</strong>
+            <div className="min-w-0">
+              <span className="text-gray-500 block mb-0.5 text-[11px]">Vehicle Plate:</span>
+              <strong className="text-black text-xs font-bold break-words block leading-tight">{challan.vehicle_no || 'Direct Handover'}</strong>
             </div>
           </div>
 
@@ -244,14 +242,17 @@ const PrintChallan = () => {
               </thead>
               <tbody>
                 {(() => {
-                  const printedItems = challan.items ? challan.items.filter((item: any) => Number(item.dispatchedQty ?? item.qty ?? 0) > 0) : [];
+                  const printedItems = challan.items ? challan.items.filter((item: any) => {
+                    const q = Number(item.dispatchedQty > 0 ? item.dispatchedQty : (item.qty || item.orderQty || 0));
+                    return q > 0;
+                  }) : [];
                   return (
                     <>
                       {printedItems.map((item: any, idx: number) => {
-                        const dispatchedQty = Number(item.dispatchedQty ?? item.qty ?? 0);
+                        const effectiveQty = Number(item.dispatchedQty > 0 ? item.dispatchedQty : (item.qty || item.orderQty || 0));
                         
                         let pcsPerBox = 1;
-                        const prodName = String(item.pDescription || item.itemName || '').trim().toLowerCase();
+                        const prodName = String(item.pDescription || item.itemName || item.product_name || '').trim().toLowerCase();
                         const prod = productsMaster.find(p => String(p?.product_name || '').trim().toLowerCase() === prodName);
                         if (prod) {
                            const rawPcs = Number(prod.pieces_per_box || prod.pcs_per_box || prod.pieces_per_packing || 0);
@@ -261,9 +262,9 @@ const PrintChallan = () => {
                            }
                         }
 
-                        let displayQty = String(dispatchedQty);
+                        let displayQty = String(effectiveQty);
                         if (pcsPerBox > 1) {
-                          const totPcs = Math.round(dispatchedQty * pcsPerBox);
+                          const totPcs = Math.round(effectiveQty * pcsPerBox);
                           const b = Math.floor(totPcs / pcsPerBox);
                           const p = totPcs % pcsPerBox;
                           totalBoxes += b;
@@ -272,15 +273,15 @@ const PrintChallan = () => {
                           else if (b === 0) displayQty = `${p} Pcs`;
                           else displayQty = `${b} Boxes + ${p} Pcs`;
                         } else {
-                          totalBoxes += dispatchedQty;
-                          displayQty = String(dispatchedQty);
+                          totalBoxes += effectiveQty;
+                          displayQty = String(effectiveQty);
                         }
 
                         return (
                           <tr key={idx} className="font-medium text-center">
                             <td className="border border-gray-300 p-2 text-center bg-gray-50/50">{idx + 1}</td>
-                            <td className="border border-gray-300 p-2 text-center font-mono">{item.skuCode || item.pCode}</td>
-                            <td className="border border-gray-300 p-2 text-black font-semibold text-left">{item.pDescription}</td>
+                            <td className="border border-gray-300 p-2 text-center font-mono">{item.skuCode || item.pCode || item.item_code || '-'}</td>
+                            <td className="border border-gray-300 p-2 text-black font-semibold text-left">{item.pDescription || item.itemName || item.product_name}</td>
                             <td className="border border-gray-300 p-2 text-center font-black text-sm text-black bg-gray-100 font-mono">
                               {displayQty}
                             </td>

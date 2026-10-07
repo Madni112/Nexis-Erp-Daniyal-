@@ -19,7 +19,7 @@ interface SidebarProps {
 const FlyoutSubMenu = ({ item, pathname, handleLinkClick, getTenantPath }: any) => {
   const [showSubFlyout, setShowSubFlyout] = useState(false);
 
-  if (item.children) {
+  if (item && item.children && Array.isArray(item.children)) {
     return (
       <li
         className="relative"
@@ -207,7 +207,7 @@ const SidebarItem = ({ item, pathname, depth = 0, sidebarOpen, setSidebarOpen, h
                   }}
                 >
                   <ul className="flex flex-col gap-1 py-1">
-                    {item.children.map((child: any, idx: number) => (
+                    {Array.isArray(item.children) && item.children.map((child: any, idx: number) => (
                       <SidebarItem
                         key={idx}
                         item={child}
@@ -375,8 +375,8 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }: SidebarProps) => {
         <div className="no-scrollbar flex flex-col overflow-y-auto overflow-x-hidden flex-1">
           <nav className={`py-4 duration-300 ${sidebarOpen ? 'px-3' : 'px-0 min-[751px]:px-2'}`}>
             <ul className="mb-6 flex flex-col gap-1.5 w-full">
-              {roleRoutes
-                .filter((route: any) => !route.hideFromSidebar)
+              {(Array.isArray(roleRoutes) ? roleRoutes : [])
+                .filter((route: any) => route && !route.hideFromSidebar)
                 .map((route: any, index: number) => (
                   <SidebarItem
                     key={index}

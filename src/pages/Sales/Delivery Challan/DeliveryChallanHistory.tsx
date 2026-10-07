@@ -5,11 +5,22 @@ import { toast } from 'react-hot-toast';
 import Spinner from '../../../ui/Spinner';
 import TableActions from '../../../ui/TableActions';
 import { useAuth } from '../../../Context/Auth';
-import { FiCheckCircle, FiTruck, FiX, FiClock, FiPlusCircle, FiAlertCircle, FiPrinter } from 'react-icons/fi';
+import { FiCheckCircle, FiTruck, FiX, FiClock, FiPlusCircle, FiAlertCircle, FiPrinter, FiCalendar } from 'react-icons/fi';
+
+// Helper to get exact date in Pakistan Time (YYYY-MM-DD)
+const getPakistanDate = () => {
+  try {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi' }).format(new Date());
+  } catch (e) {
+    return new Date().toISOString().split('T')[0];
+  }
+};
+
+import { logActivity } from '../../../service/auditLogger';
 
 const DeliveryChallanHistory = () => {
   const navigate = useNavigate();
-  const { tenantId, userLocationName } = useAuth();
+  const { tenantId, userLocationName, user } = useAuth();
   const [challans, setChallans] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [productsMaster, setProductsMaster] = useState<any[]>([]);
@@ -59,21 +70,39 @@ const DeliveryChallanHistory = () => {
   const fetchChallans = async () => {
     setLoading(true);
     try {
+      // 1. Fetch location types to identify all Sale Points (Shops/Showrooms)
+      const { data: locs } = await supabase.from('inventory_locations').select('name, location_type');
+      const shopNames = new Set(
+        (locs || [])
+          .filter(l => {
+            const t = String(l.location_type || '').toLowerCase();
+            return t.includes('sale') || t.includes('shop') || t.includes('showroom') || t.includes('counter');
+          })
+          .map(l => String(l.name || '').trim().toLowerCase())
+      );
+
       let query = supabase
         .from('delivery_challans')
         .select('*');
 
-      // Restrict Warehouse Managers to their assigned location, else filter SHOP for regular users (if that was the intention)
+      // Restrict Warehouse Managers to their assigned location
       if (userLocationName) {
         query = query.eq('dispatch_warehouse', userLocationName);
-      } else {
-        query = query.neq('dispatch_warehouse', 'SHOP');
       }
 
       const { data, error } = await query.order('created_at', { ascending: false });
 
       if (error) throw error;
-      setChallans(data || []);
+
+      // Filter to only include Storage Points (Warehouses/Godowns)
+      const warehouseOnly = (data || []).filter(dc => {
+        const whName = String(dc.dispatch_warehouse || '').trim().toLowerCase();
+        if (whName === 'shop' || whName.includes('showroom')) return false;
+        if (shopNames.has(whName)) return false;
+        return true;
+      });
+
+      setChallans(warehouseOnly);
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -84,8 +113,23 @@ const DeliveryChallanHistory = () => {
   const handleDelete = async (id: string | number) => {
     if (window.confirm('Are you completely sure you want to delete this delivery challan? This cannot be undone.')) {
       try {
+        const { data: targetChallan } = await supabase.from('delivery_challans').select('*').eq('id', id).maybeSingle();
         const { error } = await supabase.from('delivery_challans').delete().eq('id', id);
         if (error) throw error;
+
+        // Log audit activity
+        logActivity({
+          action: 'DELETE',
+          tableName: 'delivery_challans',
+          details: {
+            challan_no: targetChallan?.challan_no || id,
+            customer_name: targetChallan?.customer_name,
+            amount: targetChallan?.total_net_amount || targetChallan?.total_amount,
+            event: 'Deleted Delivery Challan'
+          },
+          performedBy: user?.name || user?.email || 'User'
+        });
+
         toast.success('Challan deleted successfully');
         fetchChallans();
       } catch (err: any) {
@@ -237,15 +281,16 @@ const DeliveryChallanHistory = () => {
         finalStatus = 'Dispatched';
       }
 
-      const processedItems = approvalItems.map(i => ({
+      const freightNum = Number(approvalFreightCharges) || 0;
+
+      // Current challan records only the approved/dispatched quantity
+      const processedApprovalItems = approvalItems.map(i => ({
         ...i,
         qty: Number(i.dispatchedQty || 0),
         dispatchedQty: Number(i.dispatchedQty || 0),
         orderQty: Number(i.orderQty || 0),
         holdQty: Number(i.holdQty || 0)
       }));
-
-      const freightNum = Number(approvalFreightCharges) || 0;
 
       const { error } = await supabase
         .from('delivery_challans')
@@ -256,19 +301,19 @@ const DeliveryChallanHistory = () => {
           freight_payment_status: freightNum > 0 ? 'Pending Approval' : 'Free / Direct',
           vehicle_no: approvalVehicle.trim() || 'Counter Delivery',
           driver_name: approvalDriver.trim() || 'Direct Handover',
-          remarks: approvalRemarks.trim() || `Approved by Warehouse Manager (${finalStatus})`,
+          remarks: approvalRemarks.trim() || `Approved by Warehouse Manager (Dispatched ${totalDispatchedQty} pcs)`,
           total_quantity: totalDispatchedQty,
           total_amount: baseAmount,
           total_discount: totalDisc,
           total_net_amount: netAmount,
-          status: finalStatus,
-          items: processedItems
+          status: 'Dispatched',
+          items: processedApprovalItems
         })
         .eq('id', selectedChallanForApproval.id);
 
       if (error) throw error;
 
-      toast.success(`Challan #${selectedChallanForApproval.challan_no || selectedChallanForApproval.id} approved: ${finalStatus}`);
+      toast.success(`Challan #${selectedChallanForApproval.challan_no || selectedChallanForApproval.id} approved: Dispatched ${totalDispatchedQty} pcs`);
       setSelectedChallanForApproval(null);
       fetchChallans();
     } catch (err: any) {
@@ -514,7 +559,18 @@ const DeliveryChallanHistory = () => {
                 </div>
               </div>
 
-              {/* Items Verification Table */}
+                            {/* Locked Dispatch Date Banner (Pakistan Standard Time) */}
+              <div className="flex items-center justify-between bg-slate-50 dark:bg-meta-4/20 p-3 rounded-xl border border-stroke dark:border-strokedark">
+                <div className="flex items-center gap-2">
+                  <FiCalendar className="text-primary text-base" />
+                  <span className="font-bold text-black dark:text-white">Dispatch Date (PK Time):</span>
+                </div>
+                <div className="flex items-center gap-1.5 bg-white dark:bg-boxdark border border-stroke dark:border-strokedark rounded-lg px-3 py-1 font-mono font-bold text-xs text-slate-700 dark:text-slate-300 shadow-xs">
+                  <span>🔒 {getPakistanDate()}</span>
+                </div>
+              </div>
+
+{/* Items Verification Table */}
               <div className="border border-stroke dark:border-strokedark rounded-xl overflow-hidden shadow-xs">
                 <div className="bg-slate-100 dark:bg-slate-800 px-3 py-2 flex justify-between items-center border-b border-stroke dark:border-strokedark">
                   <span className="font-bold text-[11px] uppercase tracking-wide text-slate-700 dark:text-slate-300">Items Fulfillment List</span>
@@ -948,12 +1004,12 @@ const DeliveryChallanHistory = () => {
                             // Simplify overflow pcs (e.g., 5 pcs when 4 per box -> 1 box 1 pc) - rough approximation if mixed pcsPerBox, but usually fine per invoice
                             const holdDisplay = totalHoldPcs > 0 ? `${totalHoldBoxes} + ${totalHoldPcs} Pcs` : `${totalHoldBoxes}`;
 
-                            const isPending = c.status === 'Pending Approval';
-                            const isPartial = c.status === 'Partially Dispatched';
+                            const isPending = !c.status || c.status === 'Pending' || c.status === 'Pending Approval' || c.status === 'Pending Dispatch';
+                            const isPartial = c.status === 'Partially Dispatched' || String(c.status || '').toLowerCase().includes('partial');
                             const isDispatched = c.status === 'Dispatched' || c.status === 'Fully Dispatched';
 
-                            // "Send Rest" only appears IF the challan was actually approved & has hold units
-                            const canSendRest = isPartial && (totalHoldBoxes > 0 || totalHoldPcs > 0) && !isPending;
+                            // "Send Rest" appears whenever there are remaining hold items on an approved/printed challan
+                            const canSendRest = (totalHoldBoxes > 0 || totalHoldPcs > 0) && (!isPending || c.is_printed);
 
                             return (
                               <tr key={c.id} className="hover:bg-slate-50 dark:hover:bg-slate-800/40 transition">
@@ -1029,37 +1085,38 @@ const DeliveryChallanHistory = () => {
                                 </td>
 
                                 <td className="py-3 px-4 text-center">
-                                  {isPending ? (
+                                  {c.is_printed ? (
+                                    <span className="inline-flex items-center gap-1 rounded-full py-0.5 px-2.5 text-[10px] font-black uppercase tracking-wider bg-green-50 text-green-600 border border-green-300 dark:bg-green-950/60 dark:text-green-400 dark:border-green-700">
+                                      <FiPrinter /> Printed
+                                    </span>
+                                  ) : isPending ? (
                                     <span className="inline-flex items-center gap-1 rounded-full py-0.5 px-2.5 text-[10px] font-black uppercase tracking-wider bg-rose-50 text-rose-600 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800">
                                       <FiClock /> Pending
                                     </span>
-                                  ) : isPartial ? (
-                                    <span className="inline-flex flex-col items-center gap-0.5 rounded-3xl py-1 px-3 text-[10px] font-black uppercase tracking-wider bg-amber-50 text-amber-600 border border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800 text-center leading-none">
-                                      <span className="inline-flex items-center gap-1"><FiAlertCircle /> Partial</span>
-                                      <span className="text-[9px] font-bold opacity-80 normal-case">({holdDisplay} Hold)</span>
-                                    </span>
-                                  ) : isDispatched ? (
-                                    <span className="inline-flex items-center gap-1 rounded-full py-0.5 px-2.5 text-[10px] font-black uppercase tracking-wider bg-emerald-50 text-emerald-600 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800">
-                                      <FiCheckCircle /> Dispatched
-                                    </span>
-                                  ) : (
-                                    <span className="inline-flex items-center gap-1 rounded-full py-0.5 px-2.5 text-[10px] font-black uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">
-                                      {c.status.toUpperCase()}
-                                    </span>
-                                  )}
+                                  ) : null}
                                 </td>
 
                                 <td className="py-3 px-4 text-right pr-6">
                                   <div className="flex items-center justify-end gap-2">
-                                    {/* APPROVE BUTTON */}
-                                    {!c.is_printed && (
+                                    {/* APPROVE BUTTON (When Pending) */}
+                                    {isPending && (
                                       <button
                                         type="button"
                                         onClick={() => openApprovalModal(c)}
-                                        className={`inline-flex items-center gap-1 py-1 px-2.5 rounded text-[11px] font-bold text-white shadow-xs transition duration-150 cursor-pointer ${isPending ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-slate-700 hover:bg-slate-800'
-                                          }`}
+                                        className="inline-flex items-center gap-1 py-1 px-2.5 rounded text-[11px] font-bold text-white shadow-xs transition duration-150 cursor-pointer bg-emerald-600 hover:bg-emerald-700"
                                       >
-                                        <FiTruck size={12} /> {isPending ? 'Approve Items' : 'Edit Dispatch'}
+                                        <FiTruck size={12} /> Approve Items
+                                      </button>
+                                    )}
+
+                                    {/* EDIT DISPATCH BUTTON (Only shown before printing; disappears once printed) */}
+                                    {!isPending && !c.is_printed && (
+                                      <button
+                                        type="button"
+                                        onClick={() => openApprovalModal(c)}
+                                        className="inline-flex items-center gap-1 py-1 px-2.5 rounded text-[11px] font-bold text-white shadow-xs transition duration-150 cursor-pointer bg-slate-700 hover:bg-slate-800"
+                                      >
+                                        <FiTruck size={12} /> Edit Dispatch
                                       </button>
                                     )}
 
@@ -1075,17 +1132,8 @@ const DeliveryChallanHistory = () => {
                                       </button>
                                     )}
 
-                                    {/* PRINT GATE PASS */}
-                                    {isPending ? (
-                                      <button
-                                        type="button"
-                                        disabled
-                                        className="inline-flex items-center gap-1 py-1 px-2.5 rounded text-[11px] font-bold bg-slate-100 text-slate-400 dark:bg-slate-800 dark:text-slate-600 border border-slate-200 dark:border-slate-800 cursor-not-allowed opacity-60"
-                                        title="Approve items first to enable printing of Official Gate Pass"
-                                      >
-                                        🔒 Print Locked
-                                      </button>
-                                    ) : (
+                                    {/* PRINT GATE PASS - Only available after approval/dispatch */}
+                                    {!isPending && (
                                       <button
                                         type="button"
                                         onClick={() => handlePrintClick(c)}
