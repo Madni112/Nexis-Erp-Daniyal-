@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { CalendarDays, Check, MailX, Pencil, Trash2, X, Eye, Printer, Calendar, ChevronLeft, ChevronRight } from 'lucide-react';
-import { useTenant } from '../../context/TenantContext';
-import { useAuth } from '../../context/AuthContext';
+import { useTenant } from '../../Context/TenantContext';
+import { useAuth } from '../../Context/AuthContext';
 import { isoDay } from '../../utils/dateRange';
 import {
   decideLeave, deleteLeave, deleteLeaveType, getLeave, getLeaveExpiryDate, LeaveApplication, LeaveBalanceRow,

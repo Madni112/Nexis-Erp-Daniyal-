@@ -27,7 +27,7 @@ import {
   checkEmployeeHasTransactions
 } from '../../services/hr.service';
 import { useHub } from '../Setup/useHub';
-import { useTenant } from '../../context/TenantContext';
+import { useTenant } from '../../Context/TenantContext';
 
 export const EmployeesPage: React.FC = () => {
   const { tenantSlug, branchId } = useTenant();

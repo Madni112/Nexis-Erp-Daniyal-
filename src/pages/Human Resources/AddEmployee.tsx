@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { supabase } from '../../Context/supabaseClient';
 import { toast } from 'react-hot-toast';
 import Spinner from '../../ui/Spinner';
-import { useTenant } from '../../context/TenantContext';
+import { useTenant } from '../../Context/TenantContext';
 import { isoDay } from '../../utils/dateRange';
 import {
   Employee,

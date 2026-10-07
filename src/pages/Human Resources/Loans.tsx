@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Banknote, Eye, Pencil, Trash2, X } from 'lucide-react';
-import { useTenant } from '../../context/TenantContext';
-import { useAuth } from '../../context/AuthContext';
+import { useTenant } from '../../Context/TenantContext';
+import { useAuth } from '../../Context/AuthContext';
 import { isoDay } from '../../utils/dateRange';
 import {
   deleteLoan, EmployeeLoan, getLoans, monthNamed, saveLoan, updateLoan

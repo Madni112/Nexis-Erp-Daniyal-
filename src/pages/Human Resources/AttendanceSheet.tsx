@@ -12,8 +12,8 @@ import {
   CheckCircle2,
   Calendar
 } from 'lucide-react';
-import { useTenant } from '../../context/TenantContext';
-import { useAuth } from '../../context/AuthContext';
+import { useTenant } from '../../Context/TenantContext';
+import { useAuth } from '../../Context/AuthContext';
 import {
   AttendanceRow,
   ApprovedLeaveMeta,

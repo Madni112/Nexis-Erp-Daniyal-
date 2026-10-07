@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Pencil, Plus, Trash2, X } from 'lucide-react';
-import { useTenant } from '../../context/TenantContext';
-import { useAuth } from '../../context/AuthContext';
+import { useTenant } from '../../Context/TenantContext';
+import { useAuth } from '../../Context/AuthContext';
 import {
   deletePayHead, getPayHeads, PayHead, PayHeadKind, savePayHead, updatePayHead
 } from '../../services/hr.service';

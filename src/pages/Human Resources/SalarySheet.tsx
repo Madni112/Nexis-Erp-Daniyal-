@@ -25,8 +25,8 @@ import {
   Users,
   X
 } from 'lucide-react';
-import { useTenant } from '../../context/TenantContext';
-import { useAuth } from '../../context/AuthContext';
+import { useTenant } from '../../Context/TenantContext';
+import { useAuth } from '../../Context/AuthContext';
 import {
   approveSheet,
   createSheet,
