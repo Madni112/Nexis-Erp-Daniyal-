@@ -602,7 +602,7 @@ const HoldingReport: React.FC = () => {
       } else if (activePerspective === 'customer') {
         const columns: ExcelColumn[] = [
           { header: 'S#', key: 'idx', width: 8, alignment: 'center' },
-          { header: 'Customer / Client Title', key: 'customer', width: 32 },
+          { header: 'Customer Name', key: 'customer', width: 30 },
           { header: 'Gatepasses Involved', key: 'gpCount', width: 18, type: 'number' },
           { header: 'Invoices Count', key: 'invCount', width: 16, type: 'number' },
           { header: 'Held Items Count', key: 'itemsCount', width: 18, type: 'number' },

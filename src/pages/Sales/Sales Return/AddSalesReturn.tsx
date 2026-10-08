@@ -91,7 +91,14 @@ const AddSalesReturn = () => {
   );
   const isDirectInvoiceLink = !!editData && !isEditMode;
 
-  const [defaultReturnNo] = useState(() => (isEditMode && editData?.return_no ? editData.return_no : `RTN-${Math.floor(100000 + Math.random() * 900000)}`));
+  const [defaultReturnNo, setDefaultReturnNo] = useState<string>(() => {
+    if (isEditMode && editData?.id) {
+      return editData.return_no && !editData.return_no.match(/^RTN-\d{6}$/)
+        ? editData.return_no
+        : `RTN-${String(editData.id).padStart(4, '0')}`;
+    }
+    return '';
+  });
   const [shouldPrintAfterSave, setShouldPrintAfterSave] = useState(false);
 
   const formatMoney = (val: number | string | undefined | null): string => {
@@ -150,6 +157,27 @@ const AddSalesReturn = () => {
             currentEdit = rtnRecord;
             setFetchedEditRecord(rtnRecord);
           }
+        }
+
+        // Compute sequential Return Memo ID (e.g. RTN-0008)
+        if (currentEdit?.id) {
+          const formatted = currentEdit.return_no && !currentEdit.return_no.match(/^RTN-\d{6}$/)
+            ? currentEdit.return_no
+            : `RTN-${String(currentEdit.id).padStart(4, '0')}`;
+          setDefaultReturnNo(formatted);
+        } else {
+          const { data: latestReturn } = await supabase
+            .from('sales_returns')
+            .select('id')
+            .order('id', { ascending: false })
+            .limit(1)
+            .maybeSingle();
+
+          let nextId = 1;
+          if (latestReturn?.id) {
+            nextId = Number(latestReturn.id) + 1;
+          }
+          setDefaultReturnNo(`RTN-${String(nextId).padStart(4, '0')}`);
         }
 
         // 1. Fetch Customers & Sales Invoices
@@ -407,7 +435,7 @@ const AddSalesReturn = () => {
 
         <Formik
           initialValues={isEditMode && editData ? {
-            returnNo: editData.return_no || defaultReturnNo,
+            returnNo: (editData.return_no && !editData.return_no.match(/^RTN-\d{6}$/)) ? editData.return_no : (defaultReturnNo || `RTN-${String(editData.id || 1).padStart(4, '0')}`),
             customerName: editData.customer_name || '',
             sourceWarehouse: editData.warehouse_name || editData.source_warehouse || (locations[0]?.name || 'Main Warehouse'),
             invoiceNo: editData.original_invoice_no || editData.invoice_no || editData.metadata?.linkedInvoiceNo || '',
@@ -435,7 +463,7 @@ const AddSalesReturn = () => {
               uom: 'Nos'
             }]
           } : (isDirectInvoiceLink && editData ? {
-            returnNo: defaultReturnNo,
+            returnNo: defaultReturnNo || 'RTN-0001',
             customerName: editData.customer_name || '',
             sourceWarehouse: editData.dispatch_warehouse || (locations[0]?.name || 'Main Warehouse'),
             invoiceNo: editData.invoice_no || `INV-${String(editData.id).padStart(4, '0')}`,
@@ -456,7 +484,7 @@ const AddSalesReturn = () => {
               uom: i.uom || 'Nos'
             }))
           } : {
-            returnNo: defaultReturnNo,
+            returnNo: defaultReturnNo || 'RTN-0001',
             customerName: '',
             sourceWarehouse: locations[0]?.name || 'Main Warehouse',
             invoiceNo: '',
@@ -546,7 +574,8 @@ const AddSalesReturn = () => {
               });
 
               const matchedInvoicesSummary: any[] = [];
-              let primaryLinkedInv = values.invoiceNo || selectedInvNo || null;
+              const isExplicitInvoice = Boolean((values.invoiceNo || selectedInvNo || '').trim());
+              const explicitLinkedInv = isExplicitInvoice ? (values.invoiceNo || selectedInvNo || '').trim() : null;
 
               for (const item of values.items) {
                 const reqQty = Number(item.qty || 0);
@@ -596,24 +625,20 @@ const AddSalesReturn = () => {
                     is_exact_rate_match: Math.abs(invoiceRate - enteredRate) < 0.01
                   });
 
-                  if (!primaryLinkedInv) {
-                    primaryLinkedInv = inv.invoice_no || `INV-${String(inv.id).padStart(4, '0')}`;
-                  }
-
                   remainingToMatch -= deductQty;
                 }
               }
 
               // 2. Prepare payload
               const returnPayload = {
-                return_no: values.returnNo,
+                return_no: values.returnNo || defaultReturnNo,
                 customer_name: values.customerName,
                 return_date: values.returnDate,
                 gate_pass_no: values.gatePassNo,
                 warehouse_name: values.sourceWarehouse,
                 source_warehouse: values.sourceWarehouse,
-                invoice_no: primaryLinkedInv || (selectedInvNo ? selectedInvNo : null),
-                original_invoice_no: primaryLinkedInv || (selectedInvNo ? selectedInvNo : null),
+                invoice_no: explicitLinkedInv,
+                original_invoice_no: explicitLinkedInv,
                 settlement_mode: values.paymentTerm === 'By Cash' ? 'Cash' : (values.paymentTerm === 'By Bank' ? 'Bank' : (values.paymentTerm === 'Split' ? 'Split' : 'On Credit')),
                 payment_term: values.paymentTerm,
                 bank_name: values.selectedBankId || null,
@@ -636,7 +661,8 @@ const AddSalesReturn = () => {
                   selectedBankId: (values.paymentTerm === 'By Bank' || values.paymentTerm === 'Split') ? values.selectedBankId : null,
                   settlementMode: values.paymentTerm,
                   paymentTerm: values.paymentTerm,
-                  linkedInvoiceNo: primaryLinkedInv,
+                  linkedInvoiceNo: explicitLinkedInv,
+                  isGeneralReturn: !isExplicitInvoice,
                   matchedInvoices: matchedInvoicesSummary
                 }
               };
@@ -706,7 +732,7 @@ const AddSalesReturn = () => {
                       Return Memo ID Code #:
                     </label>
                     <div className="p-2.5 bg-slate-50 dark:bg-slate-800 rounded-xl font-mono font-black text-emerald-700 dark:text-emerald-400 border border-slate-200 dark:border-slate-700 text-xs flex items-center justify-between">
-                      <span>{values.returnNo}</span>
+                      <span>{values.returnNo || defaultReturnNo || 'RTN-...'}</span>
                       <span className="text-[10px] bg-emerald-100 text-emerald-800 px-1.5 py-0.5 rounded font-sans uppercase font-bold">Auto</span>
                     </div>
                   </div>

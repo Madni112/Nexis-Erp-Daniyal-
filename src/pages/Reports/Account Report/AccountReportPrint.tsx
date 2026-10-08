@@ -486,6 +486,7 @@ const AccountReportPrint = () => {
                             id: cust.id,
                             customer_name: cust.customerName || 'Walking Customer',
                             customer_code: cust.customer_code || cust.customerCode || '-',
+                            page_no: cust.page_no || cust.pageNo || '-',
                             category: cust.registrationType || 'Retail / General',
                             phone: cust.mobileNo || cust.phoneNo || '-',
                             address: cust.businessAddress || cust.residentialAddress || '-',
@@ -1486,8 +1487,9 @@ const AccountReportPrint = () => {
                 filename = `Customer_Balance_Detail_Report_${new Date().toISOString().split('T')[0]}`;
                 columns = [
                     { header: 'S#', key: 'sno', width: 8, alignment: { horizontal: 'center' } },
+                    { header: 'Customer Name', key: 'customer_name', width: 30 },
                     { header: 'Customer Code', key: 'customer_code', width: 16, alignment: { horizontal: 'center' } },
-                    { header: 'Customer / Business Name', key: 'customer_name', width: 30 },
+                    { header: 'Page #', key: 'page_no', width: 12, alignment: { horizontal: 'center' } },
                     { header: 'Customer Category', key: 'category', width: 22 },
                     { header: 'Contact / Phone', key: 'phone', width: 18 },
                     { header: 'Opening Balance (PKR)', key: 'opening_balance', width: 22, numFmt: '#,##0.00', alignment: { horizontal: 'right' } },
@@ -1502,8 +1504,9 @@ const AccountReportPrint = () => {
                     else if (r.closing_balance < -0.01) status = 'Credit Advance (Payable)';
                     return {
                         sno: i + 1,
-                        customer_code: r.customer_code || '-',
                         customer_name: r.customer_name,
+                        customer_code: r.customer_code || '-',
+                        page_no: r.page_no || '-',
                         category: r.category,
                         phone: r.phone,
                         opening_balance: Number(r.opening_balance || 0),
@@ -2010,8 +2013,13 @@ const AccountReportPrint = () => {
                                                                 {cust.customer_name}
                                                             </h3>
                                                             {cust.customer_code && cust.customer_code !== '-' && (
-                                                                <span className="text-xs font-mono bg-white border border-slate-300 text-slate-700 px-1.5 py-0.5 rounded font-bold">
+                                                                <span className="text-xs font-mono bg-white border border-slate-300 text-slate-700 px-1.5 py-0.5 rounded font-bold uppercase">
                                                                     {cust.customer_code}
+                                                                </span>
+                                                            )}
+                                                            {cust.page_no && cust.page_no !== '-' && (
+                                                                <span className="text-xs font-mono bg-white border border-slate-300 text-slate-600 px-1.5 py-0.5 rounded font-semibold">
+                                                                    {String(cust.page_no).toUpperCase().startsWith('P#') ? cust.page_no : `P# ${cust.page_no}`}
                                                                 </span>
                                                             )}
                                                             <span className="text-[10px] bg-slate-200 text-slate-800 px-2 py-0.5 rounded font-bold uppercase">
@@ -2316,7 +2324,7 @@ const AccountReportPrint = () => {
                                     <th className="p-1.5 border border-black text-center w-12">S#</th>
                                     <th className="p-1.5 border border-black text-center w-28">Date</th>
                                     <th className="p-1.5 border border-black w-36">Invoice / Ref No</th>
-                                    <th className="p-1.5 border border-black">Associated Ledger Entity Title Account Name</th>
+                                    <th className="p-1.5 border border-black min-w-[150px] max-w-[260px]">{activeTab === 2 ? 'Customer Name' : 'Supplier Name'}</th>
                                     <th className="p-1.5 border border-black text-center w-24">Payment Term</th>
                                     <th className="p-1.5 border border-black text-right pr-3 w-40">Gross Invoice Amount</th>
                                 </tr>
@@ -2367,7 +2375,7 @@ const AccountReportPrint = () => {
                                 <thead className="bg-gray-100 border-b border-black font-black uppercase text-black font-mono text-[10px]">
                                     <tr>
                                         <th className="p-1.5 border border-black text-center w-12">S#</th>
-                                        <th className="p-1.5 border border-black">Customer / Account Title</th>
+                                        <th className="p-1.5 border border-black min-w-[150px] max-w-[240px]">Customer Name</th>
                                         <th className="p-1.5 border border-black text-center w-24">Unpaid Invoices</th>
                                         <th className="p-1.5 border border-black text-right w-32">Total Outstanding Debt</th>
                                         <th className="p-1.5 border border-black text-right w-28">0 - 30 Days (Current)</th>
@@ -2753,7 +2761,7 @@ const AccountReportPrint = () => {
                                         <th className="p-2 border border-black text-center w-12">S#</th>
                                         <th className="p-2 border border-black text-center w-28">Voucher No</th>
                                         <th className="p-2 border border-black text-center w-24">Recovery Date</th>
-                                        <th className="p-2 border border-black">Customer Account Name</th>
+                                        <th className="p-2 border border-black min-w-[150px] max-w-[240px]">Customer Name</th>
                                         <th className="p-2 border border-black">Original Invoice Ref</th>
                                         <th className="p-2 border border-black">Narration / Notes</th>
                                         <th className="p-2 border border-black text-right w-36 pr-3">Recovered Amount</th>
@@ -3004,7 +3012,7 @@ const AccountReportPrint = () => {
                                     <th className="p-1.5 border border-black w-32">Invoice / Ref No</th>
                                     <th className="p-1.5 border border-black w-36">Entry Classification</th>
                                     <th className="p-1.5 border border-black w-32">Sales Officer</th>
-                                    <th className="p-1.5 border border-black">Customer / Account Title</th>
+                                    <th className="p-1.5 border border-black min-w-[140px] max-w-[220px]">Customer Name</th>
                                     <th className="p-1.5 border border-black text-right w-32">Sales Invoice (PKR)</th>
                                     <th className="p-1.5 border border-black text-right w-32 pr-3">Cash Collected (PKR)</th>
                                 </tr>
@@ -3076,8 +3084,7 @@ const AccountReportPrint = () => {
                                 <thead className="bg-gray-100 border-b border-black font-black uppercase text-black font-mono text-[10px]">
                                     <tr>
                                         <th className="p-1.5 border border-black text-center w-8">S#</th>
-                                        <th className="p-1.5 border border-black text-center w-24">Cust Code</th>
-                                        <th className="p-1.5 border border-black">Customer / Business Name</th>
+                                        <th className="p-1.5 border border-black w-[22%] min-w-[160px] max-w-[280px]">Customer Name</th>
                                         <th className="p-1.5 border border-black text-center w-32">Customer Category</th>
                                         <th className="p-1.5 border border-black text-center w-28">Contact / Phone</th>
                                         <th className="p-1.5 border border-black text-right w-32">Opening Balance (PKR)</th>
@@ -3100,20 +3107,31 @@ const AccountReportPrint = () => {
                                         return (
                                             <React.Fragment key={row.id || i}>
                                                 <tr className={`border-b border-black hover:bg-gray-50 font-semibold font-mono text-xs ${isExpanded ? 'bg-slate-50/70' : ''}`}>
-                                                    <td className="p-1.5 border border-black text-center text-gray-400">{startIndex + i + 1}</td>
-                                                    <td className="p-1.5 border border-black text-center font-mono">
-                                                        {row.customer_code && row.customer_code !== '-' ? (
-                                                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-slate-100 text-slate-800 border border-slate-200">
-                                                                {row.customer_code}
-                                                            </span>
-                                                        ) : (
-                                                            <span className="text-gray-400 text-[10px]">-</span>
-                                                        )}
-                                                    </td>
-                                                    <td className="p-1.5 border border-black font-sans text-black font-bold">
+                                                    <td className="p-1.5 border border-black text-center text-gray-400 align-top">{startIndex + i + 1}</td>
+                                                    <td className="p-1.5 border border-black font-sans text-black font-bold align-top">
                                                         <div>{row.customer_name}</div>
+                                                        {(() => {
+                                                            const code = row.customer_code && row.customer_code !== '-' ? row.customer_code : '';
+                                                            const pageNo = row.page_no && row.page_no !== '-' ? row.page_no : '';
+                                                            if (!code && !pageNo) return null;
+                                                            return (
+                                                                <div className="text-[10px] font-mono text-slate-700 flex flex-wrap items-center gap-1 mt-0.5 font-normal">
+                                                                    {code && (
+                                                                        <span className="bg-slate-100 px-1 py-0.2 rounded border border-slate-300 font-bold uppercase text-slate-800 text-[9.5px]">
+                                                                            {code}
+                                                                        </span>
+                                                                    )}
+                                                                    {code && pageNo && <span className="text-slate-400 font-bold">|</span>}
+                                                                    {pageNo && (
+                                                                        <span className="text-slate-600 font-semibold text-[9.5px]">
+                                                                            {String(pageNo).toUpperCase().startsWith('P#') ? pageNo : `P# ${pageNo}`}
+                                                                        </span>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })()}
                                                         {row.address && row.address !== '-' && (
-                                                            <div className="text-[9px] text-gray-500 font-normal truncate max-w-xs">{row.address}</div>
+                                                            <div className="text-[9px] text-gray-500 font-normal truncate max-w-xs mt-0.5">{row.address}</div>
                                                         )}
                                                     </td>
                                                     <td className="p-1.5 border border-black text-center font-sans">
@@ -3174,7 +3192,7 @@ const AccountReportPrint = () => {
                                                 {/* Expanded Transaction Details Sub-Table */}
                                                 {isExpanded && (
                                                     <tr className="bg-slate-50/90 border-b-2 border-black">
-                                                        <td colSpan={11} className="p-3 pl-8 pr-4 border border-black bg-slate-50/70">
+                                                        <td colSpan={10} className="p-3 pl-8 pr-4 border border-black bg-slate-50/70">
                                                             <div className="bg-white rounded-lg border border-slate-300 p-3 shadow-2xs space-y-2">
                                                                 <div className="text-[10px] font-black uppercase tracking-wider text-slate-800 pb-1.5 border-b border-slate-200 flex justify-between items-center">
                                                                     <span>Itemized Period Audit for {row.customer_name} {row.customer_code ? `(${row.customer_code})` : ''}</span>
@@ -3240,7 +3258,7 @@ const AccountReportPrint = () => {
                                 <tfoot>
                                     {!isPrinting && pageSize !== 'all' && (
                                         <tr className="bg-amber-50/80 border-t border-amber-200 font-bold font-mono text-xs text-amber-950">
-                                            <td colSpan={5} className="p-2 border border-black text-right uppercase tracking-wider">
+                                            <td colSpan={4} className="p-2 border border-black text-right uppercase tracking-wider">
                                                 Page Subtotal (This Page):
                                             </td>
                                             <td className="p-2 border border-black text-right font-bold">
@@ -3261,7 +3279,7 @@ const AccountReportPrint = () => {
                                         </tr>
                                     )}
                                     <tr className="bg-gray-100 border-t-2 border-black font-black font-mono text-xs">
-                                        <td colSpan={5} className="p-2 border border-black text-right uppercase tracking-wider text-black">
+                                        <td colSpan={4} className="p-2 border border-black text-right uppercase tracking-wider text-black">
                                             Grand Totals Summary (All {reportRows.length} Records):
                                         </td>
                                         <td className="p-2 border border-black text-right text-black font-black text-xs">

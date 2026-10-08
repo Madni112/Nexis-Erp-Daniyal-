@@ -18,6 +18,26 @@ const SaleReportPrint = () => {
   const [reportRows, setReportRows] = useState<any[]>([]);
   const [categoryHierarchyTree, setCategoryHierarchyTree] = useState<any[]>([]);
   const [productUomMap, setProductUomMap] = useState<Record<string, string>>({});
+  const [customerLookup, setCustomerLookup] = useState<Record<string, { code: string; pageNo: string }>>({});
+
+  const resolveCustomerMeta = (custName?: string) => {
+    const raw = String(custName || '').trim().toLowerCase();
+    const clean = raw.replace(/\s+/g, ' ');
+    if (!clean) return { code: '', pageNo: '' };
+
+    if (customerLookup[clean]) return customerLookup[clean];
+    if (customerLookup[raw]) return customerLookup[raw];
+
+    if (clean === 'cash') {
+      if (customerLookup['walk-in customer']) return customerLookup['walk-in customer'];
+      if (customerLookup['cash customer']) return customerLookup['cash customer'];
+    }
+
+    const entry = Object.entries(customerLookup).find(([k]) => k === clean || k.includes(clean) || clean.includes(k));
+    if (entry) return entry[1];
+
+    return { code: '', pageNo: '' };
+  };
 
   const config = location.state || { type: 'sale', filters: {} };
   const { type: rType, filters = {} } = config;
@@ -82,8 +102,12 @@ const SaleReportPrint = () => {
           filters.customer = rawCustList.map((item: string) => String(item).replace(/^\[.*?\]\s*/, '').trim());
         }
 
-        // Fetch products lookup for UOM, categories & brands
-        const { data: prodData } = await supabase.from('products').select('*');
+        // Fetch products and customers lookup for UOM, codes & ledger page nos
+        const [prodRes, custRes] = await Promise.all([
+          supabase.from('products').select('*'),
+          supabase.from('customers').select('id, customerName, customername, customer_code, customerCode, page_no, pageNo')
+        ]);
+        const prodData = prodRes.data;
         const uomMapObj: Record<string, string> = {};
         if (prodData) {
           prodData.forEach((p: any) => {
@@ -93,6 +117,20 @@ const SaleReportPrint = () => {
             }
           });
           setProductUomMap(uomMapObj);
+        }
+
+        const custLookupMap: Record<string, { code: string; pageNo: string }> = {};
+        if (custRes.data) {
+          custRes.data.forEach((c: any) => {
+            const rawName = String(c.customerName || c.customername || '').trim().toLowerCase().replace(/\s+/g, ' ');
+            if (rawName) {
+              custLookupMap[rawName] = {
+                code: String(c.customer_code || c.customerCode || '').trim(),
+                pageNo: String(c.page_no || c.pageNo || '').trim()
+              };
+            }
+          });
+          setCustomerLookup(custLookupMap);
         }
 
         // ── 📂 REPORT TYPE: CATEGORY-WISE SALES & VOLUME REPORT ──
@@ -1570,7 +1608,14 @@ const SaleReportPrint = () => {
   };
 
   // Helper function to extract line item details
-  const extractItemDetails = (row: any): Array<{ name: string; qty: number | string; uom: string; price: number | string }> => {
+  const extractItemDetails = (row: any): Array<{
+    name: string;
+    qty: number | string;
+    uom: string;
+    price: number | string;
+    discountAmt: number;
+    discountPer: number;
+  }> => {
     let itemsList: any[] = [];
     if (Array.isArray(row.items)) {
       itemsList = row.items;
@@ -1585,13 +1630,77 @@ const SaleReportPrint = () => {
       const name = it.itemName || it.pDescription || it.product_name || it.name || 'Product';
       const cleanKey = String(name).trim().toLowerCase();
       const uom = it.uom || it.unit || productUomMap[cleanKey] || 'Nos';
+      const price = Number(it.rp ?? it.rate ?? it.price ?? 0);
+      const qty = Number(it.qty ?? it.quantity ?? it.orderQty ?? 1);
+      const gross = price * qty;
+      const discountAmt = Number(it.discountAmt ?? it.discount_amt ?? ((gross * Number(it.discountPer ?? it.discount_per ?? 0)) / 100));
+      const discountPer = Number(
+        it.discountPer ??
+        it.discount_per ??
+        (gross > 0 && discountAmt > 0 ? (discountAmt / gross) * 100 : 0)
+      );
       return {
         name,
         qty: it.qty ?? it.quantity ?? it.orderQty ?? 1,
         uom,
-        price: it.rp ?? it.rate ?? it.price ?? 0
+        price,
+        discountAmt,
+        discountPer: Number(discountPer.toFixed(2)) === Math.round(discountPer) ? Math.round(discountPer) : Number(discountPer.toFixed(1))
       };
     }).filter(it => it.name);
+  };
+
+  // Helper function to extract per-item and overall bill discounts
+  const extractRowDiscounts = (row: any) => {
+    let itemsList: any[] = [];
+    if (Array.isArray(row.items)) {
+      itemsList = row.items;
+    } else if (typeof row.items === 'string') {
+      try {
+        itemsList = JSON.parse(row.items);
+      } catch {
+        itemsList = [];
+      }
+    }
+
+    const itemsWithDiscount: Array<{ name: string; discountAmt: number; discountPer: number }> = [];
+    let totalItemDiscount = 0;
+
+    itemsList.forEach((it: any) => {
+      const price = Number(it.rp ?? it.rate ?? it.price ?? 0);
+      const qty = Number(it.qty ?? it.quantity ?? it.orderQty ?? 1);
+      const gross = price * qty;
+      const discountAmt = Number(it.discountAmt ?? it.discount_amt ?? ((gross * Number(it.discountPer ?? it.discount_per ?? 0)) / 100));
+      const discountPer = Number(
+        it.discountPer ??
+        it.discount_per ??
+        (gross > 0 && discountAmt > 0 ? (discountAmt / gross) * 100 : 0)
+      );
+      if (discountAmt > 0) {
+        totalItemDiscount += discountAmt;
+        itemsWithDiscount.push({
+          name: it.itemName || it.pDescription || it.product_name || it.name || 'Item',
+          discountAmt,
+          discountPer: Number(discountPer.toFixed(2)) === Math.round(discountPer) ? Math.round(discountPer) : Number(discountPer.toFixed(1))
+        });
+      }
+    });
+
+    const overallBillDiscount = Number(
+      row.overall_discount ||
+      row.discount_amount ||
+      itemsList.find((i: any) => i._overallDiscount !== undefined)?._overallDiscount ||
+      0
+    );
+
+    const grandTotalDiscount = totalItemDiscount + overallBillDiscount;
+
+    return {
+      itemsWithDiscount,
+      totalItemDiscount,
+      overallBillDiscount,
+      grandTotalDiscount
+    };
   };
 
   // ── 📥 EXCEL WORKBOOK EXPORT ──
@@ -1875,11 +1984,11 @@ const SaleReportPrint = () => {
         if (activeViewMode === 'summary') {
           columns = [
             { header: 'S#', key: 'sno', width: 8, alignment: { horizontal: 'center' } },
-            { header: 'Customer / Client Name', key: 'customer_name', width: 28 },
-            { header: 'Invoices Booked', key: 'invoices_count', width: 16, numFmt: '#,##0', alignment: { horizontal: 'right' } },
-            { header: 'Returns Booked', key: 'returns_count', width: 16, numFmt: '#,##0', alignment: { horizontal: 'right' } },
-            { header: 'Gross Volume', key: 'gross_units', width: 16, numFmt: '#,##0.00', alignment: { horizontal: 'right' } },
-            { header: 'Returned Volume', key: 'returned_units', width: 16, numFmt: '#,##0.00', alignment: { horizontal: 'right' } },
+            { header: 'Customer Name', key: 'customer_name', width: 28 },
+            { header: 'Customer Code', key: 'customer_code', width: 16, alignment: { horizontal: 'center' } },
+            { header: 'Page #', key: 'page_no', width: 14, alignment: { horizontal: 'center' } },
+            { header: 'Sold Volume', key: 'gross_units', width: 16, numFmt: '#,##0.00', alignment: { horizontal: 'right' } },
+            { header: 'Return Volume', key: 'returned_units', width: 16, numFmt: '#,##0.00', alignment: { horizontal: 'right' } },
             { header: 'Net Volume', key: 'net_units', width: 16, numFmt: '#,##0.00', alignment: { horizontal: 'right' } },
             { header: 'Gross Sales (PKR)', key: 'gross_sales', width: 20, numFmt: '#,##0.00', alignment: { horizontal: 'right' } },
             { header: 'Returns Credited (PKR)', key: 'return_amount', width: 22, numFmt: '#,##0.00', alignment: { horizontal: 'right' } },
@@ -1887,19 +1996,24 @@ const SaleReportPrint = () => {
             { header: 'Contribution (%)', key: 'contribution_pct', width: 16, numFmt: '0.00"%"', alignment: { horizontal: 'right' } }
           ];
 
-          exportData = reportRows.map((cust, i) => ({
-            sno: i + 1,
-            customer_name: cust.customer_name,
-            invoices_count: cust.invoices_count,
-            returns_count: cust.returns_count,
-            gross_units: cust.gross_units,
-            returned_units: cust.returned_units,
-            net_units: cust.net_units,
-            gross_sales: cust.gross_sales,
-            return_amount: cust.return_amount,
-            net_sales: cust.net_sales,
-            contribution_pct: cust.contribution_pct
-          }));
+          exportData = reportRows.map((cust, i) => {
+            const meta = resolveCustomerMeta(cust.customer_name);
+            const code = cust.customer_code || cust.customerCode || meta.code || '-';
+            const pageNo = cust.page_no || cust.pageNo || meta.pageNo || '-';
+            return {
+              sno: i + 1,
+              customer_name: cust.customer_name,
+              customer_code: code,
+              page_no: pageNo,
+              gross_units: cust.gross_units,
+              returned_units: cust.returned_units,
+              net_units: cust.net_units,
+              gross_sales: cust.gross_sales,
+              return_amount: cust.return_amount,
+              net_sales: cust.net_sales,
+              contribution_pct: cust.contribution_pct
+            };
+          });
         } else {
           columns = [
             { header: 'S#', key: 'sno', width: 6, alignment: { horizontal: 'center' } },
@@ -2193,21 +2307,30 @@ const SaleReportPrint = () => {
         if (activeViewMode === 'summary') {
           columns = [
             { header: 'S#', key: 'sno', width: 8, alignment: { horizontal: 'center' } },
-            { header: 'Customer / Client Name', key: 'customer_name', width: 30 },
+            { header: 'Customer Name', key: 'customer_name', width: 28 },
+            { header: 'Customer Code', key: 'customer_code', width: 16, alignment: { horizontal: 'center' } },
+            { header: 'Page #', key: 'page_no', width: 14, alignment: { horizontal: 'center' } },
             { header: 'Return Notes Booked', key: 'returns_count', width: 18, numFmt: '#,##0', alignment: { horizontal: 'right' } },
             { header: 'Total Returned Units', key: 'total_returned_qty', width: 18, numFmt: '#,##0.00', alignment: { horizontal: 'right' } },
             { header: 'Total Credit Adjusted (PKR)', key: 'total_return_amount', width: 24, numFmt: '#,##0.00', alignment: { horizontal: 'right' } },
             { header: '% Share of Returns', key: 'contribution_pct', width: 18, numFmt: '0.00"%"', alignment: { horizontal: 'right' } }
           ];
 
-          exportData = reportRows.map((cust, i) => ({
-            sno: i + 1,
-            customer_name: cust.customer_name,
-            returns_count: cust.returns_count,
-            total_returned_qty: cust.total_returned_qty,
-            total_return_amount: cust.total_return_amount,
-            contribution_pct: cust.contribution_pct
-          }));
+          exportData = reportRows.map((cust, i) => {
+            const meta = resolveCustomerMeta(cust.customer_name);
+            const code = cust.customer_code || cust.customerCode || meta.code || '-';
+            const pageNo = cust.page_no || cust.pageNo || meta.pageNo || '-';
+            return {
+              sno: i + 1,
+              customer_name: cust.customer_name,
+              customer_code: code,
+              page_no: pageNo,
+              returns_count: cust.returns_count,
+              total_returned_qty: cust.total_returned_qty,
+              total_return_amount: cust.total_return_amount,
+              contribution_pct: cust.contribution_pct
+            };
+          });
         } else {
           columns = [
             { header: 'S#', key: 'sno', width: 6, alignment: { horizontal: 'center' } },
@@ -2280,25 +2403,38 @@ const SaleReportPrint = () => {
         }
       } else {
         columns = [
-          { header: 'Processing Date', key: 'processingDate', width: 16, type: 'date' as const },
-          { header: 'Invoice No', key: 'docRef', width: 18 },
-          { header: 'Product', key: 'products', width: 45 },
+          { header: 'Date', key: 'processingDate', width: 16, type: 'date' as const },
+          { header: 'Invoice No#', key: 'docRef', width: 18 },
           { header: 'Customer', key: 'customerName', width: 28 },
-          { header: 'Gross Matrix Amount (Rs.)', key: 'totalAmount', width: 22, type: 'currency' as const }
+          { header: 'Product', key: 'products', width: 45 },
+          { header: 'Discount (Rs.)', key: 'discountAmount', width: 22, type: 'currency' as const },
+          { header: 'Total (Rs.)', key: 'totalAmount', width: 22, type: 'currency' as const }
         ];
 
         exportData = reportRows.map((row) => {
           const itemDetails = extractItemDetails(row);
           const itemNames = extractItemNames(row);
+          const rowDiscounts = extractRowDiscounts(row);
+          const rawCustName = String(row.customer_name || '').trim().toLowerCase();
+          const matchedCust = customerLookup[rawCustName];
+          const custCode = row.customer_code || row.customerCode || matchedCust?.code || '';
+          const custPageNo = row.page_no || row.pageNo || matchedCust?.pageNo || '';
+          const custSub = [custCode, custPageNo ? (String(custPageNo).toUpperCase().startsWith('P#') ? custPageNo : `P# ${custPageNo}`) : ''].filter(Boolean).join(' | ');
+          const customerFormatted = custSub ? `${row.customer_name || 'Counter Retail Buyer'}\r\n${custSub}` : (row.customer_name || 'Counter Retail Buyer');
+
           const productsFormatted = rType === 'invoice'
-            ? itemDetails.map(it => `${it.name} | ${it.qty} ${it.uom} | Rs. ${Number(it.price).toLocaleString()}`).join('\r\n')
+            ? itemDetails.map(it => {
+                const lineTotal = Number(it.qty || 0) * Number(it.price || 0);
+                return `${it.name} | ${it.qty} ${it.uom} | Rs. ${Number(it.price).toLocaleString()} = Rs. ${lineTotal.toLocaleString()}${it.discountAmt > 0 ? ` (Disc: Rs. ${it.discountAmt} [${it.discountPer}%])` : ''}`;
+              }).join('\r\n')
             : itemNames.join(' | ');
 
           return {
             processingDate: row.sale_date || row.return_date || String(row.created_at || '').split('T')[0],
             docRef: row.invoice_no || `INV-${String(row.id).padStart(4, '0')}`,
             products: productsFormatted,
-            customerName: row.customer_name || 'Counter Retail Buyer',
+            customerName: customerFormatted,
+            discountAmount: rowDiscounts.grandTotalDiscount,
             totalAmount: Number(row.total_amount || row.return_amount || row.payout_amount_paid || 0)
           };
         });
@@ -2466,6 +2602,13 @@ const SaleReportPrint = () => {
 
   const avgOrder = totalInvoicesCount > 0 ? totalGrossAmount / totalInvoicesCount : 0;
 
+  const totalAllDiscounts = useMemo(() => {
+    return reportRows.reduce((acc, row) => {
+      const disc = extractRowDiscounts(row);
+      return acc + disc.grandTotalDiscount;
+    }, 0);
+  }, [reportRows]);
+
   const paginatedRows = useMemo(() => {
     if (isPrinting || pageSize >= 10000 || pageSize === 'all') return reportRows;
     const pSize = typeof pageSize === 'number' ? pageSize : 25;
@@ -2474,6 +2617,20 @@ const SaleReportPrint = () => {
   }, [reportRows, currentPage, pageSize, isPrinting]);
 
   const displayedRows = isPrinting ? reportRows : paginatedRows;
+
+  const totalAllFreight = useMemo(() => {
+    return reportRows.reduce((acc, row) => {
+      const fr = Number(row.transport_charges || row.freight_charges || row.freight || 0) + Number(row.additional_charges || 0);
+      return acc + fr;
+    }, 0);
+  }, [reportRows]);
+
+  const pageAllFreight = useMemo(() => {
+    return displayedRows.reduce((acc, row) => {
+      const fr = Number(row.transport_charges || row.freight_charges || row.freight || 0) + Number(row.additional_charges || 0);
+      return acc + fr;
+    }, 0);
+  }, [displayedRows]);
 
   const displayedHierarchy = useMemo(() => {
     if (isPrinting || pageSize >= 10000 || pageSize === 'all') return categoryHierarchyTree;
@@ -2489,14 +2646,19 @@ const SaleReportPrint = () => {
       <style dangerouslySetInnerHTML={{
         __html: `
         @media print {
-          @page { size: landscape; margin: 6mm 6mm; }
-          body, html {
+          @page { size: auto; margin: 6mm 6mm; }
+          body, html, #root, main, .flex {
             height: auto !important;
             min-height: 0 !important;
             overflow: visible !important;
             background: white !important;
             margin: 0 !important;
             padding: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+          }
+          .overflow-x-auto, div {
+            overflow: visible !important;
           }
           body * { visibility: hidden !important; }
           .print-root-container, .print-root-container * {
@@ -2512,7 +2674,7 @@ const SaleReportPrint = () => {
             margin: 0 !important;
             padding: 0 !important;
             background: white !important;
-            font-size: 15px !important;
+            font-size: 11px !important;
             color: #000000 !important;
           }
           aside, header, nav, footer, .print-hidden-element, button {
@@ -2521,6 +2683,7 @@ const SaleReportPrint = () => {
           }
           table {
             width: 100% !important;
+            max-width: 100% !important;
             table-layout: fixed !important;
             box-sizing: border-box !important;
             border-collapse: collapse !important;
@@ -2529,9 +2692,9 @@ const SaleReportPrint = () => {
             break-inside: auto !important;
           }
           th {
-            font-size: 13.5px !important;
+            font-size: 11px !important;
             font-weight: 800 !important;
-            padding: 5px 3px !important;
+            padding: 4px 3px !important;
             color: #000000 !important;
             background-color: #f3f4f6 !important;
             border: 1px solid #000000 !important;
@@ -2541,19 +2704,21 @@ const SaleReportPrint = () => {
             vertical-align: middle !important;
           }
           td {
-            font-size: 14px !important;
-            font-weight: 700 !important;
-            padding: 6px 4px !important;
+            font-size: 10.5px !important;
+            font-weight: 600 !important;
+            padding: 4px 3px !important;
             color: #000000 !important;
             border: 1px solid #374151 !important;
+            word-break: break-word !important;
+            overflow-wrap: break-word !important;
           }
           tfoot td {
-            font-size: 14.5px !important;
+            font-size: 11px !important;
             font-weight: 900 !important;
-            padding: 6px 4px !important;
+            padding: 4px 3px !important;
             color: #000000 !important;
             border: 1.5px solid #000000 !important;
-            white-space: nowrap !important;
+            white-space: normal !important;
           }
           tr {
             page-break-inside: avoid !important;
@@ -2729,7 +2894,7 @@ const SaleReportPrint = () => {
         </div>
 
         {/* ── VISUAL KPI STATS RIBBON ── */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200 print-hidden-element print:hidden">
+        <div className={`grid grid-cols-2 ${(rType === 'invoice' || !rType) ? 'sm:grid-cols-5' : 'sm:grid-cols-4'} gap-3 bg-slate-50 p-3 rounded-xl border border-slate-200 print-hidden-element print:hidden`}>
           {rType === 'category-sales' ? (
             <>
               <div className="bg-white p-2.5 rounded-lg border border-slate-200 text-center shadow-2xs">
@@ -2865,6 +3030,10 @@ const SaleReportPrint = () => {
               <div className="bg-white p-2.5 rounded-lg border border-slate-200 text-center shadow-2xs">
                 <p className="text-[10px] font-bold text-slate-500 uppercase">Total Matrix Gross</p>
                 <p className="text-sm font-black text-emerald-700 font-mono mt-0.5">Rs. {totalGrossAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
+              </div>
+              <div className="bg-white p-2.5 rounded-lg border border-slate-200 text-center shadow-2xs">
+                <p className="text-[10px] font-bold text-slate-500 uppercase">Total Discounts Given</p>
+                <p className="text-sm font-black text-amber-700 font-mono mt-0.5">Rs. {totalAllDiscounts.toLocaleString(undefined, { minimumFractionDigits: 2 })}</p>
               </div>
               <div className="bg-white p-2.5 rounded-lg border border-slate-200 text-center shadow-2xs">
                 <p className="text-[10px] font-bold text-slate-500 uppercase">Cash vs Credit Split</p>
@@ -3161,7 +3330,7 @@ const SaleReportPrint = () => {
                                           <th className="p-1.5 border border-slate-200 text-center w-8">S#</th>
                                           <th className="p-1.5 border border-slate-200 text-center w-20">Date</th>
                                           <th className="p-1.5 border border-slate-200 w-24">Doc / Ref #</th>
-                                          <th className="p-1.5 border border-slate-200">Customer Name</th>
+                                          <th className="p-1.5 border border-slate-200 min-w-[130px] max-w-[200px]">Customer Name</th>
                                           <th className="p-1.5 border border-slate-200 w-24">Sales Officer</th>
                                           <th className="p-1.5 border border-slate-200">Product Item</th>
                                           <th className="p-1.5 border border-slate-200 text-right w-16">Qty</th>
@@ -3188,7 +3357,32 @@ const SaleReportPrint = () => {
                                                 <td className="p-1.5 border border-slate-200 text-black font-bold text-[10px]">
                                                   <span className={isRet ? 'text-rose-700 font-black' : 'text-indigo-900'}>{tx.doc_no}</span>
                                                 </td>
-                                                <td className="p-1.5 border border-slate-200 font-sans font-bold text-black">{tx.customer_name}</td>
+                                                <td className="p-1.5 border border-slate-200 font-sans align-top min-w-[130px] max-w-[200px]">
+                                                  <div className="font-bold text-black text-xs leading-tight">
+                                                    {tx.customer_name}
+                                                  </div>
+                                                  {(() => {
+                                                    const meta = resolveCustomerMeta(tx.customer_name);
+                                                    const code = meta.code || '';
+                                                    const pageNo = meta.pageNo || '';
+                                                    if (!code && !pageNo) return null;
+                                                    return (
+                                                      <div className="text-[9.5px] font-mono text-slate-700 flex flex-wrap items-center gap-1 mt-0.5">
+                                                        {code && (
+                                                          <span className="bg-slate-100 px-1 py-0.2 rounded border border-slate-300 font-bold uppercase text-slate-800 text-[9px]">
+                                                            {code}
+                                                          </span>
+                                                        )}
+                                                        {code && pageNo && <span className="text-slate-400 font-bold">|</span>}
+                                                        {pageNo && (
+                                                          <span className="text-slate-600 font-semibold text-[9px]">
+                                                            {String(pageNo).toUpperCase().startsWith('P#') ? pageNo : `P# ${pageNo}`}
+                                                          </span>
+                                                        )}
+                                                      </div>
+                                                    );
+                                                  })()}
+                                                </td>
                                                 <td className="p-1.5 border border-slate-200 text-gray-700 text-[10px]">{tx.salesman}</td>
                                                 <td className="p-1.5 border border-slate-200 font-sans font-medium text-black">{tx.product_name}</td>
                                                 <td className={`p-1.5 border border-slate-200 text-right font-bold ${isRet ? 'text-rose-700' : 'text-black'}`}>
@@ -3407,7 +3601,7 @@ const SaleReportPrint = () => {
                             <tr className="bg-gray-100 border-b border-black font-black uppercase text-black font-mono text-[9.5px]">
                               <th className="p-1.5 border border-black text-center w-24">Date</th>
                               <th className="p-1.5 border border-black w-28">Invoice #</th>
-                              <th className="p-1.5 border border-black">Customer Name</th>
+                              <th className="p-1.5 border border-black min-w-[140px] max-w-[220px]">Customer Name</th>
                               <th className="p-1.5 border border-black">Salesman</th>
                               <th className="p-1.5 border border-black">Warehouse</th>
                               <th className="p-1.5 border border-black text-right w-20">Qty</th>
@@ -3421,7 +3615,32 @@ const SaleReportPrint = () => {
                               <tr key={tIdx} className="border-b border-gray-300 hover:bg-gray-50 font-mono text-xs">
                                 <td className="p-1.5 border border-black text-center text-gray-700 whitespace-nowrap">{tx.date}</td>
                                 <td className="p-1.5 border border-black font-black text-primary uppercase whitespace-nowrap">{tx.invoice_no}</td>
-                                <td className="p-1.5 border border-black font-sans font-medium text-black">{tx.customer_name}</td>
+                                <td className="p-1.5 border border-black font-sans align-top min-w-[140px] max-w-[220px]">
+                                  <div className="font-semibold text-black leading-tight break-words text-xs">
+                                    {tx.customer_name}
+                                  </div>
+                                  {(() => {
+                                    const meta = resolveCustomerMeta(tx.customer_name);
+                                    const code = meta.code || '';
+                                    const pageNo = meta.pageNo || '';
+                                    if (!code && !pageNo) return null;
+                                    return (
+                                      <div className="text-[10px] font-mono text-slate-700 flex flex-wrap items-center gap-1 mt-0.5">
+                                        {code && (
+                                          <span className="bg-slate-100 px-1 py-0.2 rounded border border-slate-300 font-bold uppercase text-slate-800 text-[9.5px]">
+                                            {code}
+                                          </span>
+                                        )}
+                                        {code && pageNo && <span className="text-slate-400 font-bold">|</span>}
+                                        {pageNo && (
+                                          <span className="text-slate-600 font-semibold text-[9.5px]">
+                                            {String(pageNo).toUpperCase().startsWith('P#') ? pageNo : `P# ${pageNo}`}
+                                          </span>
+                                        )}
+                                      </div>
+                                    );
+                                  })()}
+                                </td>
                                 <td className="p-1.5 border border-black font-sans text-gray-600">{tx.salesman}</td>
                                 <td className="p-1.5 border border-black font-sans text-gray-600">{tx.warehouse}</td>
                                 <td className="p-1.5 border border-black text-right font-bold text-black whitespace-nowrap">{tx.qty} {tx.uom}</td>
@@ -3482,6 +3701,25 @@ const SaleReportPrint = () => {
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="bg-emerald-500 text-black px-2 py-0.5 rounded font-black text-[10px]">#{realCustNum}</span>
                           <span className="font-bold font-sans text-sm tracking-wide uppercase text-white">{cust.customer_name}</span>
+                          {(() => {
+                            const meta = resolveCustomerMeta(cust.customer_name);
+                            const code = cust.customer_code || cust.customerCode || meta.code || '';
+                            const pageNo = cust.page_no || cust.pageNo || meta.pageNo || '';
+                            return (
+                              <>
+                                {code && (
+                                  <span className="bg-slate-700 text-blue-200 border border-blue-400/40 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold">
+                                    Code: {code}
+                                  </span>
+                                )}
+                                {pageNo && (
+                                  <span className="bg-slate-700 text-purple-200 border border-purple-400/40 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold">
+                                    {String(pageNo).toUpperCase().startsWith('P#') ? pageNo : `Page: ${pageNo}`}
+                                  </span>
+                                )}
+                              </>
+                            );
+                          })()}
                           <span className="bg-slate-700 text-slate-200 px-2 py-0.5 rounded text-[10px]">Invoices: {cust.invoices_count}</span>
                         </div>
                         <div className="text-right text-[11px] font-black font-mono flex items-center gap-3">
@@ -3598,21 +3836,20 @@ const SaleReportPrint = () => {
                 <thead>
                   <tr className="bg-gray-100 border-b border-black font-black uppercase text-black font-mono text-[9.5px]">
                     <th className="p-1.5 border border-black text-center w-10">S#</th>
-                    <th className="p-1.5 border border-black">Customer / Purchasing Account</th>
-                    <th className="p-1.5 border border-black text-center w-24">Inv / Rtn</th>
-                    <th className="p-1.5 border border-black text-right w-24">Gross Vol</th>
-                    <th className="p-1.5 border border-black text-right w-20">Ret Vol</th>
-                    <th className="p-1.5 border border-black text-right w-24">Net Vol</th>
-                    <th className="p-1.5 border border-black text-right w-28">Gross Sales (PKR)</th>
-                    <th className="p-1.5 border border-black text-right w-28 text-rose-800">Returns (PKR)</th>
-                    <th className="p-1.5 border border-black text-right w-32">Net Revenue (PKR)</th>
-                    <th className="p-1.5 border border-black text-center w-20">% Share</th>
+                    <th className="p-1.5 border border-black w-[22%] min-w-[160px] max-w-[300px]">Customer Name</th>
+                    <th className="p-1.5 border border-black text-right w-[8%] min-w-[75px]">Sold Vol</th>
+                    <th className="p-1.5 border border-black text-right w-[8%] min-w-[75px]">Return Vol</th>
+                    <th className="p-1.5 border border-black text-right w-[8%] min-w-[75px]">Net Vol</th>
+                    <th className="p-1.5 border border-black text-right w-[17%] min-w-[110px]">Gross Sales (PKR)</th>
+                    <th className="p-1.5 border border-black text-right w-[15%] min-w-[110px] text-rose-800">Returns (PKR)</th>
+                    <th className="p-1.5 border border-black text-right w-[17%] min-w-[120px]">Net Revenue (PKR)</th>
+                    <th className="p-1.5 border border-black text-center w-[6%] min-w-[60px]">% Share</th>
                   </tr>
                 </thead>
                 <tbody>
                   {displayedRows.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="text-center py-10 font-bold italic border border-black text-gray-400 bg-gray-50/50">
+                      <td colSpan={9} className="text-center py-10 font-bold italic border border-black text-gray-400 bg-gray-50/50">
                         No customer sales breakdown records discovered matching chosen selection criteria.
                       </td>
                     </tr>
@@ -3626,12 +3863,32 @@ const SaleReportPrint = () => {
                       const retAmt = Number(cust.return_amount || 0);
                       const netRev = Number(cust.net_sales || grossSales - retAmt);
 
+                      const meta = resolveCustomerMeta(cust.customer_name);
+                      const code = cust.customer_code || cust.customerCode || cust.customercode || meta.code || '';
+                      const pageNo = cust.page_no || cust.pageNo || meta.pageNo || '';
+
                       return (
                         <tr key={idx} className="border-b border-black hover:bg-gray-50 font-semibold font-mono text-xs">
-                          <td className="p-1.5 border border-black text-center text-gray-600">{realIndex}</td>
-                          <td className="p-1.5 border border-black font-sans font-bold text-black">{cust.customer_name}</td>
-                          <td className="p-1.5 border border-black text-center font-bold text-indigo-700">
-                            {cust.invoices_count} <span className="text-gray-400 font-normal">/</span> <span className={cust.returns_count > 0 ? 'text-rose-700' : 'text-gray-400'}>{cust.returns_count}</span>
+                          <td className="p-1.5 border border-black text-center text-gray-600 align-top">{realIndex}</td>
+                          <td className="p-1.5 border border-black font-sans align-top min-w-[160px] max-w-[300px]">
+                            <div className="font-bold text-black text-xs leading-tight">
+                              {cust.customer_name}
+                            </div>
+                            {(code || pageNo) && (
+                              <div className="text-[10px] font-mono text-slate-700 flex flex-wrap items-center gap-1 mt-0.5">
+                                {code && (
+                                  <span className="bg-slate-100 px-1 py-0.2 rounded border border-slate-300 font-bold uppercase text-slate-800 text-[9.5px]">
+                                    {code}
+                                  </span>
+                                )}
+                                {code && pageNo && <span className="text-slate-400 font-bold">|</span>}
+                                {pageNo && (
+                                  <span className="text-slate-600 font-semibold text-[9.5px]">
+                                    {String(pageNo).toUpperCase().startsWith('P#') ? pageNo : `P# ${pageNo}`}
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </td>
                           <td className="p-1.5 border border-black text-right text-gray-800">
                             {grossVol.toLocaleString()}
@@ -3666,9 +3923,6 @@ const SaleReportPrint = () => {
                       <td colSpan={2} className="p-2 border border-black text-right uppercase tracking-wider text-amber-900">
                         Page {currentPage} Subtotal ({displayedRows.length} Customers):
                       </td>
-                      <td className="p-2 border border-black text-center text-indigo-900 font-bold">
-                        {displayedRows.reduce((sum, r) => sum + Number(r.invoices_count || 0), 0)} / {displayedRows.reduce((sum, r) => sum + Number(r.returns_count || 0), 0)}
-                      </td>
                       <td className="p-2 border border-black text-right text-gray-800 whitespace-nowrap">
                         {displayedRows.reduce((sum, r) => sum + Number(r.gross_units || 0), 0).toLocaleString()}
                       </td>
@@ -3696,9 +3950,6 @@ const SaleReportPrint = () => {
                   <tr className="bg-gray-100 border-t-2 border-black font-black font-mono text-xs">
                     <td colSpan={2} className="p-2 border border-black text-right uppercase tracking-wider text-gray-900">
                       Grand Total Summary (All {reportRows.length} Customers):
-                    </td>
-                    <td className="p-2 border border-black text-center text-indigo-900">
-                      {totalInvoicesCount} / {totalReturnsCount}
                     </td>
                     <td className="p-2 border border-black text-right text-gray-900 font-bold whitespace-nowrap">
                       {totalSoldUnits.toLocaleString()}
@@ -3738,6 +3989,10 @@ const SaleReportPrint = () => {
                     const custGrossUnits = Number(cust.gross_units || 0);
                     const custRetUnits = Number(cust.returned_units || 0);
                     const custNetUnits = Number(cust.net_units || custGrossUnits - custRetUnits);
+                    const custTotalFreight = (cust.transactions || []).reduce(
+                      (sum: number, r: any) => sum + (Number(r.transport_charges || r.freight_charges || r.freight || 0) + Number(r.additional_charges || 0)),
+                      0
+                    );
 
                     // Combine and sort all transactions
                     const combinedTx = [
@@ -3756,6 +4011,25 @@ const SaleReportPrint = () => {
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="bg-emerald-500 text-black px-2 py-0.5 rounded font-black text-[10px]">#{realCustomerNum}</span>
                             <span className="font-bold font-sans text-sm tracking-wide uppercase text-white">{cust.customer_name}</span>
+                            {(() => {
+                              const meta = resolveCustomerMeta(cust.customer_name);
+                              const code = cust.customer_code || cust.customerCode || cust.customercode || meta.code || '';
+                              const pageNo = cust.page_no || cust.pageNo || meta.pageNo || '';
+                              return (
+                                <>
+                                  {code && (
+                                    <span className="bg-slate-700 text-blue-200 border border-blue-400/40 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold">
+                                      Code: {code}
+                                    </span>
+                                  )}
+                                  {pageNo && (
+                                    <span className="bg-slate-700 text-purple-200 border border-purple-400/40 px-1.5 py-0.5 rounded text-[10px] font-mono font-bold">
+                                      {String(pageNo).toUpperCase().startsWith('P#') ? pageNo : `Page: ${pageNo}`}
+                                    </span>
+                                  )}
+                                </>
+                              );
+                            })()}
                             <span className="bg-slate-700 text-slate-200 px-2 py-0.5 rounded text-[10px]">Invoices: {cust.invoices_count}</span>
                             <span className="bg-slate-700 text-slate-200 px-2 py-0.5 rounded text-[10px]">Returns: {cust.returns_count}</span>
                             <span className="bg-slate-700 text-slate-200 px-2 py-0.5 rounded text-[10px]">Net Volume: {custNetUnits.toLocaleString()} Units</span>
@@ -3780,8 +4054,8 @@ const SaleReportPrint = () => {
                               <th className="p-1.5 border border-black">Sales Officer</th>
                               <th className="p-1.5 border border-black">Product Line Items</th>
                               <th className="p-1.5 border border-black text-center w-24">Doc Type / Term</th>
-                              <th className="p-1.5 border border-black text-right w-28 pr-2">Freight Charges</th>
-                              <th className="p-1.5 border border-black text-right w-28 pr-3">Amount (PKR)</th>
+                              <th className="p-1.5 border border-black text-right w-24 pr-2 text-amber-900">Discount</th>
+                              <th className="p-1.5 border border-black text-right w-28 pr-3">Total (PKR)</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -3793,9 +4067,10 @@ const SaleReportPrint = () => {
                               const processingDateDisplay = row.sale_date || row.return_date || String(row.created_at || '').split('T')[0];
                               const itemDetails = extractItemDetails(row);
                               const itemNames = extractItemNames(row);
+                              const rowDiscounts = extractRowDiscounts(row);
                               const isCash = String(row.payment_term || '').toLowerCase() === 'cash';
                               const rowAmount = Number(isReturn ? (row.return_amount || row.total_amount || 0) : (row.total_amount || 0));
-                              const rowFreight = isReturn ? 0 : (Number(row.additional_charges || 0) + Number(row.transport_charges || 0));
+                              const rowFreight = isReturn ? 0 : (Number(row.transport_charges || row.freight_charges || row.freight || 0) + Number(row.additional_charges || 0));
 
                               return (
                                 <tr key={tIdx} className={`border-b border-gray-300 hover:bg-gray-50 font-mono text-xs ${isReturn ? 'bg-rose-50/40' : ''}`}>
@@ -3812,16 +4087,23 @@ const SaleReportPrint = () => {
                                     )}
                                   </td>
                                   <td className="p-1.5 border border-black font-sans font-medium text-black align-top">{row.salesman || 'Direct'}</td>
-                                  <td className="p-1.5 border border-black font-sans text-gray-800 text-[11px] align-top">
+                                  <td className="p-1.5 border border-black font-sans text-gray-800 text-xs align-top">
                                     {itemDetails.length > 0 ? (
                                       <div className="flex flex-col gap-1 py-0.5">
                                         {itemDetails.map((item, idx) => (
-                                          <div key={idx} className="flex items-center text-[11px] whitespace-nowrap">
-                                            <span className="font-semibold text-black">{item.name}</span>
-                                            <span className={isReturn ? 'text-rose-600 font-black text-sm px-1.5 font-mono' : 'text-emerald-700 font-black text-sm px-1.5 font-mono'}>|</span>
-                                            <span className={isReturn ? 'text-rose-800 font-mono font-bold' : 'text-emerald-900 font-mono font-bold'}>{item.qty} {item.uom}</span>
-                                            <span className={isReturn ? 'text-rose-600 font-black text-sm px-1.5 font-mono' : 'text-emerald-700 font-black text-sm px-1.5 font-mono'}>|</span>
-                                            <span className="text-gray-900 font-mono font-bold">@ Rs. {Number(item.price).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                          <div key={idx} className="border-b border-gray-100 last:border-b-0 pb-1 last:pb-0">
+                                            <div className="font-semibold text-black leading-tight break-words text-xs">{item.name}</div>
+                                            <div className="text-[10px] font-mono text-gray-700 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5">
+                                              <span className={isReturn ? "text-rose-700 font-bold" : "text-primary font-bold"}>{item.qty} {item.uom}</span>
+                                              <span className="text-gray-400">×</span>
+                                              <span>Rs. {Number(item.price).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                              <span className="font-bold text-slate-900">= Rs. {(Number(item.qty || 0) * Number(item.price || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                              {item.discountAmt > 0 && (
+                                                <span className="text-amber-800 font-bold bg-amber-50 px-1 rounded border border-amber-200 text-[9px] whitespace-nowrap">
+                                                  Disc: Rs. {item.discountAmt.toLocaleString()} ({item.discountPer}%)
+                                                </span>
+                                              )}
+                                            </div>
                                           </div>
                                         ))}
                                       </div>
@@ -3849,15 +4131,42 @@ const SaleReportPrint = () => {
                                       </span>
                                     )}
                                   </td>
-                                  <td className="p-1.5 border border-black text-right pr-2 font-mono align-top">
-                                    {rowFreight > 0 ? (
-                                      <span className="text-blue-700 font-bold">Rs. {rowFreight.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                  <td className="p-1.5 border border-black text-right pr-2 text-amber-900 font-mono text-xs align-top">
+                                    {rowDiscounts.grandTotalDiscount > 0 ? (
+                                      <div className="space-y-0.5 text-right">
+                                        {rowDiscounts.totalItemDiscount > 0 && rowDiscounts.overallBillDiscount > 0 ? (
+                                          <>
+                                            <div className="text-[10px] text-amber-800 font-sans font-medium leading-tight">
+                                              Items: Rs. {rowDiscounts.totalItemDiscount.toLocaleString()}
+                                            </div>
+                                            <div className="text-[10px] text-amber-900 font-bold bg-amber-100/70 px-1 py-0.5 rounded border border-amber-300/70 leading-tight">
+                                              Bill: Rs. {rowDiscounts.overallBillDiscount.toLocaleString()}
+                                            </div>
+                                            <div className="border-t border-amber-300 pt-0.5 font-black text-amber-950 text-xs leading-tight">
+                                              Total: Rs. {rowDiscounts.grandTotalDiscount.toLocaleString()}
+                                            </div>
+                                          </>
+                                        ) : rowDiscounts.totalItemDiscount > 0 ? (
+                                          <div className="text-amber-800 font-bold text-xs leading-tight">
+                                            Rs. {rowDiscounts.totalItemDiscount.toLocaleString()}
+                                          </div>
+                                        ) : (
+                                          <div className="text-amber-900 font-bold text-[10px] bg-amber-100/70 px-1 py-0.5 rounded border border-amber-300/70 leading-tight">
+                                            Bill: Rs. {rowDiscounts.overallBillDiscount.toLocaleString()}
+                                          </div>
+                                        )}
+                                      </div>
                                     ) : (
-                                      <span className="text-gray-400 font-normal">Rs. 0.00</span>
+                                      <span className="text-gray-400 font-mono">-</span>
                                     )}
                                   </td>
-                                  <td className={`p-1.5 border border-black text-right pr-3 font-black align-top ${isReturn ? 'text-rose-700' : 'text-emerald-700'}`}>
-                                    {isReturn ? `- Rs. ${rowAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : `Rs. ${rowAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}
+                                  <td className={`p-1.5 border border-black text-right pr-3 font-black align-top font-mono text-xs ${isReturn ? 'text-rose-700' : 'text-emerald-700'}`}>
+                                    <div>{isReturn ? `- Rs. ${rowAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}` : `Rs. ${rowAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}`}</div>
+                                    {!isReturn && rowFreight > 0 && (
+                                      <div className="text-[9.5px] font-sans font-medium text-slate-500 mt-0.5 leading-tight">
+                                        (Inc. Freight Ch. {rowFreight.toLocaleString()})
+                                      </div>
+                                    )}
                                   </td>
                                 </tr>
                               );
@@ -3875,7 +4184,12 @@ const SaleReportPrint = () => {
                                 Gross: Rs. {custGrossSales.toLocaleString()} | Ret: - Rs. {custReturnAmount.toLocaleString()}
                               </td>
                               <td className="p-1.5 border border-black text-right pr-3 text-purple-900 font-black">
-                                Rs. {custNetRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                <div>Rs. {custNetRevenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+                                {custTotalFreight > 0 && (
+                                  <div className="text-[9px] font-sans font-medium text-slate-500 mt-0.5 leading-tight">
+                                    (Inc. Total Freight: {custTotalFreight.toLocaleString()})
+                                  </div>
+                                )}
                               </td>
                             </tr>
                           </tfoot>
@@ -4065,6 +4379,11 @@ const SaleReportPrint = () => {
                       return dateA.localeCompare(dateB);
                     });
 
+                    const smTotalFreight = invList.reduce(
+                      (sum: number, r: any) => sum + (Number(r.transport_charges || r.freight_charges || r.freight || 0) + Number(r.additional_charges || 0)),
+                      0
+                    );
+
                     const retList = (sm.return_transactions || []).slice().sort((a: any, b: any) => {
                       const dateA = a.return_date || a.created_at || '';
                       const dateB = b.return_date || b.created_at || '';
@@ -4115,17 +4434,18 @@ const SaleReportPrint = () => {
                               <th className="p-1.5 border border-black text-center w-10">S#</th>
                               <th className="p-1.5 border border-black text-center w-24">Date</th>
                               <th className="p-1.5 border border-black w-28">Invoice #</th>
-                              <th className="p-1.5 border border-black">Customer Name</th>
+                              <th className="p-1.5 border border-black min-w-[140px] max-w-[220px]">Customer Name</th>
                               <th className="p-1.5 border border-black">Products / Line Items</th>
                               <th className="p-1.5 border border-black text-center w-20">Term</th>
                               <th className="p-1.5 border border-black w-28">Carrier Fleet</th>
+                              <th className="p-1.5 border border-black text-right w-24 pr-2 text-amber-900">Discount</th>
                               <th className="p-1.5 border border-black text-right w-28 pr-3">Gross Amount (PKR)</th>
                             </tr>
                           </thead>
                           <tbody>
                             {invList.length === 0 ? (
                               <tr>
-                                <td colSpan={8} className="p-3 text-center text-gray-400 italic font-mono border border-black">
+                                <td colSpan={9} className="p-3 text-center text-gray-400 italic font-mono border border-black">
                                   No sales invoices booked for this salesman within chosen duration.
                                 </td>
                               </tr>
@@ -4135,25 +4455,59 @@ const SaleReportPrint = () => {
                                 const processingDateDisplay = row.sale_date || String(row.created_at || '').split('T')[0];
                                 const itemDetails = extractItemDetails(row);
                                 const itemNames = extractItemNames(row);
+                                const rowDiscounts = extractRowDiscounts(row);
                                 const isCash = String(row.payment_term || '').toLowerCase() === 'cash';
                                 const rowAmount = Number(row.total_amount || 0);
+                                const rowFreight = Number(row.transport_charges || row.freight_charges || row.freight || 0) + Number(row.additional_charges || 0);
 
                                 return (
                                   <tr key={tIdx} className="border-b border-gray-300 hover:bg-gray-50 font-mono text-xs">
                                     <td className="p-1.5 border border-black text-center text-gray-500 align-top">{tIdx + 1}</td>
                                     <td className="p-1.5 border border-black text-center text-gray-700 align-top">{processingDateDisplay}</td>
                                     <td className="p-1.5 border border-black font-black uppercase align-top text-primary">{displayDocPrefixId}</td>
-                                    <td className="p-1.5 border border-black font-sans font-medium text-black align-top">{row.customer_name || 'Counter Retail Buyer'}</td>
-                                    <td className="p-1.5 border border-black font-sans text-gray-800 text-[11px] align-top">
+                                    <td className="p-1.5 border border-black font-sans align-top min-w-[140px] max-w-[220px]">
+                                      <div className="font-semibold text-black leading-tight break-words text-xs">
+                                        {row.customer_name || 'Counter Retail Buyer'}
+                                      </div>
+                                      {(() => {
+                                        const meta = resolveCustomerMeta(row.customer_name);
+                                        const code = row.customer_code || row.customerCode || meta.code || '';
+                                        const pageNo = row.page_no || row.pageNo || meta.pageNo || '';
+                                        if (!code && !pageNo) return null;
+                                        return (
+                                          <div className="text-[10px] font-mono text-slate-700 flex flex-wrap items-center gap-1 mt-0.5">
+                                            {code && (
+                                              <span className="bg-slate-100 px-1 py-0.2 rounded border border-slate-300 font-bold uppercase text-slate-800 text-[9.5px]">
+                                                {code}
+                                              </span>
+                                            )}
+                                            {code && pageNo && <span className="text-slate-400 font-bold">|</span>}
+                                            {pageNo && (
+                                              <span className="text-slate-600 font-semibold text-[9.5px]">
+                                                {String(pageNo).toUpperCase().startsWith('P#') ? pageNo : `P# ${pageNo}`}
+                                              </span>
+                                            )}
+                                          </div>
+                                        );
+                                      })()}
+                                    </td>
+                                    <td className="p-1.5 border border-black font-sans text-gray-800 text-xs align-top">
                                       {itemDetails.length > 0 ? (
                                         <div className="flex flex-col gap-1 py-0.5">
                                           {itemDetails.map((item, idx) => (
-                                            <div key={idx} className="flex items-center text-[11px] whitespace-nowrap">
-                                              <span className="font-semibold text-black">{item.name}</span>
-                                              <span className="text-emerald-700 font-black text-sm px-1.5 font-mono">|</span>
-                                              <span className="text-emerald-900 font-mono font-bold">{item.qty} {item.uom}</span>
-                                              <span className="text-emerald-700 font-black text-sm px-1.5 font-mono">|</span>
-                                              <span className="text-gray-900 font-mono font-bold">@ Rs. {Number(item.price).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                            <div key={idx} className="border-b border-gray-100 last:border-b-0 pb-1 last:pb-0">
+                                              <div className="font-semibold text-black leading-tight break-words text-xs">{item.name}</div>
+                                              <div className="text-[10.5px] font-mono text-gray-700 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5">
+                                                <span className="text-primary font-bold">{item.qty} {item.uom}</span>
+                                                <span className="text-gray-400">×</span>
+                                                <span>Rs. {Number(item.price).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                                <span className="font-bold text-slate-900">= Rs. {(Number(item.qty || 0) * Number(item.price || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                                {item.discountAmt > 0 && (
+                                                  <span className="text-amber-800 font-bold bg-amber-50 px-1 rounded border border-amber-200 text-[9.5px] whitespace-nowrap">
+                                                    Disc: Rs. {item.discountAmt.toLocaleString()} ({item.discountPer}%)
+                                                  </span>
+                                                )}
+                                              </div>
                                             </div>
                                           ))}
                                         </div>
@@ -4176,8 +4530,42 @@ const SaleReportPrint = () => {
                                       </span>
                                     </td>
                                     <td className="p-1.5 border border-black font-sans text-purple-700 font-bold align-top">{row.transport_name || 'Self Pick'}</td>
-                                    <td className="p-1.5 border border-black text-right pr-3 font-black text-emerald-700 align-top">
-                                      Rs. {rowAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                    <td className="p-1.5 border border-black text-right pr-2 text-amber-900 font-mono text-xs align-top">
+                                      {rowDiscounts.grandTotalDiscount > 0 ? (
+                                        <div className="space-y-0.5 text-right">
+                                          {rowDiscounts.totalItemDiscount > 0 && rowDiscounts.overallBillDiscount > 0 ? (
+                                            <>
+                                              <div className="text-[10px] text-amber-800 font-sans font-medium leading-tight">
+                                                Items: Rs. {rowDiscounts.totalItemDiscount.toLocaleString()}
+                                              </div>
+                                              <div className="text-[10px] text-amber-900 font-bold bg-amber-100/70 px-1 py-0.5 rounded border border-amber-300/70 leading-tight">
+                                                Bill: Rs. {rowDiscounts.overallBillDiscount.toLocaleString()}
+                                              </div>
+                                              <div className="border-t border-amber-300 pt-0.5 font-black text-amber-950 text-xs leading-tight">
+                                                Total: Rs. {rowDiscounts.grandTotalDiscount.toLocaleString()}
+                                              </div>
+                                            </>
+                                          ) : rowDiscounts.totalItemDiscount > 0 ? (
+                                            <div className="text-amber-800 font-bold text-xs leading-tight">
+                                              Rs. {rowDiscounts.totalItemDiscount.toLocaleString()}
+                                            </div>
+                                          ) : (
+                                            <div className="text-amber-900 font-bold text-[10px] bg-amber-100/70 px-1 py-0.5 rounded border border-amber-300/70 leading-tight">
+                                              Bill: Rs. {rowDiscounts.overallBillDiscount.toLocaleString()}
+                                            </div>
+                                          )}
+                                        </div>
+                                      ) : (
+                                        <span className="text-gray-400 font-mono">-</span>
+                                      )}
+                                    </td>
+                                    <td className="p-1.5 border border-black text-right pr-3 font-black text-emerald-700 align-top font-mono text-xs">
+                                      <div>Rs. {rowAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+                                      {rowFreight > 0 && (
+                                        <div className="text-[9.5px] font-sans font-medium text-slate-500 mt-0.5 leading-tight">
+                                          (Inc. Freight Ch. {rowFreight.toLocaleString()})
+                                        </div>
+                                      )}
                                     </td>
                                   </tr>
                                 );
@@ -4190,11 +4578,16 @@ const SaleReportPrint = () => {
                                 <td colSpan={5} className="p-1.5 border border-black text-right uppercase tracking-wider text-emerald-950">
                                   Subtotal Sales Invoiced ({sm.salesman} : {invList.length} Invoices):
                                 </td>
-                                <td colSpan={2} className="p-1.5 border border-black text-right text-[10px] font-bold text-gray-700">
+                                <td colSpan={3} className="p-1.5 border border-black text-right text-[10px] font-bold text-gray-700">
                                   Cash: Rs. {smCashAmount.toLocaleString()} | Credit: Rs. {smCreditAmount.toLocaleString()}
                                 </td>
                                 <td className="p-1.5 border border-black text-right pr-3 text-emerald-900 font-black">
-                                  Rs. {smGrossSales.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                  <div>Rs. {smGrossSales.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+                                  {smTotalFreight > 0 && (
+                                    <div className="text-[9px] font-sans font-medium text-slate-500 mt-0.5 leading-tight">
+                                      (Inc. Total Freight: {smTotalFreight.toLocaleString()})
+                                    </div>
+                                  )}
                                 </td>
                               </tr>
                             </tfoot>
@@ -4222,7 +4615,7 @@ const SaleReportPrint = () => {
                                   <th className="p-1.5 border border-black text-center w-10">S#</th>
                                   <th className="p-1.5 border border-black text-center w-24">Date</th>
                                   <th className="p-1.5 border border-black w-28">Return Ref #</th>
-                                  <th className="p-1.5 border border-black">Customer Name</th>
+                                  <th className="p-1.5 border border-black min-w-[140px] max-w-[220px]">Customer Name</th>
                                   <th className="p-1.5 border border-black">Returned Products / Remarks</th>
                                   <th className="p-1.5 border border-black text-center w-24">Doc Type</th>
                                   <th className="p-1.5 border border-black w-28">Restocked Wh</th>
@@ -4247,17 +4640,44 @@ const SaleReportPrint = () => {
                                           <span className="bg-rose-100 text-rose-800 text-[9px] px-1 py-0.2 rounded font-bold border border-rose-300">RETURN</span>
                                         </div>
                                       </td>
-                                      <td className="p-1.5 border border-black font-sans font-medium text-black align-top">{row.customer_name || 'Counter Retail Buyer'}</td>
-                                      <td className="p-1.5 border border-black font-sans text-gray-800 text-[11px] align-top">
+                                      <td className="p-1.5 border border-black font-sans align-top min-w-[140px] max-w-[220px]">
+                                        <div className="font-semibold text-black leading-tight break-words text-xs">
+                                          {row.customer_name || 'Counter Retail Buyer'}
+                                        </div>
+                                        {(() => {
+                                          const meta = resolveCustomerMeta(row.customer_name);
+                                          const code = row.customer_code || row.customerCode || meta.code || '';
+                                          const pageNo = row.page_no || row.pageNo || meta.pageNo || '';
+                                          if (!code && !pageNo) return null;
+                                          return (
+                                            <div className="text-[10px] font-mono text-slate-700 flex flex-wrap items-center gap-1 mt-0.5">
+                                              {code && (
+                                                <span className="bg-slate-100 px-1 py-0.2 rounded border border-slate-300 font-bold uppercase text-slate-800 text-[9.5px]">
+                                                  {code}
+                                                </span>
+                                              )}
+                                              {code && pageNo && <span className="text-slate-400 font-bold">|</span>}
+                                              {pageNo && (
+                                                <span className="text-slate-600 font-semibold text-[9.5px]">
+                                                  {String(pageNo).toUpperCase().startsWith('P#') ? pageNo : `P# ${pageNo}`}
+                                                </span>
+                                              )}
+                                            </div>
+                                          );
+                                        })()}
+                                      </td>
+                                      <td className="p-1.5 border border-black font-sans text-gray-800 text-xs align-top">
                                         {itemDetails.length > 0 ? (
                                           <div className="flex flex-col gap-1 py-0.5">
                                             {itemDetails.map((item, idx) => (
-                                              <div key={idx} className="flex items-center text-[11px] whitespace-nowrap">
-                                                <span className="font-semibold text-black">{item.name}</span>
-                                                <span className="text-rose-600 font-black text-sm px-1.5 font-mono">|</span>
-                                                <span className="text-rose-800 font-mono font-bold">{item.qty} {item.uom}</span>
-                                                <span className="text-rose-600 font-black text-sm px-1.5 font-mono">|</span>
-                                                <span className="text-gray-900 font-mono font-bold">@ Rs. {Number(item.price).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                              <div key={idx} className="border-b border-rose-100 last:border-b-0 pb-1 last:pb-0">
+                                                <div className="font-semibold text-black leading-tight break-words text-xs">{item.name}</div>
+                                                <div className="text-[10.5px] font-mono text-gray-700 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5">
+                                                  <span className="text-rose-700 font-bold">{item.qty} {item.uom}</span>
+                                                  <span className="text-gray-400">×</span>
+                                                  <span>Rs. {Number(item.price).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                                  <span className="font-bold text-rose-900">= Rs. {(Number(item.qty || 0) * Number(item.price || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                                </div>
                                               </div>
                                             ))}
                                           </div>
@@ -4365,11 +4785,11 @@ const SaleReportPrint = () => {
                 <thead>
                   <tr className="bg-gray-100 border-b border-black font-black uppercase text-black font-mono text-[10px]">
                     <th className="p-1.5 border border-black text-center w-10">S#</th>
-                    <th className="p-1.5 border border-black">Customer / Client Name</th>
-                    <th className="p-1.5 border border-black text-center w-36">Return Notes Booked</th>
-                    <th className="p-1.5 border border-black text-right w-36">Total Returned Units</th>
-                    <th className="p-1.5 border border-black text-right w-44">Total Credit Adjusted (PKR)</th>
-                    <th className="p-1.5 border border-black text-center w-28">% Share of Returns</th>
+                    <th className="p-1.5 border border-black w-[30%] min-w-[180px] max-w-[320px]">Customer Name</th>
+                    <th className="p-1.5 border border-black text-center w-[15%] min-w-[120px]">Return Notes Booked</th>
+                    <th className="p-1.5 border border-black text-right w-[20%] min-w-[140px]">Total Returned Units</th>
+                    <th className="p-1.5 border border-black text-right w-[22%] min-w-[160px]">Total Credit Adjusted (PKR)</th>
+                    <th className="p-1.5 border border-black text-center w-[9%] min-w-[90px]">% Share of Returns</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -4384,8 +4804,33 @@ const SaleReportPrint = () => {
                       const realIndex = isPrinting || pageSize === 'all' ? idx + 1 : (currentPage - 1) * (pageSize as number) + idx + 1;
                       return (
                         <tr key={idx} className="border-b border-black hover:bg-gray-50 font-semibold font-mono text-xs">
-                          <td className="p-1.5 border border-black text-center text-gray-600">{realIndex}</td>
-                          <td className="p-1.5 border border-black font-sans font-bold text-black">{cust.customer_name}</td>
+                          <td className="p-1.5 border border-black text-center text-gray-600 align-top">{realIndex}</td>
+                          <td className="p-1.5 border border-black font-sans align-top min-w-[180px] max-w-[320px]">
+                            <div className="font-bold text-black text-xs leading-tight">
+                              {cust.customer_name}
+                            </div>
+                            {(() => {
+                              const meta = resolveCustomerMeta(cust.customer_name);
+                              const code = cust.customer_code || cust.customerCode || meta.code || '';
+                              const pageNo = cust.page_no || cust.pageNo || meta.pageNo || '';
+                              if (!code && !pageNo) return null;
+                              return (
+                                <div className="text-[10px] font-mono text-slate-700 flex flex-wrap items-center gap-1 mt-0.5">
+                                  {code && (
+                                    <span className="bg-slate-100 px-1 py-0.2 rounded border border-slate-300 font-bold uppercase text-slate-800 text-[9.5px]">
+                                      {code}
+                                    </span>
+                                  )}
+                                  {code && pageNo && <span className="text-slate-400 font-bold">|</span>}
+                                  {pageNo && (
+                                    <span className="text-slate-600 font-semibold text-[9.5px]">
+                                      {String(pageNo).toUpperCase().startsWith('P#') ? pageNo : `P# ${pageNo}`}
+                                    </span>
+                                  )}
+                                </div>
+                              );
+                            })()}
+                          </td>
                           <td className="p-1.5 border border-black text-center font-bold text-indigo-700">{cust.returns_count}</td>
                           <td className="p-1.5 border border-black text-right font-bold text-rose-700">
                             {Number(cust.total_returned_qty || 0).toLocaleString()}
@@ -4501,16 +4946,18 @@ const SaleReportPrint = () => {
                                   <td className="p-1.5 border border-black font-black text-rose-700 uppercase align-top">{displayDocPrefixId}</td>
                                   <td className="p-1.5 border border-black font-bold text-primary uppercase align-top">{originalInvDisplay}</td>
                                   <td className="p-1.5 border border-black font-sans font-medium text-black align-top">{row.salesman || 'Direct'}</td>
-                                  <td className="p-1.5 border border-black font-sans text-gray-800 text-[11px] align-top">
+                                  <td className="p-1.5 border border-black font-sans text-gray-800 text-xs align-top">
                                     {itemDetails.length > 0 ? (
                                       <div className="flex flex-col gap-1 py-0.5">
                                         {itemDetails.map((item, idx) => (
-                                          <div key={idx} className="flex items-center text-[11px] whitespace-nowrap">
-                                            <span className="font-semibold text-black">{item.name}</span>
-                                            <span className="text-rose-700 font-black text-sm px-1.5 font-mono">|</span>
-                                            <span className="text-rose-900 font-mono font-bold">{item.qty} {item.uom}</span>
-                                            <span className="text-rose-700 font-black text-sm px-1.5 font-mono">|</span>
-                                            <span className="text-gray-900 font-mono font-bold">@ Rs. {Number(item.price).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                          <div key={idx} className="border-b border-rose-100 last:border-b-0 pb-1 last:pb-0">
+                                            <div className="font-semibold text-black leading-tight break-words text-xs">{item.name}</div>
+                                            <div className="text-[10.5px] font-mono text-gray-700 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5">
+                                              <span className="text-rose-700 font-bold">{item.qty} {item.uom}</span>
+                                              <span className="text-gray-400">×</span>
+                                              <span>Rs. {Number(item.price).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                              <span className="font-bold text-rose-900">= Rs. {(Number(item.qty || 0) * Number(item.price || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                            </div>
                                           </div>
                                         ))}
                                       </div>
@@ -4593,19 +5040,20 @@ const SaleReportPrint = () => {
                   <th className="p-1.5 border border-black text-center w-10">S#</th>
                   <th className="p-1.5 border border-black text-center w-24">Date</th>
                   <th className="p-1.5 border border-black w-28">Invoice #</th>
-                  <th className="p-1.5 border border-black">Customer Name</th>
+                  <th className="p-1.5 border border-black min-w-[140px] max-w-[220px]">Customer Name</th>
                   <th className="p-1.5 border border-black">Sales Officer</th>
                   <th className="p-1.5 border border-black w-24">Carrier</th>
                   <th className="p-1.5 border border-black">Product Items</th>
                   <th className="p-1.5 border border-black w-24">Warehouse</th>
                   <th className="p-1.5 border border-black text-center w-16">Term</th>
+                  <th className="p-1.5 border border-black text-right w-24 pr-2 text-amber-900">Discount</th>
                   <th className="p-1.5 border border-black text-right pr-3 w-28">Matrix Gross</th>
                 </tr>
               </thead>
               <tbody>
                 {displayedRows.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="text-center py-10 font-bold italic border border-black text-gray-400 bg-gray-50/50">
+                    <td colSpan={11} className="text-center py-10 font-bold italic border border-black text-gray-400 bg-gray-50/50">
                       No sales parameter records discovered matching chosen multi-criteria query parameters.
                     </td>
                   </tr>
@@ -4615,18 +5063,65 @@ const SaleReportPrint = () => {
                     const displayDocPrefixId = row.invoice_no || `INV-${String(row.id).padStart(4, '0')}`;
                     const processingDateDisplay = row.sale_date || String(row.created_at || '').split('T')[0];
                     const itemNames = extractItemNames(row);
+                    const itemDetails = extractItemDetails(row);
+                    const rowDiscounts = extractRowDiscounts(row);
                     const isCash = String(row.payment_term || '').toLowerCase() === 'cash';
+                    const freight = Number(row.transport_charges || row.freight_charges || row.freight || 0) + Number(row.additional_charges || 0);
 
                     return (
                       <tr key={row.id || idx} className="border-b border-black hover:bg-gray-50 font-semibold font-mono text-xs">
                         <td className="p-1.5 border border-black text-center text-gray-600 align-top">{realIndex}</td>
                         <td className="p-1.5 border border-black text-center text-gray-700 align-top">{processingDateDisplay}</td>
                         <td className="p-1.5 border border-black font-black text-primary uppercase whitespace-nowrap align-top">{displayDocPrefixId}</td>
-                        <td className="p-1.5 border border-black font-sans font-medium text-black align-top">{row.customer_name || 'Counter Retail Buyer'}</td>
+                        <td className="p-1.5 border border-black font-sans align-top min-w-[140px] max-w-[220px]">
+                          <div className="font-semibold text-black leading-tight break-words text-xs">
+                            {row.customer_name || 'Counter Retail Buyer'}
+                          </div>
+                          {(() => {
+                            const meta = resolveCustomerMeta(row.customer_name);
+                            const code = row.customer_code || row.customerCode || meta.code || '';
+                            const pageNo = row.page_no || row.pageNo || meta.pageNo || '';
+                            if (!code && !pageNo) return null;
+                            return (
+                              <div className="text-[10px] font-mono text-slate-700 flex flex-wrap items-center gap-1 mt-0.5">
+                                {code && (
+                                  <span className="bg-slate-100 px-1 py-0.2 rounded border border-slate-300 font-bold uppercase text-slate-800 text-[9.5px]">
+                                    {code}
+                                  </span>
+                                )}
+                                {code && pageNo && <span className="text-slate-400 font-bold">|</span>}
+                                {pageNo && (
+                                  <span className="text-slate-600 font-semibold text-[9.5px]">
+                                    {String(pageNo).toUpperCase().startsWith('P#') ? pageNo : `P# ${pageNo}`}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })()}
+                        </td>
                         <td className="p-1.5 border border-black font-sans text-gray-700 align-top">{row.salesman || 'Direct'}</td>
                         <td className="p-1.5 border border-black font-sans text-purple-700 font-bold align-top">{row.transport_name || 'Self Pick'}</td>
-                        <td className="p-1.5 border border-black font-sans text-gray-800 text-[11px] align-top">
-                          {itemNames.length > 0 ? (
+                        <td className="p-1.5 border border-black font-sans text-gray-800 text-xs align-top">
+                          {itemDetails.length > 0 ? (
+                            <div className="flex flex-col gap-1 py-0.5">
+                              {itemDetails.map((item, idx) => (
+                                <div key={idx} className="border-b border-gray-100 last:border-b-0 pb-1 last:pb-0">
+                                  <div className="font-semibold text-black leading-tight break-words text-xs">{item.name}</div>
+                                  <div className="text-[10.5px] font-mono text-gray-700 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5">
+                                    <span className="text-primary font-bold">{item.qty} {item.uom}</span>
+                                    <span className="text-gray-400">×</span>
+                                    <span>Rs. {Number(item.price).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                    <span className="font-bold text-slate-900">= Rs. {(Number(item.qty || 0) * Number(item.price || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                    {item.discountAmt > 0 && (
+                                      <span className="text-amber-800 font-bold bg-amber-50 px-1 rounded border border-amber-200 text-[9.5px] whitespace-nowrap">
+                                        Disc: Rs. {item.discountAmt.toLocaleString()} ({item.discountPer}%)
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          ) : itemNames.length > 0 ? (
                             itemNames.map((name: string, i: number) => (
                               <React.Fragment key={i}>
                                 {i > 0 && <span className="text-emerald-700 font-black text-sm px-1.5 font-mono">|</span>}
@@ -4645,8 +5140,42 @@ const SaleReportPrint = () => {
                             {row.payment_term || 'Credit'}
                           </span>
                         </td>
-                        <td className="p-1.5 border border-black text-right pr-3 font-black text-emerald-700 whitespace-nowrap align-top">
-                          Rs. {Number(row.total_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        <td className="p-1.5 border border-black text-right pr-2 text-amber-900 font-mono text-xs align-top">
+                          {rowDiscounts.grandTotalDiscount > 0 ? (
+                            <div className="space-y-0.5 text-right">
+                              {rowDiscounts.totalItemDiscount > 0 && rowDiscounts.overallBillDiscount > 0 ? (
+                                <>
+                                  <div className="text-[10px] text-amber-800 font-sans font-medium leading-tight">
+                                    Items: Rs. {rowDiscounts.totalItemDiscount.toLocaleString()}
+                                  </div>
+                                  <div className="text-[10px] text-amber-900 font-bold bg-amber-100/70 px-1 py-0.5 rounded border border-amber-300/70 leading-tight">
+                                    Bill: Rs. {rowDiscounts.overallBillDiscount.toLocaleString()}
+                                  </div>
+                                  <div className="border-t border-amber-300 pt-0.5 font-black text-amber-950 text-xs leading-tight">
+                                    Total: Rs. {rowDiscounts.grandTotalDiscount.toLocaleString()}
+                                  </div>
+                                </>
+                              ) : rowDiscounts.totalItemDiscount > 0 ? (
+                                <div className="text-amber-800 font-bold text-xs leading-tight">
+                                  Rs. {rowDiscounts.totalItemDiscount.toLocaleString()}
+                                </div>
+                              ) : (
+                                <div className="text-amber-900 font-bold text-[10px] bg-amber-100/70 px-1 py-0.5 rounded border border-amber-300/70 leading-tight">
+                                  Bill: Rs. {rowDiscounts.overallBillDiscount.toLocaleString()}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-gray-400 font-mono">-</span>
+                          )}
+                        </td>
+                        <td className="p-1.5 border border-black text-right pr-3 font-black text-emerald-700 align-top font-mono text-xs">
+                          <div>Rs. {Number(row.total_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+                          {freight > 0 && (
+                            <div className="text-[9.5px] font-sans font-medium text-slate-500 mt-0.5 leading-tight">
+                              (Inc. Freight Ch. {freight.toLocaleString()})
+                            </div>
+                          )}
                         </td>
                       </tr>
                     );
@@ -4657,40 +5186,59 @@ const SaleReportPrint = () => {
                 {/* 📄 Page Subtotal Row */}
                 {!isPrinting && pageSize !== 'all' && (
                   <tr className="bg-amber-50/80 border-t border-black font-bold font-mono text-xs text-amber-950">
-                    <td colSpan={9} className="p-2 border border-black text-right uppercase tracking-wider text-amber-900">
+                    <td colSpan={10} className="p-2 border border-black text-right uppercase tracking-wider text-amber-900">
                       Page {currentPage} Subtotal ({displayedRows.length} transactions):
                     </td>
                     <td className="p-2 border border-black text-right pr-3 text-emerald-800 font-bold whitespace-nowrap">
-                      Rs. {displayedRows.reduce((sum, r) => sum + Number(r.total_amount || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      <div>Rs. {displayedRows.reduce((sum, r) => sum + Number(r.total_amount || 0), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+                      {pageAllFreight > 0 && (
+                        <div className="text-[9px] font-sans font-medium text-slate-500 mt-0.5 leading-tight">
+                          (Inc. Total Freight: {pageAllFreight.toLocaleString()})
+                        </div>
+                      )}
                     </td>
                   </tr>
                 )}
                 {/* 📊 Overall Grand Totals Row */}
                 <tr className="bg-gray-100 border-t-2 border-black font-black font-mono text-xs">
-                  <td colSpan={9} className="p-2 border border-black text-right uppercase tracking-wider text-gray-900">
+                  <td colSpan={10} className="p-2 border border-black text-right uppercase tracking-wider text-gray-900">
                     Grand Total Summary (All {reportRows.length} Parameter Records):
                   </td>
                   <td className="p-2 border border-black text-right pr-3 text-success underline decoration-double text-sm whitespace-nowrap font-black">
-                    Rs. {totalGrossAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    <div>Rs. {totalGrossAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+                    {totalAllFreight > 0 && (
+                      <div className="text-[9.5px] font-sans font-medium text-slate-600 no-underline mt-0.5 leading-tight">
+                        (Inc. Total Freight: Rs. {totalAllFreight.toLocaleString()})
+                      </div>
+                    )}
                   </td>
                 </tr>
               </tfoot>
             </table>
           ) : (
-            <table className="w-full table-auto border border-collapse border-black text-[11px] font-sans antialiased text-left print:w-full">
+            <table className="w-full table-fixed border border-collapse border-black text-xs font-sans antialiased text-left print:w-full">
+              <colgroup>
+                <col style={{ width: '11%' }} />
+                <col style={{ width: '13%' }} />
+                <col style={{ width: '18%' }} />
+                <col style={{ width: '28%' }} />
+                <col style={{ width: '14%' }} />
+                <col style={{ width: '16%' }} />
+              </colgroup>
               <thead>
-                <tr className="bg-gray-100 border-b border-black font-black uppercase text-black font-mono text-[10px]">
-                  <th className="p-1.5 border border-black text-center">Processing Date</th>
-                  <th className="p-1.5 border border-black">Document Ref #</th>
-                  <th className="p-1.5 border border-black">Product</th>
+                <tr className="bg-gray-100 border-b border-black font-black uppercase text-black font-mono text-xs">
+                  <th className="p-1.5 border border-black text-center">Date</th>
+                  <th className="p-1.5 border border-black">Invoice No#</th>
                   <th className="p-1.5 border border-black">Customer</th>
-                  <th className="p-1.5 border border-black text-right pr-3">Gross Matrix Amount</th>
+                  <th className="p-1.5 border border-black">Product</th>
+                  <th className="p-1.5 border border-black text-right pr-2 text-amber-900">Discount</th>
+                  <th className="p-1.5 border border-black text-right pr-2.5">Total</th>
                 </tr>
               </thead>
               <tbody>
                 {displayedRows.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="text-center py-10 font-bold italic border border-black text-gray-400 bg-gray-50/50">
+                    <td colSpan={6} className="text-center py-10 font-bold italic border border-black text-gray-400 bg-gray-50/50">
                       No rows fetched matching the isolated active report criteria token keys.
                     </td>
                   </tr>
@@ -4700,22 +5248,57 @@ const SaleReportPrint = () => {
                     const processingDateDisplay = row.sale_date || row.return_date || String(row.created_at || '').split('T')[0];
                     const itemNames = extractItemNames(row);
                     const itemDetails = extractItemDetails(row);
+                    const rowDiscounts = extractRowDiscounts(row);
 
                     return (
                       <tr key={row.id} className="border-b border-black hover:bg-gray-50 font-semibold font-mono text-xs">
-                        <td className="p-1.5 border border-black text-center text-gray-600 align-top">{processingDateDisplay}</td>
-                        <td className="p-1.5 border border-black text-primary font-black uppercase whitespace-nowrap align-top">{displayDocPrefixId}</td>
-                        <td className="p-1.5 border border-black font-sans text-black text-[11px] align-top">
+                        <td className="p-1.5 border border-black text-center text-gray-700 align-top font-mono text-xs whitespace-nowrap">{processingDateDisplay}</td>
+                        <td className="p-1.5 border border-black text-primary font-black uppercase align-top font-mono text-xs break-all">{displayDocPrefixId}</td>
+                        <td className="p-1.5 border border-black font-sans align-top">
+                          <div className="font-bold text-black leading-tight break-words text-xs">
+                            {row.customer_name || 'Counter Retail Buyer'}
+                          </div>
+                          {(() => {
+                            const rawName = String(row.customer_name || '').trim().toLowerCase();
+                            const matched = customerLookup[rawName] || (rawName === 'cash' ? customerLookup['walk-in customer'] || customerLookup['cash customer'] : undefined);
+                            const code = row.customer_code || row.customerCode || row.customercode || matched?.code || '';
+                            const pageNo = row.page_no || row.pageNo || matched?.pageNo || '';
+                            if (!code && !pageNo) return null;
+                            return (
+                              <div className="text-[10px] font-mono text-slate-700 flex flex-wrap items-center gap-1 mt-0.5">
+                                {code && (
+                                  <span className="bg-slate-100 px-1 py-0.2 rounded border border-slate-300 font-bold uppercase text-slate-800 text-[9.5px]">
+                                    {code}
+                                  </span>
+                                )}
+                                {code && pageNo && <span className="text-slate-400 font-bold">|</span>}
+                                {pageNo && (
+                                  <span className="text-slate-600 font-semibold text-[9.5px]">
+                                    {String(pageNo).toUpperCase().startsWith('P#') ? pageNo : `P# ${pageNo}`}
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })()}
+                        </td>
+                        <td className="p-1.5 border border-black font-sans text-black text-xs align-top">
                           {rType === 'invoice' ? (
                             itemDetails.length > 0 ? (
                               <div className="flex flex-col gap-1 py-0.5">
                                 {itemDetails.map((item, idx) => (
-                                  <div key={idx} className="flex items-center text-[11px] whitespace-nowrap">
-                                    <span className="font-semibold text-black">{item.name}</span>
-                                    <span className="text-emerald-700 font-black text-sm px-1.5 font-mono">|</span>
-                                    <span className="text-gray-700 font-mono font-bold">{item.qty} {item.uom}</span>
-                                    <span className="text-emerald-700 font-black text-sm px-1.5 font-mono">|</span>
-                                    <span className="text-gray-900 font-mono font-bold">Rs. {Number(item.price).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                  <div key={idx} className="border-b border-gray-100 last:border-b-0 pb-1 last:pb-0">
+                                    <div className="font-semibold text-black leading-tight break-words text-xs">{item.name}</div>
+                                    <div className="text-[10.5px] font-mono text-gray-700 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 mt-0.5">
+                                      <span className="text-primary font-bold">{item.qty} {item.uom}</span>
+                                      <span className="text-gray-400">×</span>
+                                      <span>Rs. {Number(item.price).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                      <span className="font-bold text-slate-900">= Rs. {(Number(item.qty || 0) * Number(item.price || 0)).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                                      {item.discountAmt > 0 && (
+                                        <span className="text-amber-800 font-bold bg-amber-50 px-1 rounded border border-amber-200 text-[9.5px] whitespace-nowrap">
+                                          Disc: Rs. {item.discountAmt.toLocaleString()} ({item.discountPer}%)
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
                                 ))}
                               </div>
@@ -4726,8 +5309,8 @@ const SaleReportPrint = () => {
                             itemNames.length > 0 ? (
                               itemNames.map((name: string, i: number) => (
                                 <React.Fragment key={i}>
-                                  {i > 0 && <span className="text-emerald-700 font-black text-sm px-1.5 font-mono">|</span>}
-                                  <span className="font-medium">{name}</span>
+                                  {i > 0 && <span className="text-emerald-700 font-black text-xs px-1 font-mono">|</span>}
+                                  <span className="font-medium break-words">{name}</span>
                                 </React.Fragment>
                               ))
                             ) : (
@@ -4735,8 +5318,51 @@ const SaleReportPrint = () => {
                             )
                           )}
                         </td>
-                        <td className="p-1.5 border border-black text-black font-sans align-top">{row.customer_name || 'Counter Retail Buyer'}</td>
-                        <td className="p-1.5 border border-black text-right pr-3 text-success font-black whitespace-nowrap align-top">Rs. {Number(row.total_amount || row.return_amount || row.payout_amount_paid || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                        <td className="p-1.5 border border-black text-right pr-2 text-amber-900 font-mono text-xs align-top">
+                          {rowDiscounts.grandTotalDiscount > 0 ? (
+                            <div className="space-y-0.5 text-right">
+                              {rowDiscounts.totalItemDiscount > 0 && rowDiscounts.overallBillDiscount > 0 ? (
+                                <>
+                                  <div className="text-[10px] text-amber-800 font-sans font-medium leading-tight">
+                                    Items: Rs. {rowDiscounts.totalItemDiscount.toLocaleString()}
+                                  </div>
+                                  <div className="text-[10px] text-amber-900 font-bold bg-amber-100/70 px-1 py-0.5 rounded border border-amber-300/70 leading-tight">
+                                    Bill: Rs. {rowDiscounts.overallBillDiscount.toLocaleString()}
+                                  </div>
+                                  <div className="border-t border-amber-300 pt-0.5 font-black text-amber-950 text-xs leading-tight">
+                                    Total: Rs. {rowDiscounts.grandTotalDiscount.toLocaleString()}
+                                  </div>
+                                </>
+                              ) : rowDiscounts.totalItemDiscount > 0 ? (
+                                <div className="text-amber-800 font-bold text-xs leading-tight">
+                                  Rs. {rowDiscounts.totalItemDiscount.toLocaleString()}
+                                </div>
+                              ) : (
+                                <div className="text-amber-900 font-bold text-[10px] bg-amber-100/70 px-1 py-0.5 rounded border border-amber-300/70 leading-tight">
+                                  Bill: Rs. {rowDiscounts.overallBillDiscount.toLocaleString()}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-gray-400 font-mono">-</span>
+                          )}
+                        </td>
+                        <td className="p-1.5 border border-black text-right pr-2.5 text-success font-black align-top font-mono text-xs">
+                          <div>
+                            Rs. {Number(row.total_amount || row.return_amount || row.payout_amount_paid || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          </div>
+                          {(() => {
+                            const freight = Number(row.transport_charges || row.freight_charges || row.freight || 0) + Number(row.additional_charges || 0);
+                            if (freight > 0) {
+                              return (
+                                <div className="text-[9.5px] font-sans font-medium text-slate-500 mt-0.5 leading-tight">
+                                  (Inc. Freight Ch. {freight.toLocaleString()})
+                                </div>
+                              );
+                            }
+                            return null;
+                          })()}
+                        </td>
                       </tr>
                     );
                   })
@@ -4749,8 +5375,18 @@ const SaleReportPrint = () => {
                     <td colSpan={4} className="p-2 border border-black text-right uppercase tracking-wider text-amber-900">
                       Page {currentPage} Subtotal ({displayedRows.length} records):
                     </td>
-                    <td className="p-2 border border-black text-right pr-3 text-emerald-800 font-bold whitespace-nowrap">
-                      Rs. {displayedRows.reduce((sum, r) => sum + (Number(r.total_amount || r.return_amount || r.payout_amount_paid || 0)), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    <td className="p-2 border border-black text-right pr-2 text-amber-800 font-bold">
+                      Rs. {displayedRows.reduce((sum, r) => sum + extractRowDiscounts(r).grandTotalDiscount, 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </td>
+                    <td className="p-2 border border-black text-right pr-2.5 text-emerald-800 font-bold">
+                      <div>
+                        Rs. {displayedRows.reduce((sum, r) => sum + (Number(r.total_amount || r.return_amount || r.payout_amount_paid || 0)), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </div>
+                      {pageAllFreight > 0 && (
+                        <div className="text-[9.5px] font-sans font-medium text-slate-600 mt-0.5 leading-tight">
+                          (Inc. Freight: Rs. {pageAllFreight.toLocaleString()})
+                        </div>
+                      )}
                     </td>
                   </tr>
                 )}
@@ -4759,8 +5395,18 @@ const SaleReportPrint = () => {
                   <td colSpan={4} className="p-2 border border-black text-right uppercase tracking-wider text-gray-900">
                     Grand Total Summary (All {reportRows.length} Records):
                   </td>
-                  <td className="p-2 border border-black text-right pr-3 text-success underline decoration-double text-sm whitespace-nowrap">
-                    Rs. {reportRows.reduce((sum, r) => sum + (Number(r.total_amount || r.return_amount || r.payout_amount_paid || 0)), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  <td className="p-2 border border-black text-right pr-2 text-amber-900 font-black">
+                    Rs. {totalAllDiscounts.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </td>
+                  <td className="p-2 border border-black text-right pr-2.5 text-success underline decoration-double font-black">
+                    <div>
+                      Rs. {reportRows.reduce((sum, r) => sum + (Number(r.total_amount || r.return_amount || r.payout_amount_paid || 0)), 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </div>
+                    {totalAllFreight > 0 && (
+                      <div className="text-[9.5px] font-sans font-medium text-slate-600 no-underline mt-0.5 leading-tight">
+                        (Inc. Total Freight: Rs. {totalAllFreight.toLocaleString()})
+                      </div>
+                    )}
                   </td>
                 </tr>
               </tfoot>

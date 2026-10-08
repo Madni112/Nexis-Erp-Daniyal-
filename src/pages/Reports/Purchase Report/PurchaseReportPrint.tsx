@@ -37,6 +37,7 @@ const PurchaseReportPrint = () => {
   const [expandedRowKeys, setExpandedRowKeys] = useState<Set<string | number>>(new Set());
   const [categoryHierarchyTree, setCategoryHierarchyTree] = useState<any[]>([]);
   const [productLookupMap, setProductLookupMap] = useState<Record<string, any>>({});
+  const [vendorLookupMap, setVendorLookupMap] = useState<Record<string, any>>({});
 
   const config = location.state || { type: 'purchase', filters: {} };
   const { type: rType, filters = {} } = config;
@@ -143,6 +144,37 @@ const PurchaseReportPrint = () => {
     }
   };
 
+  // Helper to compile row discounts (item discounts + bill discounts)
+  const getRowDiscounts = (row: any, items: any[]) => {
+    let totalItemDiscount = 0;
+    if (Array.isArray(items)) {
+      items.forEach((it: any) => {
+        const q = Number(it.qty || it.quantity || 1);
+        const r = Number(it.purchase_price ?? it.cost_price ?? it.unit_price ?? it.rate ?? it.price ?? 0);
+        const gross = q * r;
+        const dPer = Number(it.discountPer ?? it.discount_per ?? 0);
+        const dAmt = Number(it.discountAmt ?? it.discount_amt ?? (dPer > 0 ? (gross * dPer) / 100 : 0));
+        totalItemDiscount += dAmt;
+      });
+    }
+    const overallBillDiscount = Number(
+      row.overall_discount ||
+      row.overall_discount_amount ||
+      row.bill_discount ||
+      row.discount_amount ||
+      row.discount ||
+      0
+    );
+    const grandTotalDiscount = totalItemDiscount + overallBillDiscount;
+    return { totalItemDiscount, overallBillDiscount, grandTotalDiscount };
+  };
+
+  // Helper to lookup vendor code and page number
+  const getVendorDetails = (vendorNameOrId: any) => {
+    const key = String(vendorNameOrId || '').trim().toLowerCase();
+    return vendorLookupMap[key] || null;
+  };
+
   // Set dynamic document title
   useEffect(() => {
     const originalTitle = document.title;
@@ -238,17 +270,28 @@ const PurchaseReportPrint = () => {
       try {
         setLoading(true);
 
-        const [prodRes, purRes, retRes, catRes] = await Promise.all([
+        const [prodRes, purRes, retRes, catRes, venRes] = await Promise.all([
           supabase.from('products').select('*'),
           supabase.from('supplier_purchases').select('*').order('id', { ascending: true }),
           supabase.from('purchase_returns').select('*').order('id', { ascending: true }),
-          supabase.from('inventory_categories').select('id, name, parent_id')
+          supabase.from('inventory_categories').select('id, name, parent_id'),
+          supabase.from('vendors').select('id, vendor_name, name, vendor_code, vendorCode, page_no, pageNo')
         ]);
 
         const allProducts = prodRes.data || [];
         const allPurchases = purRes.data || [];
         const allReturns = retRes.data || [];
         const allCategories = catRes.data || [];
+        const allVendors = venRes.data || [];
+
+        // Build vendor lookup map
+        const vLookup: Record<string, any> = {};
+        allVendors.forEach((v: any) => {
+          const vName = (v.vendor_name || v.name || '').trim().toLowerCase();
+          if (vName) vLookup[vName] = v;
+          if (v.id) vLookup[String(v.id)] = v;
+        });
+        setVendorLookupMap(vLookup);
 
         // Build category lookup and ancestor map
         const catById = new Map<number, any>();
@@ -875,7 +918,10 @@ const PurchaseReportPrint = () => {
               const { parentCategory, subCategory, category, brand, uom, sku } = getProductMeta(pName);
               const qty = Number(it.qty || it.quantity || 1);
               const rate = Number(it.purchase_price ?? it.cost_price ?? it.unit_price ?? it.rate ?? it.price ?? 0);
-              const lineTotal = Number(it.total || it.amount || it.subtotal || (qty * rate) || 0);
+              const gross = qty * rate;
+              const dPer = Number(it.discountPer ?? it.discount_per ?? 0);
+              const dAmt = Number(it.discountAmt ?? it.discount_amt ?? (dPer > 0 ? (gross * dPer) / 100 : 0));
+              const lineTotal = Number(it.total || it.amount || it.subtotal || Math.max(0, gross - dAmt) || 0);
 
               return {
                 sno: iIdx + 1,
@@ -888,23 +934,29 @@ const PurchaseReportPrint = () => {
                 uom: it.uom || uom,
                 qty,
                 rate,
+                discountPer: dPer,
+                discountAmt: dAmt,
                 total_amount: lineTotal
               };
             });
 
             const invoiceTotalUnits = lineItems.reduce((sum: number, it: any) => sum + it.qty, 0);
+            const rowDiscounts = getRowDiscounts(pur, items);
 
             return {
               id: pur.id,
               purchase_no: pNo,
               supplier_name: sName,
+              vendor_code: pur.vendor_code || pur.supplier_code || '',
+              page_no: pur.page_no || pur.pageNo || '',
               purchase_date: pDate,
               warehouse,
               payment_term: pur.payment_term || 'Settle',
               total_amount: Number(pur.total_amount || 0),
               total_units: invoiceTotalUnits,
               items_count: lineItems.length,
-              line_items: lineItems
+              line_items: lineItems,
+              row_discounts: rowDiscounts
             };
           });
 
@@ -1098,16 +1150,25 @@ const PurchaseReportPrint = () => {
           { header: 'S#', key: 'idx', width: 8, alignment: { horizontal: 'center' } },
           { header: 'Processing Date', key: 'processingDate', width: 16, alignment: { horizontal: 'center' } },
           { header: rType === 'return' ? 'Return No' : 'Purchase No', key: 'docRef', width: 20 },
-          { header: 'Supplier / Vendor Name', key: 'vendorName', width: 32 },
+          { header: 'Supplier Name', key: 'vendorName', width: 28 },
+          { header: 'Supplier Code', key: 'vendorCode', width: 16, alignment: { horizontal: 'center' } },
+          { header: 'Page #', key: 'pageNo', width: 12, alignment: { horizontal: 'center' } },
           { header: 'Purchased Line Items / Products', key: 'productDetails', width: 50 },
           { header: 'Total Consignment Qty', key: 'totalQty', width: 22, alignment: { horizontal: 'center' } },
+          { header: 'Discount (PKR)', key: 'discount', width: 18, numFmt: '#,##0.00', alignment: { horizontal: 'right' } },
           { header: 'Payment Term', key: 'status', width: 18, alignment: { horizontal: 'center' } },
-          { header: rType === 'return' ? 'Gross Return Amount (PKR)' : 'Gross Purchase Amount (PKR)', key: 'totalAmount', width: 24, numFmt: '#,##0.00', alignment: { horizontal: 'right' } }
+          { header: rType === 'return' ? 'Debit Amount (PKR)' : 'Net Amount (PKR)', key: 'totalAmount', width: 24, numFmt: '#,##0.00', alignment: { horizontal: 'right' } }
         ];
 
         exportData = reportRows.map((row, idx) => {
           const items = parseItems(row.items || row.returned_items);
           const totalQtyStr = getConsignmentQtyBreakdown(items).join(', ');
+          const supplierTitle = row.supplier_name || row.vendor_name || 'Generic Wholesaler';
+          const matchedVendor = getVendorDetails(supplierTitle);
+          const vendorCode = row.vendor_code || row.supplier_code || matchedVendor?.vendor_code || matchedVendor?.vendorCode || '-';
+          const pageNo = row.page_no || row.pageNo || matchedVendor?.page_no || matchedVendor?.pageNo || '-';
+          const rowDiscounts = getRowDiscounts(row, items);
+
           const productDetails = items.map((it: any) => {
             const pName = (it.itemName || it.product_name || it.name || 'Item').trim();
             const qStr = formatItemLineQty(pName, Number(it.qty || it.quantity || 1), it.uom);
@@ -1120,9 +1181,12 @@ const PurchaseReportPrint = () => {
             idx: idx + 1,
             docRef: row.purchase_no || row.return_no || `PUR-${String(row.id).padStart(4, '0')}`,
             processingDate: row.purchase_date || row.return_date || String(row.created_at || '').split('T')[0],
-            vendorName: row.supplier_name || row.vendor_name || 'Generic Wholesaler',
+            vendorName: supplierTitle,
+            vendorCode,
+            pageNo,
             productDetails: productDetails || 'No line items recorded',
             totalQty: totalQtyStr || '-',
+            discount: rowDiscounts.grandTotalDiscount,
             status: row.payment_term || row.status || 'Confirmed',
             totalAmount: Number(row.total_amount || row.return_amount || 0)
           };
@@ -1738,7 +1802,7 @@ const PurchaseReportPrint = () => {
                                     <th className="p-1 border border-slate-300 text-center w-10">S#</th>
                                     <th className="p-1 border border-slate-300 w-24 text-center">Date</th>
                                     <th className="p-1 border border-slate-300 w-28">Purchase No</th>
-                                    <th className="p-1 border border-slate-300">Supplier / Vendor</th>
+                                    <th className="p-1 border border-slate-300 min-w-[130px] max-w-[200px]">Supplier Name</th>
                                     <th className="p-1 border border-slate-300 w-32">Warehouse</th>
                                     <th className="p-1 border border-slate-300 text-right w-20">Batch Qty</th>
                                     <th className="p-1 border border-slate-300 text-right w-24">Unit Rate</th>
@@ -1747,19 +1811,42 @@ const PurchaseReportPrint = () => {
                                   </tr>
                                 </thead>
                                 <tbody>
-                                  {prod.transactions.map((tx: any, tIdx: number) => (
-                                    <tr key={tIdx} className="border-b border-slate-200 hover:bg-slate-50 font-mono">
-                                      <td className="p-1 border border-slate-300 text-center text-slate-400">{tIdx + 1}</td>
-                                      <td className="p-1 border border-slate-300 text-center text-slate-600">{tx.date}</td>
-                                      <td className="p-1 border border-slate-300 font-bold text-primary">{tx.purchase_no}</td>
-                                      <td className="p-1 border border-slate-300 font-sans font-semibold text-slate-800">{tx.supplier_name}</td>
-                                      <td className="p-1 border border-slate-300 font-sans text-slate-600">{tx.warehouse}</td>
-                                      <td className="p-1 border border-slate-300 text-right font-bold text-slate-900">{tx.qty.toLocaleString()} {tx.uom}</td>
-                                      <td className="p-1 border border-slate-300 text-right font-semibold text-slate-700">Rs. {Number(tx.rate).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                  {prod.transactions.map((tx: any, tIdx: number) => {
+                                    const matchedVendor = getVendorDetails(tx.supplier_name);
+                                    const code = tx.vendor_code || matchedVendor?.vendor_code || matchedVendor?.vendorCode || '';
+                                    const pageNo = tx.page_no || matchedVendor?.page_no || matchedVendor?.pageNo || '';
+
+                                    return (
+                                      <tr key={tIdx} className="border-b border-slate-200 hover:bg-slate-50 font-mono">
+                                        <td className="p-1 border border-slate-300 text-center text-slate-400">{tIdx + 1}</td>
+                                        <td className="p-1 border border-slate-300 text-center text-slate-600">{tx.date}</td>
+                                        <td className="p-1 border border-slate-300 font-bold text-primary">{tx.purchase_no}</td>
+                                        <td className="p-1 border border-slate-300 font-sans font-semibold text-slate-800">
+                                          <div>{tx.supplier_name}</div>
+                                          {(code || pageNo) && (
+                                            <div className="text-[9.5px] font-mono text-slate-700 flex flex-wrap items-center gap-1 mt-0.5 font-normal">
+                                              {code && (
+                                                <span className="bg-slate-100 px-1 py-0.2 rounded border border-slate-300 font-bold uppercase text-slate-800 text-[9px]">
+                                                  {code}
+                                                </span>
+                                              )}
+                                              {code && pageNo && <span className="text-slate-400 font-bold">|</span>}
+                                              {pageNo && (
+                                                <span className="text-slate-600 font-semibold text-[9px]">
+                                                  {String(pageNo).toUpperCase().startsWith('P#') ? pageNo : `P# ${pageNo}`}
+                                                </span>
+                                              )}
+                                            </div>
+                                          )}
+                                        </td>
+                                        <td className="p-1 border border-slate-300 font-sans text-slate-600">{tx.warehouse}</td>
+                                        <td className="p-1 border border-slate-300 text-right font-bold text-slate-900">{tx.qty.toLocaleString()} {tx.uom}</td>
+                                        <td className="p-1 border border-slate-300 text-right font-semibold text-slate-700">Rs. {Number(tx.rate).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                                       <td className="p-1 border border-slate-300 text-right pr-2 font-black text-emerald-800">Rs. {Number(tx.total_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                                       <td className="p-1 border border-slate-300 text-center uppercase text-[9px] font-bold text-slate-600">{tx.payment_term}</td>
                                     </tr>
-                                  ))}
+                                  );
+                                })}
                                 </tbody>
                               </table>
                             </td>
@@ -1801,7 +1888,7 @@ const PurchaseReportPrint = () => {
                     <th className="p-1.5 border border-black text-center w-10">S#</th>
                     <th className="p-1.5 border border-black text-center w-24">Date</th>
                     <th className="p-1.5 border border-black w-32 font-mono">Purchase No</th>
-                    <th className="p-1.5 border border-black">Supplier / Vendor</th>
+                    <th className="p-1.5 border border-black min-w-[150px] max-w-[240px]">Supplier Name</th>
                     <th className="p-1.5 border border-black w-28">Warehouse</th>
                     <th className="p-1.5 border border-black text-center w-24">Items Count</th>
                     <th className="p-1.5 border border-black text-right w-28">Total Units</th>
@@ -1816,20 +1903,43 @@ const PurchaseReportPrint = () => {
                       </td>
                     </tr>
                   ) : (
-                    paginatedRows.map((inv, idx) => (
-                      <tr key={inv.id || inv.purchase_no} className="border-b border-black font-mono text-xs hover:bg-gray-50">
-                        <td className="p-1.5 border border-black text-center text-gray-400">{startIndex + idx + 1}</td>
-                        <td className="p-1.5 border border-black text-center text-slate-700">{inv.purchase_date}</td>
-                        <td className="p-1.5 border border-black font-bold uppercase text-slate-900">{inv.purchase_no}</td>
-                        <td className="p-1.5 border border-black font-sans font-bold text-slate-800">{inv.supplier_name}</td>
-                        <td className="p-1.5 border border-black font-sans text-slate-600">{inv.warehouse}</td>
-                        <td className="p-1.5 border border-black text-center font-bold text-slate-700">{inv.line_items?.length || 0}</td>
-                        <td className="p-1.5 border border-black text-right font-bold text-slate-900">{Number(inv.total_units || 0).toLocaleString()}</td>
-                        <td className="p-1.5 border border-black text-right pr-3 font-black text-emerald-800">
-                          Rs. {Number(inv.total_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                        </td>
-                      </tr>
-                    ))
+                    paginatedRows.map((inv, idx) => {
+                      const matchedVendor = getVendorDetails(inv.supplier_name);
+                      const code = inv.vendor_code || matchedVendor?.vendor_code || matchedVendor?.vendorCode || '';
+                      const pageNo = inv.page_no || matchedVendor?.page_no || matchedVendor?.pageNo || '';
+
+                      return (
+                        <tr key={inv.id || inv.purchase_no} className="border-b border-black font-mono text-xs hover:bg-gray-50">
+                          <td className="p-1.5 border border-black text-center text-gray-400">{startIndex + idx + 1}</td>
+                          <td className="p-1.5 border border-black text-center text-slate-700">{inv.purchase_date}</td>
+                          <td className="p-1.5 border border-black font-bold uppercase text-slate-900">{inv.purchase_no}</td>
+                          <td className="p-1.5 border border-black font-sans font-bold text-slate-800">
+                            <div>{inv.supplier_name}</div>
+                            {(code || pageNo) && (
+                              <div className="text-[10px] font-mono text-slate-700 flex flex-wrap items-center gap-1 mt-0.5 font-normal">
+                                {code && (
+                                  <span className="bg-slate-100 px-1 py-0.2 rounded border border-slate-300 font-bold uppercase text-slate-800 text-[9.5px]">
+                                    {code}
+                                  </span>
+                                )}
+                                {code && pageNo && <span className="text-slate-400 font-bold">|</span>}
+                                {pageNo && (
+                                  <span className="text-slate-600 font-semibold text-[9.5px]">
+                                    {String(pageNo).toUpperCase().startsWith('P#') ? pageNo : `P# ${pageNo}`}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                          </td>
+                          <td className="p-1.5 border border-black font-sans text-slate-600">{inv.warehouse}</td>
+                          <td className="p-1.5 border border-black text-center font-bold text-slate-700">{inv.line_items?.length || 0}</td>
+                          <td className="p-1.5 border border-black text-right font-bold text-slate-900">{Number(inv.total_units || 0).toLocaleString()}</td>
+                          <td className="p-1.5 border border-black text-right pr-3 font-black text-emerald-800">
+                            Rs. {Number(inv.total_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
                 <tfoot className="bg-gray-200 border-t-2 border-black font-black text-xs font-mono">
@@ -1854,6 +1964,9 @@ const PurchaseReportPrint = () => {
               ) : (
                 paginatedRows.map((inv, idx) => {
                   const invKey = inv.id || inv.purchase_no;
+                  const matchedVendor = getVendorDetails(inv.supplier_name);
+                  const code = inv.vendor_code || matchedVendor?.vendor_code || matchedVendor?.vendorCode || '';
+                  const pageNo = inv.page_no || matchedVendor?.page_no || matchedVendor?.pageNo || '';
 
                   return (
                     <div key={invKey} className="border-2 border-black rounded overflow-hidden shadow-xs print:break-inside-avoid">
@@ -1866,8 +1979,22 @@ const PurchaseReportPrint = () => {
                           <span className="text-xs font-black uppercase text-slate-900 tracking-wide">
                             {inv.purchase_no}
                           </span>
-                          <span className="text-xs font-sans font-bold text-slate-700">
+                          <span className="text-xs font-sans font-bold text-slate-700 flex items-center gap-1.5">
                             • {inv.supplier_name}
+                            {(code || pageNo) && (
+                              <span className="inline-flex items-center gap-1 font-mono font-normal">
+                                {code && (
+                                  <span className="bg-white px-1.5 py-0.2 rounded border border-slate-300 text-[9.5px] font-bold text-slate-800 uppercase">
+                                    {code}
+                                  </span>
+                                )}
+                                {pageNo && (
+                                  <span className="bg-white px-1.5 py-0.2 rounded border border-slate-300 text-[9.5px] font-semibold text-slate-600">
+                                    {String(pageNo).toUpperCase().startsWith('P#') ? pageNo : `P# ${pageNo}`}
+                                  </span>
+                                )}
+                              </span>
+                            )}
                           </span>
                         </div>
                         <div className="flex items-center gap-4 text-xs">
@@ -1909,7 +2036,14 @@ const PurchaseReportPrint = () => {
                                 <td className="p-1 border border-slate-300 text-center uppercase text-slate-500">{it.uom}</td>
                                 <td className="p-1 border border-slate-300 text-right font-bold text-slate-900">{Number(it.qty).toLocaleString()}</td>
                                 <td className="p-1 border border-slate-300 text-right text-slate-700">Rs. {Number(it.rate).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                                <td className="p-1 border border-slate-300 text-right pr-2 font-black text-emerald-800">Rs. {Number(it.total_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                                <td className="p-1 border border-slate-300 text-right pr-2 font-black text-emerald-800">
+                                  <div>Rs. {Number(it.total_amount).toLocaleString(undefined, { minimumFractionDigits: 2 })}</div>
+                                  {Number(it.discountAmt || 0) > 0 && (
+                                    <div className="text-[9.5px] font-sans font-bold text-amber-800">
+                                      Disc: Rs. {Number(it.discountAmt).toLocaleString()} {it.discountPer > 0 ? `(${it.discountPer}%)` : ''}
+                                    </div>
+                                  )}
+                                </td>
                               </tr>
                             ))}
                           </tbody>
@@ -1948,17 +2082,18 @@ const PurchaseReportPrint = () => {
                   <th className="p-1.5 border border-black text-center w-10">S#</th>
                   <th className="p-1.5 border border-black text-center w-24">Date</th>
                   <th className="p-1.5 border border-black w-24">{rType === 'return' ? 'Return No' : 'Purchase No'}</th>
-                  <th className="p-1.5 border border-black w-40">Supplier / Vendor</th>
+                  <th className="p-1.5 border border-black w-[18%] min-w-[140px] max-w-[220px]">Supplier Name</th>
                   <th className="p-1.5 border border-black">{rType === 'return' ? 'Returned Merchandise / Line Items' : 'Purchased Product Details / Line Items'}</th>
-                  <th className="p-1.5 border border-black text-right w-32">Total Qty</th>
+                  <th className="p-1.5 border border-black text-right w-24">Total Qty</th>
+                  <th className="p-1.5 border border-black text-right w-24 pr-2">Discount</th>
                   <th className="p-1.5 border border-black text-center w-24">{rType === 'return' ? 'Adjustment Term' : 'Payment Term'}</th>
-                  <th className="p-1.5 border border-black text-right pr-3 w-36">{rType === 'return' ? 'Debit Amount' : 'Gross Amount'}</th>
+                  <th className="p-1.5 border border-black text-right pr-3 w-36">{rType === 'return' ? 'Debit Amount' : 'Net Amount'}</th>
                 </tr>
               </thead>
               <tbody>
                 {paginatedRows.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="text-center py-10 font-bold italic border border-black text-gray-400 bg-gray-50/50">
+                    <td colSpan={9} className="text-center py-10 font-bold italic border border-black text-gray-400 bg-gray-50/50">
                       No rows matching active report criteria.
                     </td>
                   </tr>
@@ -1968,14 +2103,36 @@ const PurchaseReportPrint = () => {
                     const displayAccountTitle = row.supplier_name || row.vendor_name || 'Generic Wholesaler';
                     const displayProcessingDate = String(row.purchase_date || row.return_date || row.created_at || '').split('T')[0];
                     const items = parseItems(row.items || row.returned_items);
+                    const matchedVendor = getVendorDetails(displayAccountTitle);
+                    const code = row.vendor_code || row.supplier_code || matchedVendor?.vendor_code || matchedVendor?.vendorCode || '';
+                    const pageNo = row.page_no || row.pageNo || matchedVendor?.page_no || matchedVendor?.pageNo || '';
+                    const rowDiscounts = getRowDiscounts(row, items);
+                    const freight = Number(row.additional_charges || row.freight_charges || row.transport_charges || 0);
 
                     return (
                       <tr key={row.id || idx} className="border-b border-black hover:bg-gray-50 font-semibold font-mono text-xs">
-                        <td className="p-1.5 border border-black text-center text-gray-400">{startIndex + idx + 1}</td>
-                        <td className="p-1.5 border border-black text-center text-gray-600 whitespace-nowrap text-[10.5px]">{displayProcessingDate}</td>
-                        <td className="p-1.5 border border-black text-primary font-black uppercase whitespace-nowrap">{displayDocRef}</td>
-                        <td className="p-1.5 border border-black text-black font-sans font-bold">{displayAccountTitle}</td>
-                        <td className="p-1.5 border border-black font-sans">
+                        <td className="p-1.5 border border-black text-center text-gray-400 align-top">{startIndex + idx + 1}</td>
+                        <td className="p-1.5 border border-black text-center text-gray-600 whitespace-nowrap text-[10.5px] align-top">{displayProcessingDate}</td>
+                        <td className="p-1.5 border border-black text-primary font-black uppercase whitespace-nowrap align-top">{displayDocRef}</td>
+                        <td className="p-1.5 border border-black text-black font-sans font-bold align-top">
+                          <div>{displayAccountTitle}</div>
+                          {(code || pageNo) && (
+                            <div className="text-[10px] font-mono text-slate-700 flex flex-wrap items-center gap-1 mt-0.5 font-normal">
+                              {code && (
+                                <span className="bg-slate-100 px-1 py-0.2 rounded border border-slate-300 font-bold uppercase text-slate-800 text-[9.5px]">
+                                  {code}
+                                </span>
+                              )}
+                              {code && pageNo && <span className="text-slate-400 font-bold">|</span>}
+                              {pageNo && (
+                                <span className="text-slate-600 font-semibold text-[9.5px]">
+                                  {String(pageNo).toUpperCase().startsWith('P#') ? pageNo : `P# ${pageNo}`}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </td>
+                        <td className="p-1.5 border border-black font-sans align-top">
                           {items.length === 0 ? (
                             <span className="text-gray-400 italic text-[10px]">No line items recorded</span>
                           ) : (
@@ -1985,6 +2142,9 @@ const PurchaseReportPrint = () => {
                                 const qtyFormatted = formatItemLineQty(pName, Number(it.qty || it.quantity || 1), it.uom);
                                 const rate = Number(it.purchase_price ?? it.cost_price ?? it.unit_price ?? it.rate ?? it.price ?? 0);
                                 const itemWh = it.warehouse || it.target_warehouse || row.target_warehouse;
+                                const grossLine = Number(it.qty || it.quantity || 1) * rate;
+                                const dPer = Number(it.discountPer ?? it.discount_per ?? 0);
+                                const dAmt = Number(it.discountAmt ?? it.discount_amt ?? (dPer > 0 ? (grossLine * dPer) / 100 : 0));
 
                                 return (
                                   <div
@@ -1999,8 +2159,15 @@ const PurchaseReportPrint = () => {
                                         </span>
                                       )}
                                     </span>
-                                    <span className="text-slate-700 whitespace-nowrap text-[10px] font-bold">
-                                      {qtyFormatted} {rate > 0 && <span className="text-slate-400 font-medium">@ Rs. {rate.toLocaleString()}</span>}
+                                    <span className="text-slate-700 whitespace-nowrap text-[10px] font-bold flex items-center gap-1.5">
+                                      <span>{qtyFormatted}</span>
+                                      {rate > 0 && <span className="text-slate-400 font-medium">× Rs. {rate.toLocaleString()}</span>}
+                                      {rate > 0 && <span className="text-slate-900 font-bold">= Rs. {grossLine.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>}
+                                      {dAmt > 0 && (
+                                        <span className="text-amber-800 font-bold bg-amber-50 px-1 rounded border border-amber-200 text-[9.5px]">
+                                          Disc: Rs. {dAmt.toLocaleString()} {dPer > 0 ? `(${dPer}%)` : ''}
+                                        </span>
+                                      )}
                                     </span>
                                   </div>
                                 );
@@ -2008,7 +2175,7 @@ const PurchaseReportPrint = () => {
                             </div>
                           )}
                         </td>
-                        <td className="p-1.5 border border-black text-right font-black font-mono text-slate-900 whitespace-nowrap text-[11px]">
+                        <td className="p-1.5 border border-black text-right font-black font-mono text-slate-900 whitespace-nowrap text-[11px] align-top">
                           <div className="flex flex-col items-end space-y-0.5">
                             {getConsignmentQtyBreakdown(items).map((qLine, qIdx) => (
                               <span key={qIdx} className="leading-tight">
@@ -2017,9 +2184,45 @@ const PurchaseReportPrint = () => {
                             ))}
                           </div>
                         </td>
-                        <td className="p-2 border border-black text-center uppercase text-[10px] font-black whitespace-nowrap">{row.payment_term || 'Settled'}</td>
-                        <td className="p-1.5 border border-black text-right pr-3 text-success font-black whitespace-nowrap">
-                          Rs. {Number(row.total_amount || row.return_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                        <td className="p-1.5 border border-black text-right pr-2 text-amber-900 font-mono text-xs align-top">
+                          {rowDiscounts.grandTotalDiscount > 0 ? (
+                            <div className="space-y-0.5 text-right">
+                              {rowDiscounts.totalItemDiscount > 0 && rowDiscounts.overallBillDiscount > 0 ? (
+                                <>
+                                  <div className="text-[10px] text-amber-800 font-sans font-medium leading-tight">
+                                    Items: Rs. {rowDiscounts.totalItemDiscount.toLocaleString()}
+                                  </div>
+                                  <div className="text-[10px] text-amber-900 font-bold bg-amber-100/70 px-1 py-0.5 rounded border border-amber-300/70 leading-tight">
+                                    Bill: Rs. {rowDiscounts.overallBillDiscount.toLocaleString()}
+                                  </div>
+                                  <div className="border-t border-amber-300 pt-0.5 font-black text-amber-950 text-xs leading-tight">
+                                    Total: Rs. {rowDiscounts.grandTotalDiscount.toLocaleString()}
+                                  </div>
+                                </>
+                              ) : rowDiscounts.totalItemDiscount > 0 ? (
+                                <div className="text-amber-800 font-bold text-xs leading-tight">
+                                  Rs. {rowDiscounts.totalItemDiscount.toLocaleString()}
+                                </div>
+                              ) : (
+                                <div className="text-amber-900 font-bold text-[10px] bg-amber-100/70 px-1 py-0.5 rounded border border-amber-300/70 leading-tight">
+                                  Bill: Rs. {rowDiscounts.overallBillDiscount.toLocaleString()}
+                                </div>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-gray-400 font-mono">-</span>
+                          )}
+                        </td>
+                        <td className="p-2 border border-black text-center uppercase text-[10px] font-black whitespace-nowrap align-top">{row.payment_term || 'Settled'}</td>
+                        <td className="p-1.5 border border-black text-right pr-3 text-success font-black whitespace-nowrap align-top">
+                          <div>
+                            Rs. {Number(row.total_amount || row.return_amount || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                          </div>
+                          {freight > 0 && (
+                            <div className="text-[9.5px] font-sans font-medium text-slate-500 mt-0.5 leading-tight">
+                              (Inc. Freight Ch. {freight.toLocaleString()})
+                            </div>
+                          )}
                         </td>
                       </tr>
                     );
@@ -2029,7 +2232,7 @@ const PurchaseReportPrint = () => {
               <tfoot>
                 {!isPrinting && pageSize !== 'all' && (
                   <tr className="bg-amber-50/80 border-t border-black font-bold font-mono text-xs text-amber-950">
-                    <td colSpan={7} className="p-2 border border-black text-right uppercase tracking-wider text-amber-900">
+                    <td colSpan={8} className="p-2 border border-black text-right uppercase tracking-wider text-amber-900">
                       Page {currentPage} Subtotal ({paginatedRows.length} records):
                     </td>
                     <td className="p-2 border border-black text-right pr-3 text-emerald-800 font-bold whitespace-nowrap">
@@ -2038,7 +2241,7 @@ const PurchaseReportPrint = () => {
                   </tr>
                 )}
                 <tr className="bg-gray-100 border-t-2 border-black font-black font-mono text-xs">
-                  <td colSpan={7} className="p-2 border border-black text-right uppercase tracking-wider text-gray-900">
+                  <td colSpan={8} className="p-2 border border-black text-right uppercase tracking-wider text-gray-900">
                     Grand Total Summary (All {reportRows.length} Records):
                   </td>
                   <td className="p-2 border border-black text-right pr-3 text-success underline decoration-double text-sm whitespace-nowrap">

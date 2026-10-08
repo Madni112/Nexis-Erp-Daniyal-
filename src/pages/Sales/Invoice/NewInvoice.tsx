@@ -41,6 +41,10 @@ const NewInvoice = () => {
   const [highlightedProdNameIndex, setHighlightedProdNameIndex] = useState<number>(0);
   const [activeWhIndex, setActiveWhIndex] = useState<number | null>(null);
   const [highlightedWhIndex, setHighlightedWhIndex] = useState<number>(0);
+  const [activeReturnProdIndex, setActiveReturnProdIndex] = useState<number | null>(null);
+  const [highlightedReturnProdIndex, setHighlightedReturnProdIndex] = useState<number>(0);
+  const [activeReturnWhIndex, setActiveReturnWhIndex] = useState<number | null>(null);
+  const [highlightedReturnWhIndex, setHighlightedReturnWhIndex] = useState<number>(0);
 
   const [showCustomerModal, setShowCustomerModal] = useState<boolean>(false);
   const [customerModalType, setCustomerModalType] = useState<'walkin' | 'recorded'>('walkin');
@@ -118,6 +122,12 @@ const NewInvoice = () => {
       if (!target.closest('.wh-container')) {
         setActiveWhIndex(null);
       }
+      if (!target.closest('.return-prod-name-container')) {
+        setActiveReturnProdIndex(null);
+      }
+      if (!target.closest('.return-wh-container')) {
+        setActiveReturnWhIndex(null);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
@@ -185,6 +195,16 @@ const NewInvoice = () => {
         overallDiscount: Number(editData.overall_discount || editData.discount_amount || parsedItems.find((i: any) => i._overallDiscount !== undefined)?._overallDiscount || 0),
         showAdditionalCharges: Number(editData.additional_charges || 0) > 0,
         additionalCharges: Number(editData.additional_charges || 0),
+        showReturnSection: (Array.isArray(editData.return_items) && editData.return_items.length > 0) || (Array.isArray(parsedItems[0]?._returnItems) && parsedItems[0]._returnItems.length > 0),
+        returnItems: (Array.isArray(editData.return_items) ? editData.return_items : (parsedItems[0]?._returnItems || [])).map((r: any) => ({
+          skuCode: r.skuCode || r.sku || '',
+          itemName: r.itemName || r.product_name || '',
+          warehouse: r.warehouse || editData.dispatch_warehouse || 'Main Warehouse',
+          qty: Number(r.qty || 1),
+          rp: Number(r.rp ?? r.rate ?? 0),
+          uom: r.uom || 'PCS',
+          amount: Number(r.total || (Number(r.qty || 1) * Number(r.rp ?? r.rate ?? 0)))
+        })),
         items: parsedItems.map((it: any) => ({
           ...it,
           warehouse: it.warehouse || editData.dispatch_warehouse || '',
@@ -195,7 +215,9 @@ const NewInvoice = () => {
     }
     return {
       invoiceNo: '', customerName: '', saleDate: new Date().toISOString().split('T')[0], paymentTerm: 'Cash',
-      dispatchWarehouse: '', applyFbrTax: false, showDiscount: false, showOverallDiscount: false, overallDiscount: 0, showAdditionalCharges: false, additionalCharges: 0, taxScenario: 'Goods at Standard Rate to Registered Buyers',
+      dispatchWarehouse: '', applyFbrTax: false, showDiscount: false, showOverallDiscount: false, overallDiscount: 0, showAdditionalCharges: false, additionalCharges: 0,
+      showReturnSection: false, returnItems: [],
+      taxScenario: 'Goods at Standard Rate to Registered Buyers',
       salesman: isSalesman ? (matchedSalesman || currentSalesmanName) : '',
       transportType: 'No Transport (Handover)', transportCharges: 0, settlementMode: 'Cash',
       selectedBankTitle: '', cashAmountPaid: 0, bankAmountPaid: 0,
@@ -293,7 +315,15 @@ const NewInvoice = () => {
         gstRate: Yup.number().min(0).required('Required Field'),
         fTaxPer: Yup.number().min(0).required('Required Field')
       })
-    ).min(1)
+    ).min(1),
+    returnItems: Yup.array().of(
+      Yup.object().shape({
+        itemName: Yup.string().required('Item Name is required'),
+        warehouse: Yup.string().required('Warehouse is required'),
+        qty: Yup.number().min(0.001, 'Return Qty must be > 0').required('Qty is required'),
+        rp: Yup.number().min(0, 'Return rate cannot be negative').required('Rate is required')
+      })
+    ).nullable()
   });
 
   const fetchStockForWarehouse = async (productName: string, chosenWarehouse: string) => {
@@ -460,12 +490,20 @@ const NewInvoice = () => {
         consumedInInvoice[itemKey] = priorUsed + Number(item.qty || 0);
       }
 
-      let calculatedGrandTotal = Math.max(
-        0,
-        values.items.reduce((acc: number, item: any) => {
-          return acc + calculateLineTotals(item, values.taxScenario, values.applyFbrTax).netTotal;
-        }, 0) + Number(values.transportCharges || 0) + Number(values.additionalCharges || 0) - Number(values.overallDiscount || 0)
+      const validReturnItems = (values.returnItems || []).filter(
+        (r: any) => r.itemName && Number(r.qty || 0) > 0
       );
+
+      const returnTotalVal = validReturnItems.reduce((acc: number, rItem: any) => {
+        return acc + (Number(rItem.qty || 0) * Number(rItem.rp ?? rItem.rate ?? 0));
+      }, 0);
+
+      const soldItemsSum = values.items.reduce((acc: number, item: any) => {
+        return acc + calculateLineTotals(item, values.taxScenario, values.applyFbrTax).netTotal;
+      }, 0);
+
+      const grossAfterCharges = soldItemsSum + Number(values.transportCharges || 0) + Number(values.additionalCharges || 0) - Number(values.overallDiscount || 0);
+      const calculatedGrandTotal = grossAfterCharges - returnTotalVal;
 
       let paidCash = 0;
       let paidBank = 0;
@@ -482,12 +520,14 @@ const NewInvoice = () => {
       }
 
       const totalPaidCombined = paidCash + paidBank;
-      if (totalPaidCombined > calculatedGrandTotal + 0.01) {
+      if (calculatedGrandTotal >= 0 && totalPaidCombined > calculatedGrandTotal + 0.01) {
         toast.error(`Payment amount (Rs. ${totalPaidCombined.toLocaleString(undefined, { minimumFractionDigits: 2 })}) cannot exceed total bill amount (Rs. ${calculatedGrandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })})!`);
         setLoading(false);
         return;
       }
-      const runningBalanceTerm = totalPaidCombined >= calculatedGrandTotal ? 'Cash' : 'Credit';
+      const runningBalanceTerm = calculatedGrandTotal <= 0 
+        ? 'Credit' 
+        : (totalPaidCombined >= calculatedGrandTotal ? 'Cash' : 'Credit');
 
       const itemsToSave = (values.items || []).map((it: any, idx: number) => {
         const cleanItem = {
@@ -496,7 +536,12 @@ const NewInvoice = () => {
           fTaxPer: values.applyFbrTax ? Number(it.fTaxPer || 0) : 0
         };
         if (idx === 0) {
-          return { ...cleanItem, _overallDiscount: Number(values.overallDiscount || 0) };
+          return { 
+            ...cleanItem, 
+            _overallDiscount: Number(values.overallDiscount || 0),
+            _returnItems: validReturnItems,
+            _returnAmount: returnTotalVal
+          };
         }
         return cleanItem;
       });
@@ -514,8 +559,8 @@ const NewInvoice = () => {
         selected_bank: (values.settlementMode === 'Bank' || values.settlementMode === 'Split') ? values.selectedBankTitle : null,
         bank_amount: String(paidBank),
         cash_amount_paid: paidCash,
-        total_amount: String(calculatedGrandTotal),
-        receipt_status: totalPaidCombined >= calculatedGrandTotal ? 'Paid' : 'On Credit',
+        total_amount: String(grossAfterCharges),
+        receipt_status: (calculatedGrandTotal <= 0 && returnTotalVal > 0) ? 'Credit Adjusted' : (totalPaidCombined >= calculatedGrandTotal ? 'Paid' : 'On Credit'),
         sale_status: 'Confirm',
         shipping_address: values.shippingAddress,
         gate_pass_no: Object.entries(values.gatePasses || {}).map(([k, v]) => `${k}: ${v}`).join(' | '),
@@ -860,6 +905,54 @@ const NewInvoice = () => {
         }
         toast.success('Sales Invoice & Delivery Challan(s) logged successfully!');
       }
+
+      // ── AUTO-SYNC SALES RETURN RECORD (FOR IN-INVOICE RETURN / EXCHANGE) ──
+      try {
+        if (validReturnItems.length > 0) {
+          const returnPayload = {
+            return_no: values.invoiceNo,
+            customer_name: customerFinalName,
+            return_date: values.saleDate || new Date().toISOString().split('T')[0],
+            warehouse_name: values.dispatchWarehouse || 'Main Warehouse',
+            source_warehouse: values.dispatchWarehouse || 'Main Warehouse',
+            invoice_no: values.invoiceNo,
+            original_invoice_no: values.invoiceNo,
+            settlement_mode: 'On Credit',
+            payment_term: 'On Credit',
+            total_amount: returnTotalVal,
+            payout_amount_paid: 0,
+            status: 'Credit Applied',
+            inward_status: 'Pending Inward',
+            remarks: `In-invoice return/exchange against Invoice #${values.invoiceNo}`,
+            items: validReturnItems.map((i: any) => ({
+              sku: i.skuCode || '',
+              itemName: i.itemName,
+              warehouse: i.warehouse || values.dispatchWarehouse || 'Main Warehouse',
+              qty: Number(i.qty),
+              rate: Number(i.rp),
+              uom: i.uom || 'Nos',
+              total: Number(i.qty) * Number(i.rp)
+            }))
+          };
+
+          const { data: existingReturn } = await supabase
+            .from('sales_returns')
+            .select('id')
+            .eq('return_no', values.invoiceNo)
+            .maybeSingle();
+
+          if (existingReturn) {
+            await supabase.from('sales_returns').update(returnPayload).eq('id', existingReturn.id);
+          } else {
+            await supabase.from('sales_returns').insert([returnPayload]);
+          }
+        } else if (editData) {
+          await supabase.from('sales_returns').delete().eq('return_no', editData.invoice_no || values.invoiceNo);
+        }
+      } catch (retSyncErr: any) {
+        console.error('Sales Return sync warning:', retSyncErr);
+      }
+
       setShowCustomerModal(false);
       if (submitAction === 'print' && finalInvoiceId) {
         navigate(`${tenantId ? `/${tenantId}` : ''}/sales/invoice/print/${finalInvoiceId}`);
@@ -877,18 +970,21 @@ const NewInvoice = () => {
     if (!pendingFormValues) return;
 
     // Calculate if sale is on credit
-    const currentSubtotal = Math.max(
-      0,
-      (pendingFormValues.items || []).reduce((acc: number, item: any) => {
-        return acc + calculateLineTotals(item, pendingFormValues.taxScenario, pendingFormValues.applyFbrTax).netTotal;
-      }, 0) + Number(pendingFormValues.transportCharges || 0) + Number(pendingFormValues.additionalCharges || 0) - Number(pendingFormValues.overallDiscount || 0)
+    const returnVal = (pendingFormValues.returnItems || []).reduce(
+      (acc: number, r: any) => acc + (Number(r.qty || 0) * Number(r.rp ?? r.rate ?? 0)), 0
     );
+    const grossTotal = (pendingFormValues.items || []).reduce((acc: number, item: any) => {
+      return acc + calculateLineTotals(item, pendingFormValues.taxScenario, pendingFormValues.applyFbrTax).netTotal;
+    }, 0) + Number(pendingFormValues.transportCharges || 0) + Number(pendingFormValues.additionalCharges || 0) - Number(pendingFormValues.overallDiscount || 0);
+
+    const netPayable = grossTotal - returnVal;
+    const currentSubtotal = Math.max(0, netPayable);
 
     const totalPaidNow = pendingFormValues.settlementMode === 'Cash'
       ? Number(pendingFormValues.cashAmountPaid || 0)
       : (pendingFormValues.settlementMode === 'Bank' ? Number(pendingFormValues.bankAmountPaid || 0) : (Number(pendingFormValues.cashAmountPaid || 0) + Number(pendingFormValues.bankAmountPaid || 0)));
     const remainingBal = Math.max(0, currentSubtotal - totalPaidNow);
-    const isOnCredit = remainingBal > 0.01;
+    const isOnCredit = remainingBal > 0.01 || netPayable < -0.01;
 
     let finalCustomerName = '';
 
@@ -976,12 +1072,14 @@ const NewInvoice = () => {
     <div className="mx-auto max-w-7xl text-black dark:text-bodydark text-xs font-sans relative">
       {/* CUSTOMER CHECKOUT MODAL */}
       {showCustomerModal && (() => {
-        const modalSubtotal = pendingFormValues ? Math.max(
-          0,
+        const modalReturnVal = (pendingFormValues?.returnItems || []).reduce((acc: number, r: any) => acc + (Number(r.qty || 0) * Number(r.rp ?? r.rate ?? 0)), 0);
+        const modalGross = pendingFormValues ? (
           (pendingFormValues.items || []).reduce((acc: number, item: any) => {
             return acc + calculateLineTotals(item, pendingFormValues.taxScenario, pendingFormValues.applyFbrTax).netTotal;
           }, 0) + Number(pendingFormValues.transportCharges || 0) + Number(pendingFormValues.additionalCharges || 0) - Number(pendingFormValues.overallDiscount || 0)
         ) : 0;
+        const modalNetPayable = modalGross - modalReturnVal;
+        const modalSubtotal = Math.max(0, modalNetPayable);
 
         const modalPaid = pendingFormValues ? (
           pendingFormValues.settlementMode === 'Cash'
@@ -990,7 +1088,7 @@ const NewInvoice = () => {
         ) : 0;
 
         const modalRemainingBal = Math.max(0, modalSubtotal - modalPaid);
-        const isModalOnCredit = modalRemainingBal > 0.01;
+        const isModalOnCredit = modalRemainingBal > 0.01 || modalNetPayable < -0.01;
 
         return (
           <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
@@ -1004,7 +1102,14 @@ const NewInvoice = () => {
                 </button>
               </div>
 
-              {isModalOnCredit && (
+              {modalNetPayable < -0.01 ? (
+                <div className="mb-4 p-3 rounded-lg bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 text-teal-800 dark:text-teal-200 text-xs flex items-center gap-2">
+                  <span>ℹ️</span>
+                  <span>
+                    <strong>Customer Account Credit (Excess Return: Rs. {Math.abs(modalNetPayable).toLocaleString(undefined, { minimumFractionDigits: 2 })}):</strong> Balance will be credited to customer receivable account.
+                  </span>
+                </div>
+              ) : isModalOnCredit && (
                 <div className="mb-4 p-3 rounded-lg bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-200 text-xs flex items-center gap-2">
                   <span>ℹ️</span>
                   <span>
@@ -1145,13 +1250,18 @@ const NewInvoice = () => {
           {({ values, handleChange, setFieldValue, errors, touched, submitCount, submitForm, isSubmitting, isValidating }) => {
             const hasAttempted = submitCount > 0;
             const isModalLoading = isOpeningCustomerModal || isSubmitting || isValidating;
+            const returnTotalValue = (values.returnItems || []).reduce((acc: number, rItem: any) => {
+              return acc + (Number(rItem.qty || 0) * Number(rItem.rp ?? rItem.rate ?? 0));
+            }, 0);
+
             const grossSubtotalValue = values.items.reduce((acc: number, item: any) => {
               return acc + calculateLineTotals(item, values.taxScenario, values.applyFbrTax).netTotal;
             }, 0) + Number(values.transportCharges || 0) + Number(values.additionalCharges || 0);
 
+            const netPayableBeforeFloor = grossSubtotalValue - Number(values.overallDiscount || 0) - returnTotalValue;
             const currentSubtotalValue = Math.max(
               0,
-              grossSubtotalValue - Number(values.overallDiscount || 0)
+              netPayableBeforeFloor
             );
 
             const currentPrefix = getSalesmanPrefix(values.salesman, salesmenList);
@@ -1359,6 +1469,33 @@ const NewInvoice = () => {
                       }`}
                     >
                       Freight Charges
+                    </div>
+
+                    {/* Return / Exchange Toggle Pill */}
+                    <div
+                      onClick={() => {
+                        const isChecked = !values.showReturnSection;
+                        setFieldValue('showReturnSection', isChecked);
+                        if (!isChecked) {
+                          setFieldValue('returnItems', []);
+                        } else if ((values.returnItems || []).length === 0) {
+                          setFieldValue('returnItems', [{
+                            itemName: '',
+                            skuCode: '',
+                            warehouse: values.dispatchWarehouse || 'Main Warehouse',
+                            qty: 1,
+                            rp: 0,
+                            amount: 0
+                          }]);
+                        }
+                      }}
+                      className={`cursor-pointer px-3 py-1.5 text-xs font-bold rounded-full transition select-none flex items-center justify-center border ${
+                        values.showReturnSection
+                          ? 'bg-rose-100 text-rose-700 border-rose-300 dark:bg-rose-900/40 dark:text-rose-400 dark:border-rose-800'
+                          : 'bg-white text-slate-500 border-stroke dark:bg-boxdark dark:text-slate-400 dark:border-strokedark hover:bg-slate-50 dark:hover:bg-meta-4'
+                      }`}
+                    >
+                      Return
                     </div>
                   </div>
 
@@ -2146,6 +2283,293 @@ const NewInvoice = () => {
                   </FieldArray>
                 </div>
 
+                {/* --- RETURN / EXCHANGE PRODUCTS DYNAMIC FIELDARRAY --- */}
+                {values.showReturnSection && (
+                  <div className="border border-rose-300 dark:border-rose-900/60 bg-rose-50/20 dark:bg-rose-950/10 rounded-sm mt-6 relative z-20 overflow-visible pb-4">
+                    <FieldArray name="returnItems">
+                      {({ push, remove }) => {
+                        return (
+                          <div className="w-full min-w-[800px]">
+                            <div className="p-3 bg-rose-100/60 dark:bg-rose-900/30 border-b border-rose-200 dark:border-rose-800 flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <span className="px-2 py-0.5 rounded bg-rose-600 text-white font-mono text-[10px] font-black tracking-wider uppercase">
+                                  Return / Exchange
+                                </span>
+                                <span className="font-bold text-xs text-rose-900 dark:text-rose-200">
+                                  Returned Items (Credit Subtracted From This Invoice)
+                                </span>
+                              </div>
+                              <div className="text-xs font-mono font-black text-rose-700 dark:text-rose-300">
+                                Total Return Credit: Rs. {returnTotalValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                              </div>
+                            </div>
+                            <table className="w-full table-auto border-collapse text-left">
+                              <thead className="bg-rose-50/70 dark:bg-rose-950/40 text-[10px] font-black uppercase text-rose-900 dark:text-rose-300 border-b border-rose-200 dark:border-rose-800">
+                                <tr>
+                                  <th className="p-2 w-8 text-center">S#</th>
+                                  <th className="p-2 min-w-[240px]">Returned Product (Name / Code)</th>
+                                  <th className="p-2 w-44">Return Warehouse Zone</th>
+                                  <th className="p-2 w-32 text-center">Return Qty</th>
+                                  <th className="p-2 w-32 text-right">Return Rate (RP)</th>
+                                  <th className="p-2 w-36 text-right pr-4">Line Credit Total</th>
+                                  <th className="p-2 w-8 text-center"></th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {(values.returnItems || []).map((rItem: any, rIdx: number) => {
+                                  const isCurrentProdActive = activeReturnProdIndex === rIdx;
+                                  const isCurrentWhActive = activeReturnWhIndex === rIdx;
+                                  const lineTotal = Number(rItem.qty || 0) * Number(rItem.rp ?? rItem.rate ?? 0);
+
+                                  const filteredProducts = productsList.filter((p: any) => {
+                                    const search = (rItem.itemName || '').toLowerCase().trim();
+                                    if (!search) return true;
+                                    return (
+                                      (p.product_name && p.product_name.toLowerCase().includes(search)) ||
+                                      (p.item_sr_no && p.item_sr_no.toLowerCase().includes(search)) ||
+                                      (`sku-${p.id}`.includes(search))
+                                    );
+                                  });
+
+                                  const currentWh = rItem.warehouse || values.dispatchWarehouse || '';
+                                  const filteredWhs = warehousesList.filter(w =>
+                                    w.toLowerCase().includes(currentWh.toLowerCase().trim())
+                                  );
+
+                                  return (
+                                    <tr key={rIdx} className="border-b border-rose-100 dark:border-rose-900/30 hover:bg-rose-50/30">
+                                      <td className="p-2 text-center text-gray-500 font-mono text-xs">{rIdx + 1}</td>
+                                      
+                                      {/* RETURN PRODUCT SELECTOR */}
+                                      <td className="p-2 relative return-prod-name-container">
+                                        <div className="relative">
+                                          <input
+                                            type="text"
+                                            autoComplete="off"
+                                            value={rItem.itemName || ''}
+                                            onFocus={() => {
+                                              setActiveReturnProdIndex(rIdx);
+                                              setHighlightedReturnProdIndex(0);
+                                            }}
+                                            onKeyDown={(e) => {
+                                              if (e.key === 'ArrowDown') {
+                                                e.preventDefault();
+                                                if (filteredProducts.length === 0) return;
+                                                setHighlightedReturnProdIndex(prev => prev < filteredProducts.length - 1 ? prev + 1 : 0);
+                                              } else if (e.key === 'ArrowUp') {
+                                                e.preventDefault();
+                                                if (filteredProducts.length === 0) return;
+                                                setHighlightedReturnProdIndex(prev => prev > 0 ? prev - 1 : filteredProducts.length - 1);
+                                              } else if (e.key === 'Enter') {
+                                                e.preventDefault();
+                                                if (filteredProducts.length > 0) {
+                                                  const sel = filteredProducts[highlightedReturnProdIndex] || filteredProducts[0];
+                                                  setFieldValue(`returnItems.${rIdx}.itemName`, sel.product_name);
+                                                  setFieldValue(`returnItems.${rIdx}.skuCode`, sel.item_sr_no || `SKU-${sel.id}`);
+                                                  setFieldValue(`returnItems.${rIdx}.rp`, Number(sel.retail_price || 0));
+                                                  setFieldValue(`returnItems.${rIdx}.uom`, sel.uom || 'Nos');
+                                                  setActiveReturnProdIndex(null);
+                                                }
+                                              } else if (e.key === 'Tab' || e.key === 'Escape') {
+                                                setActiveReturnProdIndex(null);
+                                              }
+                                            }}
+                                            onChange={(e) => {
+                                              const typed = e.target.value;
+                                              setFieldValue(`returnItems.${rIdx}.itemName`, typed);
+                                              setActiveReturnProdIndex(rIdx);
+                                              setHighlightedReturnProdIndex(0);
+
+                                              const match = productsList.find(p => p.product_name && p.product_name.toLowerCase() === typed.trim().toLowerCase());
+                                              if (match) {
+                                                setFieldValue(`returnItems.${rIdx}.skuCode`, match.item_sr_no || `SKU-${match.id}`);
+                                                setFieldValue(`returnItems.${rIdx}.rp`, Number(match.retail_price || 0));
+                                                setFieldValue(`returnItems.${rIdx}.uom`, match.uom || 'Nos');
+                                              }
+                                            }}
+                                            placeholder="Search product to return..."
+                                            className="w-full bg-white dark:bg-boxdark font-bold border border-rose-200 dark:border-rose-900 rounded p-2 outline-none text-xs text-black dark:text-white focus:border-rose-500 shadow-sm"
+                                          />
+
+                                          {rItem.skuCode && (
+                                            <div className="text-[10px] font-mono font-bold text-rose-600 dark:text-rose-400 mt-0.5 truncate">
+                                              Code: {rItem.skuCode}
+                                            </div>
+                                          )}
+
+                                          {/* PRODUCT DROPDOWN */}
+                                          {isCurrentProdActive && (
+                                            <div className="absolute left-0 top-full mt-1.5 z-[99999] min-w-[340px] max-w-[420px] max-h-[260px] overflow-y-auto rounded-xl border border-rose-200 dark:border-rose-800 bg-white dark:bg-[#1A222C] shadow-2xl divide-y divide-slate-100 dark:divide-slate-800 scrollbar-thin">
+                                              {filteredProducts.map((p, pIdx) => {
+                                                const displaySku = p.item_sr_no || `SKU-${p.id}`;
+                                                const isHighlighted = pIdx === highlightedReturnProdIndex;
+                                                return (
+                                                  <div
+                                                    key={p.id}
+                                                    onMouseEnter={() => setHighlightedReturnProdIndex(pIdx)}
+                                                    onMouseDown={(e) => {
+                                                      e.preventDefault();
+                                                      e.stopPropagation();
+                                                      setFieldValue(`returnItems.${rIdx}.itemName`, p.product_name);
+                                                      setFieldValue(`returnItems.${rIdx}.skuCode`, displaySku);
+                                                      setFieldValue(`returnItems.${rIdx}.rp`, Number(p.retail_price || 0));
+                                                      setFieldValue(`returnItems.${rIdx}.uom`, p.uom || 'Nos');
+                                                      setActiveReturnProdIndex(null);
+                                                    }}
+                                                    className={`p-2.5 cursor-pointer transition flex items-center justify-between ${isHighlighted ? 'bg-rose-50 dark:bg-rose-950/40 border-l-4 border-rose-500' : 'hover:bg-slate-50 dark:hover:bg-slate-800/80'}`}
+                                                  >
+                                                    <div className="flex flex-col text-left pr-2">
+                                                      <span className="text-xs font-bold text-slate-900 dark:text-white leading-tight">
+                                                        {p.product_name}
+                                                      </span>
+                                                      <span className="text-[10px] text-slate-500 font-mono">
+                                                        {displaySku} {p.category ? `• ${p.category}` : ''}
+                                                      </span>
+                                                    </div>
+                                                    <div className="text-right font-mono text-xs font-bold text-rose-600 dark:text-rose-400 shrink-0">
+                                                      Rs. {Number(p.retail_price || 0).toLocaleString()}
+                                                    </div>
+                                                  </div>
+                                                );
+                                              })}
+                                              {filteredProducts.length === 0 && (
+                                                <div className="p-4 text-center text-xs text-slate-400 italic">No products found</div>
+                                              )}
+                                            </div>
+                                          )}
+                                        </div>
+                                      </td>
+
+                                      {/* RETURN WAREHOUSE SELECTOR */}
+                                      <td className="p-2 w-44 relative return-wh-container">
+                                        <div className="relative">
+                                          <input
+                                            type="text"
+                                            autoComplete="off"
+                                            value={currentWh}
+                                            onFocus={() => {
+                                              setActiveReturnWhIndex(rIdx);
+                                              setHighlightedReturnWhIndex(0);
+                                            }}
+                                            onKeyDown={(e) => {
+                                              if (e.key === 'ArrowDown') {
+                                                e.preventDefault();
+                                                setHighlightedReturnWhIndex(prev => prev < filteredWhs.length - 1 ? prev + 1 : 0);
+                                              } else if (e.key === 'ArrowUp') {
+                                                e.preventDefault();
+                                                setHighlightedReturnWhIndex(prev => prev > 0 ? prev - 1 : filteredWhs.length - 1);
+                                              } else if (e.key === 'Enter') {
+                                                e.preventDefault();
+                                                if (filteredWhs[highlightedReturnWhIndex]) {
+                                                  setFieldValue(`returnItems.${rIdx}.warehouse`, filteredWhs[highlightedReturnWhIndex]);
+                                                  setActiveReturnWhIndex(null);
+                                                }
+                                              } else if (e.key === 'Escape' || e.key === 'Tab') {
+                                                setActiveReturnWhIndex(null);
+                                              }
+                                            }}
+                                            onChange={(e) => {
+                                              setFieldValue(`returnItems.${rIdx}.warehouse`, e.target.value);
+                                              setActiveReturnWhIndex(rIdx);
+                                              setHighlightedReturnWhIndex(0);
+                                            }}
+                                            placeholder={`Default (${values.dispatchWarehouse || 'Main Warehouse'})`}
+                                            className="w-full bg-white dark:bg-boxdark border border-rose-200 dark:border-rose-900 rounded p-1.5 text-xs font-bold text-slate-800 dark:text-slate-100 outline-none focus:border-rose-500 shadow-sm"
+                                          />
+
+                                          {isCurrentWhActive && filteredWhs.length > 0 && (
+                                            <div className="absolute left-0 right-0 top-full mt-1 z-[99999] max-h-[180px] overflow-y-auto rounded-xl border border-rose-200 dark:border-rose-800 bg-white dark:bg-[#1A222C] shadow-2xl divide-y divide-slate-100 dark:divide-slate-800 scrollbar-thin">
+                                              {filteredWhs.map((wh, wIdx) => (
+                                                <div
+                                                  key={wh}
+                                                  onMouseEnter={() => setHighlightedReturnWhIndex(wIdx)}
+                                                  onMouseDown={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    setFieldValue(`returnItems.${rIdx}.warehouse`, wh);
+                                                    setActiveReturnWhIndex(null);
+                                                  }}
+                                                  className={`p-2 cursor-pointer transition text-xs font-bold ${wIdx === highlightedReturnWhIndex ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border-l-4 border-rose-500' : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/80'}`}
+                                                >
+                                                  {wh}
+                                                </div>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
+                                      </td>
+
+                                      {/* RETURN QTY */}
+                                      <td className="p-2 w-32">
+                                        <input
+                                          type="number"
+                                          min="1"
+                                          onKeyDown={blockInvalidChar}
+                                          value={rItem.qty === 0 ? '' : rItem.qty}
+                                          onChange={(e) => {
+                                            const val = e.target.value.trim();
+                                            const num = val === '' ? 0 : Math.max(0, Number(val) || 0);
+                                            setFieldValue(`returnItems.${rIdx}.qty`, num);
+                                          }}
+                                          placeholder="1"
+                                          className="w-full bg-white dark:bg-boxdark font-black text-xs text-center border border-rose-200 dark:border-rose-900 rounded p-1.5 outline-none focus:border-rose-500 shadow-sm text-black dark:text-white"
+                                        />
+                                      </td>
+
+                                      {/* RETURN RATE / RP */}
+                                      <td className="p-2 w-32">
+                                        <input
+                                          type="number"
+                                          min="0"
+                                          onKeyDown={blockInvalidChar}
+                                          value={rItem.rp === 0 ? '' : rItem.rp}
+                                          onChange={(e) => {
+                                            const val = e.target.value.trim();
+                                            const num = val === '' ? 0 : Math.max(0, Number(val) || 0);
+                                            setFieldValue(`returnItems.${rIdx}.rp`, num);
+                                          }}
+                                          placeholder="0"
+                                          className="w-full bg-white dark:bg-boxdark font-black text-xs text-right border border-rose-200 dark:border-rose-900 rounded p-1.5 outline-none focus:border-rose-500 shadow-sm text-black dark:text-white"
+                                        />
+                                      </td>
+
+                                      {/* LINE CREDIT TOTAL */}
+                                      <td className="p-2 text-right pr-4 text-rose-600 dark:text-rose-400 font-black font-mono">
+                                        - Rs. {lineTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                                      </td>
+
+                                      {/* ACTION */}
+                                      <td className="p-1 w-8 text-center">
+                                        <button
+                                          type="button"
+                                          onClick={() => remove(rIdx)}
+                                          className="text-gray-400 hover:text-danger cursor-pointer"
+                                          title="Remove Return Item"
+                                        >
+                                          <FiTrash2 size={14} />
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                            <div className="p-2 bg-rose-50/40 dark:bg-rose-950/20 border-t border-rose-200 dark:border-rose-900/50 text-left">
+                              <button
+                                type="button"
+                                onClick={() => push({ itemName: '', skuCode: '', warehouse: values.dispatchWarehouse || 'Main Warehouse', qty: 1, rp: 0, amount: 0 })}
+                                className="text-rose-600 dark:text-rose-400 font-bold hover:underline cursor-pointer text-xs"
+                              >
+                                + Append Returned Item Row
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      }}
+                    </FieldArray>
+                  </div>
+                )}
+
                 {/* --- LOCATION GATE PASSES DYNAMIC SECTION --- */}
                 {(() => {
                   const validItems = values.items.filter((i: any) => i.itemName && i.itemName.trim() !== '');
@@ -2351,6 +2775,18 @@ const NewInvoice = () => {
                       </div>
                     )}
 
+                    {(values.showReturnSection || returnTotalValue > 0) && (
+                      <div className="flex justify-between border-b pb-1 dark:border-strokedark text-rose-600 dark:text-rose-400 font-bold">
+                        <span>Less Return Credit:</span>
+                        <span>- Rs. {returnTotalValue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                      </div>
+                    )}
+
+                    <div className={`flex justify-between border-b pb-1 dark:border-strokedark font-black ${netPayableBeforeFloor < 0 ? 'text-teal-600 dark:text-teal-400' : 'text-slate-900 dark:text-white'}`}>
+                      <span>{netPayableBeforeFloor < 0 ? 'Excess Customer Credit:' : 'Net Bill Payable:'}</span>
+                      <span>Rs. {Math.abs(netPayableBeforeFloor).toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+                    </div>
+
                     {(values.settlementMode === 'Cash' || values.settlementMode === 'Split') && (
                       <div className="flex justify-between border-b pb-1 dark:border-strokedark text-emerald-600">
                         <span>Received Cash Flow:</span>
@@ -2376,6 +2812,18 @@ const NewInvoice = () => {
                       const totalPaidNow = values.settlementMode === 'Cash'
                         ? Number(values.cashAmountPaid || 0)
                         : (values.settlementMode === 'Bank' ? Number(values.bankAmountPaid || 0) : (Number(values.cashAmountPaid || 0) + Number(values.bankAmountPaid || 0)));
+                      
+                      if (netPayableBeforeFloor < 0) {
+                        return (
+                          <div className="flex justify-between pt-1 border-double border-b-4 border-teal-500 dark:border-teal-400">
+                            <span className="font-sans text-[11px] text-teal-600 dark:text-teal-400 font-bold">Adjusted into Customer Balance:</span>
+                            <b className="text-sm text-teal-600 dark:text-teal-400 font-mono">
+                              - Rs. {Math.abs(netPayableBeforeFloor).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                            </b>
+                          </div>
+                        );
+                      }
+
                       const remBalance = Math.max(0, currentSubtotalValue - totalPaidNow);
                       return (
                         <div className="flex justify-between pt-1 border-double border-b-4 border-stroke dark:border-strokedark">

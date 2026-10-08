@@ -46,6 +46,56 @@ const HoldingReportPrint: React.FC = () => {
 
   const [activePerspective, setActivePerspective] = useState<string>(initialPerspective);
   const [fetchedRows, setFetchedRows] = useState<HoldingItemRow[]>(stateData.rows || []);
+  const [customerLookupMap, setCustomerLookupMap] = useState<Record<string, { code: string; pageNo: string }>>({});
+
+  useEffect(() => {
+    const fetchCustomers = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('customers')
+          .select('id, customerName, customer_code, customerCode, page_no, pageNo');
+        if (data && !error) {
+          const map: Record<string, { code: string; pageNo: string }> = {};
+          data.forEach((c: any) => {
+            const code = c.customer_code || c.customerCode || (c.id ? `CUST-${String(c.id).padStart(3, '0')}` : '');
+            const pageNo = c.page_no || c.pageNo || '';
+            if (c.customerName) map[c.customerName.trim().toLowerCase()] = { code, pageNo };
+          });
+          setCustomerLookupMap(map);
+        }
+      } catch (e) {
+        console.warn('Failed to fetch customers for lookup in holding report:', e);
+      }
+    };
+    fetchCustomers();
+  }, []);
+
+  const getCustomerDetails = (name: string) => {
+    if (!name) return { code: '', pageNo: '' };
+    return customerLookupMap[name.trim().toLowerCase()] || { code: '', pageNo: '' };
+  };
+
+  const renderCustomerBadge = (name: string, light = false) => {
+    const details = getCustomerDetails(name);
+    if (!details.code && !details.pageNo) return null;
+    return (
+      <div className="flex items-center gap-1.5 mt-0.5 text-[9.5px] leading-tight font-sans">
+        {details.code && (
+          <span className={light ? "bg-slate-700 text-teal-300 px-1 py-0.2 rounded border border-slate-600 font-bold uppercase" : "bg-slate-100 px-1 py-0.2 rounded border border-slate-300 font-bold uppercase text-slate-800"}>
+            [{details.code}]
+          </span>
+        )}
+        {details.code && details.pageNo && (
+          <span className={light ? "text-slate-400 font-bold" : "text-slate-400 font-bold"}>|</span>
+        )}
+        {details.pageNo && (
+          <span className={light ? "text-slate-300 font-semibold" : "text-slate-600 font-semibold"}>
+            P# {details.pageNo}
+          </span>
+        )}
+      </div>
+    );
+  };
 
   useEffect(() => {
     const originalTitle = document.title;
@@ -78,13 +128,21 @@ const HoldingReportPrint: React.FC = () => {
           supabase.from('delivery_challans').select('*').order('created_at', { ascending: false }),
           supabase.from('sales_invoices').select('*'),
           supabase.from('salesmen').select('id, name'),
-          supabase.from('customers').select('id, customerName, customer_code, customerCode')
+          supabase.from('customers').select('id, customerName, customer_code, customerCode, page_no, pageNo')
         ]);
-
-        if (dcRes.error) throw dcRes.error;
 
         const dcs = dcRes.data || [];
         const invoices = invRes.data || [];
+
+        if (custRes.data) {
+          const map: Record<string, { code: string; pageNo: string }> = {};
+          custRes.data.forEach((c: any) => {
+            const code = c.customer_code || c.customerCode || (c.id ? `CUST-${String(c.id).padStart(3, '0')}` : '');
+            const pageNo = c.page_no || c.pageNo || '';
+            if (c.customerName) map[c.customerName.trim().toLowerCase()] = { code, pageNo };
+          });
+          setCustomerLookupMap(prev => ({ ...map, ...prev }));
+        }
 
         // Create lookup map for invoices
         const invMap: Record<string, any> = {};
@@ -554,6 +612,8 @@ const HoldingReportPrint: React.FC = () => {
           { header: 'Invoice #', key: 'invoiceNo', width: 15 },
           { header: 'Date', key: 'date', width: 14, type: 'date' },
           { header: 'Customer Name', key: 'customerName', width: 26 },
+          { header: 'Customer Code', key: 'customerCode', width: 15 },
+          { header: 'Page #', key: 'pageNo', width: 10, alignment: 'center' },
           { header: 'Salesman', key: 'salesman', width: 20 },
           { header: 'Product Description', key: 'productName', width: 32 },
           { header: 'Code', key: 'skuCode', width: 14 },
@@ -569,6 +629,7 @@ const HoldingReportPrint: React.FC = () => {
         let globalIdx = 1;
 
         (displayRows || []).forEach((doc: any) => {
+          const cDetails = getCustomerDetails(doc.customerName || '');
           (doc.items || []).forEach((item: any, itIdx: number) => {
             exportData.push({
               idx: itIdx === 0 ? globalIdx : '',
@@ -576,6 +637,8 @@ const HoldingReportPrint: React.FC = () => {
               invoiceNo: itIdx === 0 ? (doc.invoiceNo || '-') : '',
               date: itIdx === 0 ? (doc.date || '-') : '',
               customerName: itIdx === 0 ? (doc.customerName || '-') : '',
+              customerCode: itIdx === 0 ? (cDetails.code || '-') : '',
+              pageNo: itIdx === 0 ? (cDetails.pageNo || '-') : '',
               salesman: itIdx === 0 ? (doc.salesman || '-') : '',
               productName: item.productName || '-',
               skuCode: item.skuCode || '-',
@@ -607,6 +670,8 @@ const HoldingReportPrint: React.FC = () => {
           { header: 'Invoice #', key: 'invoiceNo', width: 15 },
           { header: 'Date', key: 'date', width: 14, type: 'date' },
           { header: 'Customer Name', key: 'customerName', width: 26 },
+          { header: 'Customer Code', key: 'customerCode', width: 15 },
+          { header: 'Page #', key: 'pageNo', width: 10, alignment: 'center' },
           { header: 'Salesman', key: 'salesman', width: 20 },
           { header: 'Product Description', key: 'productName', width: 32 },
           { header: 'Code', key: 'skuCode', width: 14 },
@@ -630,6 +695,7 @@ const HoldingReportPrint: React.FC = () => {
 
           // Itemized rows grouped by document
           (s.docs || []).forEach((doc: any) => {
+            const cDetails = getCustomerDetails(doc.customerName || '');
             (doc.items || []).forEach((item: any, itIdx: number) => {
               exportData.push({
                 idx: itIdx === 0 ? globalIdx : '',
@@ -637,6 +703,8 @@ const HoldingReportPrint: React.FC = () => {
                 invoiceNo: itIdx === 0 ? (doc.invoiceNo || '-') : '',
                 date: itIdx === 0 ? (doc.date || '-') : '',
                 customerName: itIdx === 0 ? (doc.customerName || '-') : '',
+                customerCode: itIdx === 0 ? (cDetails.code || '-') : '',
+                pageNo: itIdx === 0 ? (cDetails.pageNo || '-') : '',
                 salesman: s.salesman,
                 productName: item.productName || '-',
                 skuCode: item.skuCode || '-',
@@ -679,6 +747,9 @@ const HoldingReportPrint: React.FC = () => {
           { header: 'Gatepass / DC #', key: 'gatepassNo', width: 16 },
           { header: 'Invoice #', key: 'invoiceNo', width: 15 },
           { header: 'Date', key: 'date', width: 14, type: 'date' },
+          { header: 'Customer Name', key: 'customerName', width: 26 },
+          { header: 'Customer Code', key: 'customerCode', width: 15 },
+          { header: 'Page #', key: 'pageNo', width: 10, alignment: 'center' },
           { header: 'Salesman', key: 'salesman', width: 20 },
           { header: 'Product Description', key: 'productName', width: 32 },
           { header: 'Code', key: 'skuCode', width: 14 },
@@ -700,6 +771,8 @@ const HoldingReportPrint: React.FC = () => {
             sectionTitle: `CUSTOMER: ${c.customer.toUpperCase()} (${c.itemsCount} Items | ${c.gatepasses || 0} Gatepasses | ${c.invoices || 0} Invoices | Held: ${Number(c.totalHeldQty || 0).toLocaleString()} Pcs | Rs. ${Number(c.totalHeldValue || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })})`
           });
 
+          const cDetails = getCustomerDetails(c.customer || '');
+
           // Itemized rows grouped by document
           (c.docs || []).forEach((doc: any) => {
             (doc.items || []).forEach((item: any, itIdx: number) => {
@@ -709,6 +782,8 @@ const HoldingReportPrint: React.FC = () => {
                 invoiceNo: itIdx === 0 ? (doc.invoiceNo || '-') : '',
                 date: itIdx === 0 ? (doc.date || '-') : '',
                 customerName: c.customer,
+                customerCode: cDetails.code || '-',
+                pageNo: cDetails.pageNo || '-',
                 salesman: itIdx === 0 ? (doc.salesman || '-') : '',
                 productName: item.productName || '-',
                 skuCode: item.skuCode || '-',
@@ -751,6 +826,8 @@ const HoldingReportPrint: React.FC = () => {
           { header: 'Invoice #', key: 'invoiceNo', width: 16 },
           { header: 'Date', key: 'date', width: 14, type: 'date' },
           { header: 'Customer Name', key: 'customerName', width: 26 },
+          { header: 'Customer Code', key: 'customerCode', width: 15 },
+          { header: 'Page #', key: 'pageNo', width: 10, alignment: 'center' },
           { header: 'Salesman', key: 'salesman', width: 20 },
           { header: 'Product Description', key: 'productName', width: 32 },
           { header: 'Code', key: 'skuCode', width: 14 },
@@ -774,12 +851,15 @@ const HoldingReportPrint: React.FC = () => {
 
           // Itemized rows grouped by document / invoice
           (g.docs || []).forEach((doc: any) => {
+            const cDetails = getCustomerDetails(doc.customerName || g.customer || '');
             (doc.items || []).forEach((item: any, itIdx: number) => {
               exportData.push({
                 idx: itIdx === 0 ? globalIdx : '',
                 invoiceNo: itIdx === 0 ? (doc.invoiceNo || '-') : '',
                 date: itIdx === 0 ? (doc.date || '-') : '',
                 customerName: itIdx === 0 ? (doc.customerName || g.customer || '-') : '',
+                customerCode: itIdx === 0 ? (cDetails.code || '-') : '',
+                pageNo: itIdx === 0 ? (cDetails.pageNo || '-') : '',
                 salesman: itIdx === 0 ? (doc.salesman || g.salesman || '-') : '',
                 productName: item.productName || '-',
                 skuCode: item.skuCode || '-',
@@ -822,6 +902,8 @@ const HoldingReportPrint: React.FC = () => {
           { header: 'Gatepass / DC #', key: 'gatepassNo', width: 16 },
           { header: 'Date', key: 'date', width: 14, type: 'date' },
           { header: 'Customer Name', key: 'customerName', width: 26 },
+          { header: 'Customer Code', key: 'customerCode', width: 15 },
+          { header: 'Page #', key: 'pageNo', width: 10, alignment: 'center' },
           { header: 'Salesman', key: 'salesman', width: 20 },
           { header: 'Product Description', key: 'productName', width: 32 },
           { header: 'Code', key: 'skuCode', width: 14 },
@@ -845,6 +927,7 @@ const HoldingReportPrint: React.FC = () => {
 
           // Itemized rows grouped by document / gatepass
           (inv.docs || []).forEach((doc: any) => {
+            const cDetails = getCustomerDetails(doc.customerName || inv.customer || '');
             (doc.items || []).forEach((item: any, itIdx: number) => {
               exportData.push({
                 idx: itIdx === 0 ? globalIdx : '',
@@ -852,6 +935,8 @@ const HoldingReportPrint: React.FC = () => {
                 invoiceNo: inv.invoiceNo,
                 date: itIdx === 0 ? (doc.date || '-') : '',
                 customerName: itIdx === 0 ? (doc.customerName || inv.customer || '-') : '',
+                customerCode: itIdx === 0 ? (cDetails.code || '-') : '',
+                pageNo: itIdx === 0 ? (cDetails.pageNo || '-') : '',
                 salesman: itIdx === 0 ? (doc.salesman || inv.salesman || '-') : '',
                 productName: item.productName || '-',
                 skuCode: item.skuCode || '-',
@@ -1138,7 +1223,7 @@ const HoldingReportPrint: React.FC = () => {
                   <th className="p-1.5 border border-black text-center w-24">Date</th>
                   <th className="p-1.5 border border-black">Gatepass #</th>
                   <th className="p-1.5 border border-black">Invoice #</th>
-                  <th className="p-1.5 border border-black">Customer Title</th>
+                  <th className="p-1.5 border border-black min-w-[140px] max-w-[220px]">Customer Name</th>
                   <th className="p-1.5 border border-black">Salesman</th>
                   <th className="p-1.5 border border-black">Product Description</th>
                   <th className="p-1.5 border border-black text-center w-16">Order</th>
@@ -1164,7 +1249,10 @@ const HoldingReportPrint: React.FC = () => {
                         <td className="p-1.5 border border-black text-center text-gray-700 font-sans text-[10px] align-middle">{doc.date || '-'}</td>
                         <td className="p-1.5 border border-black font-bold font-mono align-middle">{doc.gatepassNo || '-'}</td>
                         <td className="p-1.5 border border-black font-mono font-bold align-middle">{doc.invoiceNo || '-'}</td>
-                        <td className="p-1.5 border border-black font-sans font-bold align-middle">{doc.customerName || '-'}</td>
+                        <td className="p-1.5 border border-black font-sans font-bold align-middle min-w-[140px] max-w-[220px]">
+                          <div className="leading-tight">{doc.customerName || '-'}</div>
+                          {renderCustomerBadge(doc.customerName)}
+                        </td>
                         <td className="p-1.5 border border-black font-sans text-gray-700 align-middle">{doc.salesman || '-'}</td>
                         
                         {/* 📦 Product Description Sub-Rows */}
@@ -1293,7 +1381,7 @@ const HoldingReportPrint: React.FC = () => {
                     <th className="p-2 border border-black">Gatepass / DC #</th>
                     <th className="p-2 border border-black">Invoice #</th>
                     <th className="p-2 border border-black text-center">Date</th>
-                    <th className="p-2 border border-black">Customer Name</th>
+                    <th className="p-2 border border-black min-w-[140px] max-w-[220px]">Customer Name</th>
                     <th className="p-2 border border-black">Item Description</th>
                     <th className="p-2 border border-black text-center">Code</th>
                     <th className="p-2 border border-black">Warehouse</th>
@@ -1365,8 +1453,9 @@ const HoldingReportPrint: React.FC = () => {
                               </td>
 
                               {/* 🏢 Customer Name */}
-                              <td className="p-2 border border-black font-sans font-bold text-gray-900 align-middle">
-                                {doc.customerName || '-'}
+                              <td className="p-2 border border-black font-sans font-bold text-gray-900 align-middle min-w-[140px] max-w-[220px]">
+                                <div className="leading-tight">{doc.customerName || '-'}</div>
+                                {renderCustomerBadge(doc.customerName)}
                               </td>
 
                               {/* 📦 Product Description Sub-Rows */}
@@ -1546,6 +1635,7 @@ const HoldingReportPrint: React.FC = () => {
                                   Customer
                                 </span>
                                 <span className="text-sm font-bold tracking-wide">{c.customer}</span>
+                                {renderCustomerBadge(c.customer, true)}
                               </div>
                               <div className="flex items-center gap-4 text-[11px] font-mono font-normal">
                                 <span><b>{c.gatepasses || 0}</b> Gatepasses</span>
@@ -1775,7 +1865,7 @@ const HoldingReportPrint: React.FC = () => {
                                 <span className="text-gray-300 font-sans text-[11px] font-normal">({g.date || '-'})</span>
                               </div>
                               <div className="flex items-center gap-3 text-[11px] font-mono font-normal">
-                                <span>Cust: <b className="text-white font-bold">{g.customer || 'Counter'}</b></span>
+                                <span className="flex items-center gap-1">Cust: <b className="text-white font-bold">{g.customer || 'Counter'}</b>{renderCustomerBadge(g.customer, true)}</span>
                                 <span>•</span>
                                 <span>SM: <b className="text-white font-bold">{g.salesman || 'Direct'}</b></span>
                                 <span>•</span>
@@ -1992,7 +2082,7 @@ const HoldingReportPrint: React.FC = () => {
                                 <span className="text-gray-300 font-sans text-[11px] font-normal">({inv.date || '-'})</span>
                               </div>
                               <div className="flex items-center gap-3 text-[11px] font-mono font-normal">
-                                <span>Cust: <b className="text-white font-bold">{inv.customer || 'Counter'}</b></span>
+                                <span className="flex items-center gap-1">Cust: <b className="text-white font-bold">{inv.customer || 'Counter'}</b>{renderCustomerBadge(inv.customer, true)}</span>
                                 <span>•</span>
                                 <span>SM: <b className="text-white font-bold">{inv.salesman || 'Direct'}</b></span>
                                 <span>•</span>

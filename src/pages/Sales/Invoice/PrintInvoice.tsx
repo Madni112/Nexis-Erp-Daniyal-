@@ -235,7 +235,16 @@ const PrintInvoice = () => {
     parsedItemsList.find((i: any) => i._overallDiscount !== undefined)?._overallDiscount ||
     0
   );
-  const grandTotal = Math.max(0, computedTotalNet + freightCharges + additionalCharges - overallDiscount);
+  const firstItem = parsedItemsList[0] || {};
+  const returnItemsList: any[] = Array.isArray(firstItem._returnItems) ? firstItem._returnItems : [];
+  const returnTotalAmount = Number(
+    firstItem._returnAmount !== undefined
+      ? firstItem._returnAmount
+      : returnItemsList.reduce((acc: number, r: any) => acc + (Number(r.qty || 0) * Number(r.rp ?? r.rate ?? 0)), 0)
+  );
+
+  const netBeforeFloor = computedTotalNet + freightCharges + additionalCharges - overallDiscount - returnTotalAmount;
+  const grandTotal = Math.max(0, netBeforeFloor);
   const cashPaid = Number(invoice.cash_amount_paid || 0);
   const bankPaid = Number(invoice.bank_amount || 0);
   const totalPaid = (cashPaid > 0 && bankPaid > 0) ? (cashPaid + bankPaid) : (cashPaid > 0 ? cashPaid : (bankPaid > 0 ? bankPaid : Number(invoice.cash_amount_paid || invoice.bank_amount || 0)));
@@ -470,6 +479,47 @@ const PrintInvoice = () => {
           </table>
         </div>
 
+        {/* ── Returned / Exchange Items Table ── */}
+        {returnItemsList.length > 0 && (
+          <div className="border border-rose-200 rounded-xl overflow-hidden mb-5 bg-rose-50/10">
+            <div className="bg-rose-900 text-white text-[10px] font-black uppercase tracking-wider py-1.5 px-3 flex items-center justify-between">
+              <span>Returned / Exchange Items (Credited Against This Bill)</span>
+              <span>Total Credit: - Rs. {returnTotalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+            </div>
+            <table className="w-full text-xs text-left border-collapse">
+              <thead>
+                <tr className="bg-rose-100/60 text-rose-900 text-[10px] font-black uppercase tracking-wider">
+                  <th className="py-2 px-2 w-[4%] text-center">S#</th>
+                  <th className="py-2 px-2 w-[14%] font-mono">SKU</th>
+                  <th className="py-2 px-2 w-[34%]">Returned Item Description</th>
+                  <th className="py-2 px-2 w-[18%]">Warehouse Zone</th>
+                  <th className="py-2 px-2 text-center w-[12%]">Return Qty</th>
+                  <th className="py-2 px-2 text-right w-[14%]">Return Rate</th>
+                  <th className="py-2 px-2 text-right pr-2 w-[16%] font-black text-rose-700">Credit Total</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-rose-100 font-medium text-[10.5px]">
+                {returnItemsList.map((r: any, rIdx: number) => {
+                  const lineTotal = Number(r.qty || 0) * Number(r.rp ?? r.rate ?? 0);
+                  return (
+                    <tr key={rIdx} className="hover:bg-rose-50/30">
+                      <td className="py-1.5 px-2 text-center text-slate-400 font-mono">{rIdx + 1}</td>
+                      <td className="py-1.5 px-2 font-mono font-bold text-slate-700">{r.skuCode || r.sku || '-'}</td>
+                      <td className="py-1.5 px-2 font-bold text-slate-900">{r.itemName || r.product_name}</td>
+                      <td className="py-1.5 px-2 text-slate-600">{r.warehouse || invoice.dispatch_warehouse || 'Main Warehouse'}</td>
+                      <td className="py-1.5 px-2 text-center font-mono font-bold">{r.qty} {r.uom || 'Nos'}</td>
+                      <td className="py-1.5 px-2 text-right font-mono">Rs. {Number(r.rp ?? r.rate ?? 0).toLocaleString()}</td>
+                      <td className="py-1.5 px-2 text-right pr-2 font-mono font-black text-rose-600">
+                        - Rs. {lineTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+
         {/* ── Summary & Settlement Breakdown ─────────────────────────────────── */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
           {/* Amount in words */}
@@ -540,6 +590,13 @@ const PrintInvoice = () => {
               </div>
             )}
 
+            {returnTotalAmount > 0 && (
+              <div className="flex justify-between text-rose-700 font-bold">
+                <span>Less Return / Exchange Credit:</span>
+                <span>- Rs. {returnTotalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+              </div>
+            )}
+
             <div className="flex justify-between border-t border-b py-1.5 border-slate-300 text-sm font-black text-slate-950">
               <span className="font-sans">Grand Invoice Total:</span>
               <span>Rs. {grandTotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
@@ -573,6 +630,15 @@ const PrintInvoice = () => {
                 Rs. {remainingDebt.toLocaleString(undefined, { minimumFractionDigits: 2 })}
               </span>
             </div>
+
+            {netBeforeFloor < 0 && (
+              <div className="flex justify-between pt-1 border-t border-teal-200 text-teal-700 font-bold">
+                <span className="font-sans text-[11px]">Excess Customer Credit:</span>
+                <span className="text-xs font-mono font-black">
+                  - Rs. {Math.abs(netBeforeFloor).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 

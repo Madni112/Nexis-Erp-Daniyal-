@@ -210,7 +210,9 @@ const PrintSalesReturn: React.FC = () => {
     ? rawOrigInvStr
     : (rawOrigInvStr ? `INV-${rawOrigInvStr.padStart(4, '0')}` : 'FIFO General Return');
 
-  const returnNoFormatted = returnData.return_no || `RTN-${String(returnData.id).padStart(4, '0')}`;
+  const returnNoFormatted = (returnData.return_no && !returnData.return_no.match(/^RTN-\d{6}$/))
+    ? returnData.return_no
+    : `RTN-${String(returnData.id).padStart(4, '0')}`;
   const returnDateFormatted = returnData.return_date 
     ? new Date(returnData.return_date).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
     : new Date(returnData.created_at).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
