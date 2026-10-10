@@ -709,7 +709,7 @@ const DeveloperDashboard: React.FC = () => {
             full_name: newEmployee.name.trim(),
             role: newEmployee.role,
             tenant_id: cleanSlug,
-            business_name: 'Zoaib Ali & Company',
+            business_name: 'NHT ENTERPRISE',
             allowed_modules: newEmployee.modules,
           },
         },
@@ -725,7 +725,7 @@ const DeveloperDashboard: React.FC = () => {
             slug: cleanSlug,
             email: newEmployee.email.trim(),
             business_activity: newEmployee.role,
-            seller_address: 'Zoaib Ali & Company Headquarters',
+            seller_address: 'NHT ENTERPRISE Headquarters',
             allowed_modules: newEmployee.modules,
             location_id: newEmployee.role === 'Warehouse Manager' && newEmployee.location_id ? Number(newEmployee.location_id) : null,
           },
@@ -739,7 +739,7 @@ const DeveloperDashboard: React.FC = () => {
               slug: cleanSlug,
               email: newEmployee.email.trim(),
               business_activity: newEmployee.role,
-              seller_address: 'Zoaib Ali & Company Headquarters',
+              seller_address: 'NHT ENTERPRISE Headquarters',
               allowed_modules: newEmployee.modules,
               location_id: newEmployee.role === 'Warehouse Manager' && newEmployee.location_id ? Number(newEmployee.location_id) : null,
             },
@@ -1272,7 +1272,7 @@ const DeveloperDashboard: React.FC = () => {
               <MdSecurity />
             </div>
             <h2 className="text-2xl font-black tracking-tight text-black dark:text-white">Master Role & Dev Console</h2>
-            <p className="text-xs text-gray-500 dark:text-gray-400">Employee Access & Roles Control for Zoaib Ali & Company</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400">Employee Access & Roles Control for NHT ENTERPRISE</p>
           </div>
 
           {authError && (
@@ -1335,7 +1335,7 @@ const DeveloperDashboard: React.FC = () => {
           </div>
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-black text-black dark:text-white tracking-tight">Zoaib Ali & Company</h1>
+              <h1 className="text-xl font-black text-black dark:text-white tracking-tight">NHT ENTERPRISE</h1>
               <span className="bg-emerald-500/20 text-emerald-600 dark:text-emerald-300 text-[10px] font-bold px-2.5 py-0.5 rounded-full border border-emerald-500/30">
                 Employee Role & Access Control
               </span>
@@ -1704,7 +1704,7 @@ const DeveloperDashboard: React.FC = () => {
                   </p>
                 </div>
                 <span className="bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs px-3 py-1 rounded-full border border-emerald-500/20 font-semibold flex items-center gap-1.5">
-                  <MdSecurity /> Zoaib Ali & Company RBAC
+                  <MdSecurity /> NHT ENTERPRISE RBAC
                 </span>
               </div>
 

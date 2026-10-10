@@ -58,7 +58,7 @@ const CompanyLanding: React.FC = () => {
       <main className="flex-1 max-w-6xl mx-auto px-6 py-16 sm:py-24 flex flex-col items-center justify-center text-center relative z-10">
         <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-bold shadow-inner mb-6">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-          Zoaib Ali & Company • Corporate Management Suite
+          NHT ENTERPRISE • Corporate Management Suite
         </div>
 
         <h1 className="text-4xl sm:text-6xl font-black tracking-tight text-white leading-tight max-w-4xl">
@@ -66,7 +66,7 @@ const CompanyLanding: React.FC = () => {
         </h1>
 
         <p className="text-slate-400 text-base sm:text-lg max-w-2xl mt-6 leading-relaxed">
-          Zoaib Ali & Company delivers next-generation resource planning, computerized distribution accounting, inventory lifecycle tracking, and instant fiscal synchronization.
+          NHT ENTERPRISE delivers next-generation resource planning, computerized distribution accounting, inventory lifecycle tracking, and instant fiscal synchronization.
         </p>
 
         {/* Action Buttons */}
@@ -134,7 +134,7 @@ const CompanyLanding: React.FC = () => {
       {/* FOOTER */}
       <footer className="border-t border-slate-900 bg-[#05070C] py-8 text-center text-xs text-slate-500">
         <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <span>© {new Date().getFullYear()} Zoaib Ali & Company. All Rights Reserved.</span>
+          <span>© {new Date().getFullYear()} NHT ENTERPRISE. All Rights Reserved.</span>
           <span className="font-mono text-[11px] text-slate-600">Enterprise Cloud Infrastructure v1.3.8</span>
         </div>
       </footer>

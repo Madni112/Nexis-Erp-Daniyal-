@@ -112,10 +112,10 @@ const AccountReportPrint = () => {
     useEffect(() => {
         const originalTitle = document.title;
         document.title = activeTab === 13 
-            ? 'Customer Balance Detail Report - ZOAIB ALI & COMPANY'
+            ? 'Customer Balance Detail Report - NHT ENTERPRISE'
             : activeTab === 3
-            ? 'Vendor Balance Detail Report - ZOAIB ALI & COMPANY'
-            : 'Corporate Account Ledger - ZOAIB ALI & COMPANY';
+            ? 'Vendor Balance Detail Report - NHT ENTERPRISE'
+            : 'Corporate Account Ledger - NHT ENTERPRISE';
 
         return () => {
             document.title = originalTitle;
@@ -1750,7 +1750,7 @@ const AccountReportPrint = () => {
             await exportToExcel({
                 filename,
                 sheetName: reportHeading.slice(0, 31),
-                title: businessName || 'ZOAIB ALI & COMPANY',
+                title: businessName || 'NHT ENTERPRISE',
                 subtitle: reportHeading,
                 columns,
                 data: exportData
@@ -1767,7 +1767,7 @@ const AccountReportPrint = () => {
     const handleShareWhatsApp = () => {
         const periodText = filters.dateFrom && filters.dateTo ? `${filters.dateFrom} to ${filters.dateTo}` : 'Current Period';
         const lines = [
-            `📊 *${businessName || 'ZOAIB ALI & COMPANY'}*`,
+            `📊 *${businessName || 'NHT ENTERPRISE'}*`,
             `💼 *Financial Account Ledger Audit Summary*`,
             `━━━━━━━━━━━━━━━━━━━━━`,
             `📅 *Period:* ${periodText}`,
@@ -1940,13 +1940,13 @@ const AccountReportPrint = () => {
                                     printColorAdjust: 'exact'
                                 }}
                             >
-                                ZAC
+                NHT
                             </span>
                         </div>
                     </div>
 
                     <h1 className="text-3xl font-black uppercase tracking-widest font-serif text-slate-950">
-                        {businessName || 'ZOAIB ALI & COMPANY'}
+                        {businessName || 'NHT ENTERPRISE'}
                     </h1>
                     <p className="text-xs font-bold tracking-wider text-gray-600 uppercase">Master Corporate Ledger Book & Financial Audit Statement Summary</p>
 
@@ -3351,7 +3351,7 @@ const AccountReportPrint = () => {
                 {/* 🏢 Software & Corporate Provider Footer */}
                 <div className="mt-8 pt-3 border-t border-gray-300 flex justify-between items-center text-[10px] text-gray-600 font-sans print:border-gray-400 break-inside-avoid">
                     <div className="flex items-center gap-2 font-bold">
-                        <span className="text-black font-black uppercase">ZOAIB ALI &amp; COMPANY</span>
+                        <span className="text-black font-black uppercase">NHT ENTERPRISE</span>
                     </div>
                     <div className="text-[9.5px] text-gray-600 font-mono font-medium text-right">
                         Software Solution &amp; Cloud Infrastructure by <b className="text-black font-bold">NHT ENTERPRISES (Noor Horizon Technologies)</b>

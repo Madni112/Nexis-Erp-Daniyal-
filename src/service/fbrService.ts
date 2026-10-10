@@ -1,6 +1,6 @@
 /**
  * Commercial Invoicing & Billing Utilities
- * Zoaib Ali & Company
+ * NHT ENTERPRISE
  */
 
 export interface InvoiceItemPayload {

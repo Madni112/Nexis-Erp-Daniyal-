@@ -1392,7 +1392,7 @@ export const AttendanceSheetPage: React.FC = () => {
               <div id="printable-employee-timesheet" className="hidden">
                 <div className="text-center pb-2 border-b-2 border-black mb-2">
                   <h1 className="text-xl font-black uppercase tracking-wider text-black">
-                    ZOAIB ALI &amp; COMPANY
+                    NHT ENTERPRISE
                   </h1>
                   <h2 className="text-xs font-bold uppercase text-gray-700 tracking-wide mt-0.5">
                     INDIVIDUAL EMPLOYEE MONTHLY ATTENDANCE SHEET
@@ -1533,7 +1533,7 @@ export const AttendanceSheetPage: React.FC = () => {
       <div id="printable-attendance-register" className="hidden">
         <div className="text-center pb-3 border-b-2 border-black mb-3">
           <h1 className="text-xl font-black uppercase tracking-wider text-black">
-            ZOAIB ALI &amp; COMPANY
+            NHT ENTERPRISE
           </h1>
           <h2 className="text-xs font-bold uppercase text-gray-700 tracking-wide mt-0.5">
             MONTHLY ATTENDANCE REGISTER &amp; DEDUCT-DAYS SHEET

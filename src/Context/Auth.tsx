@@ -244,7 +244,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUserEmail(email || null);
       setRole(userRole);
       setTenantId(null);
-      setBusinessName('Zoaib Ali & Company');
+      setBusinessName('NHT ENTERPRISE');
       setAllowedModules(userPermissions);
       setUserLocationId(locId);
       setUserLocationName(locName);
@@ -265,7 +265,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUserEmail(null);
       setRole('Super Admin');
       setTenantId(null);
-      setBusinessName('Zoaib Ali & Company');
+      setBusinessName('NHT ENTERPRISE');
       setUserLocationId(null);
       setUserLocationName(null);
       setUserName(null);
