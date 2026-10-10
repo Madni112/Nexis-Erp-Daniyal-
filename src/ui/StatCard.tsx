@@ -8,6 +8,7 @@ interface StatCardProps {
   Icon: IconType;
   /** Tailwind gradient class for the icon background */
   bgColor?: string;
+  iconStyle?: React.CSSProperties;
   decimals?: number;
   thisMonthValue?: number | string;
   thisMonthLabel?: string;
@@ -19,6 +20,7 @@ const StatCard: React.FC<StatCardProps> = ({
   value,
   Icon,
   bgColor = 'bg-gradient-to-br from-emerald-500 to-teal-700',
+  iconStyle,
   decimals,
   thisMonthValue,
   thisMonthLabel = 'This Month',
@@ -46,7 +48,7 @@ const StatCard: React.FC<StatCardProps> = ({
     <GlassCard
       onClick={onClick}
       className={`flex flex-col justify-between p-5 hover:shadow-lg hover:-translate-y-0.5 transition-all duration-200 group ${
-        onClick ? 'cursor-pointer hover:border-emerald-500/40' : ''
+        onClick ? 'cursor-pointer hover:border-primary/40' : ''
       }`}
     >
       <div className="flex items-center justify-between gap-3">
@@ -57,6 +59,7 @@ const StatCard: React.FC<StatCardProps> = ({
           </span>
         </div>
         <div
+          style={iconStyle}
           className={`flex items-center justify-center w-11 h-11 rounded-2xl text-white shadow-md ${bgColor} group-hover:scale-110 transition-transform duration-200 shrink-0 ${
             onClick ? 'ring-2 ring-white/20' : ''
           }`}

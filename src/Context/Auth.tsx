@@ -47,7 +47,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     }
   });
   const [tenantId, setTenantId] = useState<string | null>(null);
-  const [businessName, setBusinessName] = useState<string | null>('Zoaib Ali & Company');
+  const [businessName, setBusinessName] = useState<string | null>('NHT ENTERPRISES');
   const [userEmail, setUserEmail] = useState<string | null>(() => {
     try {
       return localStorage.getItem('zac_user_email') || null;

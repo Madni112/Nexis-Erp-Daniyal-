@@ -4,6 +4,7 @@ import { ModalProvider } from './Context/Modal';
 import { useEffect } from 'react';
 import { initializeSocket } from './service/socket';
 import { AuthProvider } from './Context/Auth';
+import { ThemeColorProvider } from './Context/ThemeColor';
 import Alert from './pages/Alert';
 
 function App() {
@@ -11,9 +12,10 @@ function App() {
     initializeSocket();
   }, []);
   return (
-    <AuthProvider>
-      <ModalProvider>
-        <Navigation />
+    <ThemeColorProvider>
+      <AuthProvider>
+        <ModalProvider>
+          <Navigation />
         <Toaster
           position="top-center"
           containerStyle={{ zIndex: 999999 }}
@@ -37,6 +39,7 @@ function App() {
         <Alert />
       </ModalProvider>
     </AuthProvider>
+  </ThemeColorProvider>
   );
 }
 

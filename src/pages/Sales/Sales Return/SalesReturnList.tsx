@@ -125,7 +125,7 @@ const SalesReturnList = () => {
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">Manage customer return debit notes, stock reversals and settlement vouchers</p>
         </div>
         <button
-          onClick={() => navigate('/Sales-Return/Debit-Notes/Add')}
+          onClick={() => navigate('/Sales/Sales-Return/Add')}
           className="flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 py-2.5 px-4 text-xs font-bold text-white hover:bg-emerald-700 transition shadow-sm hover:shadow-md cursor-pointer"
         >
           <span>+ Add Return Note</span>

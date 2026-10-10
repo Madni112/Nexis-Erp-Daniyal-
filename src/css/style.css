@@ -21,6 +21,82 @@
 
 
 
+:root {
+  --color-primary: #059669;
+  --color-primary-hover: #047857;
+  --color-primary-light: #ECFDF5;
+  --color-primary-dark: #064E3B;
+  --color-primary-rgb: 5, 150, 105;
+}
+
+/* ─────────────────────────────────────────────────────────────
+   DYNAMIC ACCENT THEME BINDINGS
+   Seamlessly maps all buttons, Save/Add actions, badges, inputs
+   and highlights across every page to the active theme palette.
+───────────────────────────────────────────────────────────── */
+.bg-emerald-600,
+.bg-emerald-700,
+.bg-teal-600,
+.bg-teal-700,
+.bg-teal-500,
+.bg-emerald-500,
+.bg-primary {
+  background-color: var(--color-primary, #059669) !important;
+  color: var(--color-primary-text, #ffffff) !important;
+  box-shadow: 0 0 0 1px var(--color-primary-border, transparent), 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
+}
+
+.hover\:bg-emerald-700:hover,
+.hover\:bg-emerald-800:hover,
+.hover\:bg-teal-700:hover,
+.hover\:bg-teal-800:hover,
+.hover\:bg-emerald-600:hover,
+.hover\:bg-teal-600:hover,
+.hover\:bg-primary-hover:hover {
+  background-color: var(--color-primary-hover, #047857) !important;
+}
+
+.text-emerald-600,
+.text-teal-600,
+.text-emerald-500,
+.text-teal-500 {
+  color: var(--color-primary, #059669) !important;
+}
+
+.text-emerald-700,
+.text-teal-700,
+.text-emerald-800,
+.text-teal-800 {
+  color: var(--color-primary-hover, #047857) !important;
+}
+
+.border-emerald-600,
+.border-teal-600,
+.border-emerald-500,
+.border-teal-500 {
+  border-color: var(--color-primary, #059669) !important;
+}
+
+.bg-emerald-50,
+.bg-teal-50 {
+  background-color: var(--color-primary-light, #ECFDF5) !important;
+}
+
+.focus\:border-emerald-600:focus,
+.focus\:border-teal-600:focus {
+  border-color: var(--color-primary, #059669) !important;
+}
+
+.focus\:ring-emerald-500\/20:focus,
+.focus\:ring-teal-500\/20:focus {
+  --tw-ring-color: rgba(var(--color-primary-rgb, 5, 150, 105), 0.2) !important;
+}
+
+.shadow-emerald-600\/30,
+.shadow-teal-700\/20 {
+  --tw-shadow-color: rgba(var(--color-primary-rgb, 5, 150, 105), 0.25) !important;
+}
+
 @layer base {
   * {
     @apply border-stroke dark:border-strokedark;

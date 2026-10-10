@@ -4,6 +4,7 @@ import Loader from '../common/Loader';
 import SignIn from '../pages/Authentication/SignIn';
 import DeveloperDashboard from '../pages/Developer/DeveloperDashboard';
 import DefaultLayout from '../layout/DefaultLayout';
+import HomePage from '../pages/Home/HomePage';
 import Dashboard from '../pages/Dashboard/Dashboard';
 import NotFound from '../pages/Error/NotFound';
 import { useAuth } from '../Context/Auth';
@@ -94,13 +95,13 @@ function Navigation() {
 
   return (
     <Routes>
-      {/* 1. ROOT PORTAL URL: Authenticated -> Dashboard, Unauthenticated -> Single Universal SignIn */}
+      {/* 1. ROOT PORTAL URL: Authenticated -> HomePage, Unauthenticated -> Single Universal SignIn */}
       <Route
         path="/"
         element={
           isAuthenticated ? (
             <DefaultLayout>
-              <Dashboard />
+              <HomePage />
             </DefaultLayout>
           ) : (
             <SignIn />
@@ -134,7 +135,7 @@ function Navigation() {
         element={
           isAuthenticated ? (
             <DefaultLayout>
-              <Dashboard />
+              <HomePage />
             </DefaultLayout>
           ) : (
             <SignIn />

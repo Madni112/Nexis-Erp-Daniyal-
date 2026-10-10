@@ -880,6 +880,9 @@ const DeliveryChallanHistory = () => {
       <div className="flex justify-between items-center mb-6">
         <div className="flex-1">
           <h4 className="text-xl font-semibold text-black dark:text-white">Delivery Challan / Gate Pass Registry</h4>
+        </div>
+        <button type="button" onClick={() => navigate("/Sales/Delivery-Challan/Add")} className="flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 py-2 px-4 text-xs font-bold text-white hover:bg-emerald-700 transition shadow-sm cursor-pointer shrink-0"><span>+ Add Delivery Challan</span></button>
+        <div style={{display:"none"}}>
           <p className="text-xs text-gray-500 mt-0.5">Authorize, dispatch, and track warehouse goods gate-pass fulfillment</p>
         </div>
       </div>

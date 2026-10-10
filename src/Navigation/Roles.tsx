@@ -1,16 +1,68 @@
 import {
-  MdDashboard, MdReceipt, MdPeople, MdAdminPanelSettings, MdEmojiTransportation,
-  MdEdit, MdInventory2, MdClass, MdAccountBox, MdCategory, MdStraighten, MdDomain,
-  MdInventory, MdBadge, MdShoppingCart, MdLocationOn, MdLocalShipping, MdCompareArrows,
-  MdFormatListBulleted, MdAccountTree, MdReceiptLong, MdAccountBalance, MdLaptop,
-  MdLaptopChromebook, MdMan, MdRequestPage, MdOutlineRequestPage, MdPageview,
-  MdSpaceDashboard, MdOutlineLaptop, MdTexture, MdPayment, MdAssignmentReturn,
-  MdAssessment, MdDashboardCustomize, MdTrendingUp, MdBarChart, MdAccountBalanceWallet,
-  MdBalance, MdPauseCircleFilled, MdInbox, MdPointOfSale, MdWarehouse
-} from 'react-icons/md';
+  Home,
+  LayoutDashboard,
+  Users,
+  UserPlus,
+  UserCheck,
+  Briefcase,
+  FileText,
+  FileCheck,
+  AlertCircle,
+  CalendarClock,
+  History,
+  ShoppingCart,
+  Receipt,
+  FilePlus,
+  ClipboardList,
+  Tag,
+  Truck,
+  Send,
+  Undo2,
+  CreditCard,
+  ShoppingBag,
+  PackageCheck,
+  BookOpen,
+  Building2,
+  Layers,
+  Folder,
+  FolderTree,
+  Sparkles,
+  Ruler,
+  Scale,
+  MapPin,
+  Car,
+  Landmark,
+  BookMarked,
+  Coins,
+  Store,
+  Clock,
+  PauseCircle,
+  Barcode,
+  Warehouse,
+  Boxes,
+  ArrowLeftRight,
+  SlidersHorizontal,
+  ClipboardCheck,
+  Calendar,
+  BarChart3,
+  TrendingUp,
+  FileSpreadsheet,
+  CalendarCheck2,
+  Banknote,
+  ListPlus,
+  CalendarOff,
+  HandCoins,
+  ShieldCheck,
+  PackageSearch,
+  UploadCloud,
+  Building,
+  Plus
+} from 'lucide-react';
+
 import HoldingReport from '../pages/Reports/Holding Report/HoldingReport';
 import HoldingReportPrint from '../pages/Reports/Holding Report/HoldingReportPrint';
 import Brands from '../pages/Administration/Brands';
+import HomePage from '../pages/Home/HomePage';
 import Dashboard from '../pages/Dashboard/Dashboard';
 import SalesmanDashboard from '../pages/Dashboard/SalesmanDashboard';
 import WarehouseDashboard from '../pages/Dashboard/WarehouseDashboard';
@@ -49,7 +101,6 @@ import BankAccountList from '../pages/Registration/Bank Account/BankAccountList'
 import AddBank from '../pages/Registration/Bank Account/AddBankAccount';
 import AddOpeningStock from '../pages/Registration/Opening Stock/AddOpeningStock';
 import OpeningStockList from '../pages/Registration/Opening Stock/OpeningStockList';
-import { Children, Component } from 'react';
 import AddInvoiceReceipt from '../pages/Registration/Invoice Receipt/AddInvoiceReceipt';
 import InvoiceReceiptList from '../pages/Registration/Invoice Receipt/InvoiceReceiptList';
 import PrintInvoiceReceipt from '../pages/Registration/Invoice Receipt/PrintInvoiceReceipt';
@@ -97,789 +148,681 @@ import { PayHeadsPage } from '../pages/Human Resources/PayHeads';
 import { LeavePage } from '../pages/Human Resources/Leave';
 import { LoansPage } from '../pages/Human Resources/Loans';
 
+// Xenith Complete Page Suite
+import WarehouseTerminal from '../pages/Inventory/WarehouseTerminal';
+import StockAdjustments from '../pages/Inventory/StockAdjustments';
+import StockAudits from '../pages/Inventory/StockAudits';
+import AdjustmentTypes from '../pages/Inventory/AdjustmentTypes';
+import StockLedger from '../pages/Inventory/StockLedger';
+import ScheduledValuations from '../pages/Inventory/ScheduledValuations';
+import CustomerDueList from '../pages/CRM/CustomerDueList';
+import Leads from '../pages/CRM/Leads';
+import Quotations from '../pages/CRM/Quotations';
+import FollowUps from '../pages/CRM/FollowUps';
+import RecoveryHistory from '../pages/CRM/RecoveryHistory';
+import SalesOrders from '../pages/Sales/SalesOrders';
+import CustomerPriceList from '../pages/Sales/CustomerPriceList';
+import PurchaseOrders from '../pages/Purchase/PurchaseOrders';
+import SupplierQuotations from '../pages/Purchase/SupplierQuotations';
+import VendorLedger from '../pages/Purchase/VendorLedger';
+import SubCategories from '../pages/Administration/SubCategories';
+import TileDimensions from '../pages/Administration/TileDimensions';
+import DriversDirectory from '../pages/Administration/DriversDirectory';
+import JournalVouchers from '../pages/Registration/JournalVouchers';
+import BankReconciliation from '../pages/Registration/BankReconciliation';
+import TrialBalance from '../pages/Registration/TrialBalance';
+import PosTerminal from '../pages/POS/PosTerminal';
+import PosRegister from '../pages/POS/PosRegister';
+import PosHoldOrders from '../pages/POS/PosHoldOrders';
+import BarcodeGenerator from '../pages/POS/BarcodeGenerator';
+
 export const adminRoutes = [
   {
     path: '/',
+    component: <HomePage />,
+    label: 'Home',
+    icon: Home,
+  },
+  {
+    path: '/dashboard',
     component: <Dashboard />,
     label: 'Dashboard',
-    icon: MdDashboard,
+    icon: LayoutDashboard,
+    hideFromSidebar: true,
   },
   {
     path: '/Dashboard/Salesman',
     component: <SalesmanDashboard />,
     label: 'Salesman Dashboard',
-    icon: MdPointOfSale,
+    icon: Store,
     hideFromSidebar: true,
   },
   {
     path: '/Dashboard/Warehouse',
     component: <WarehouseDashboard />,
     label: 'Warehouse Dashboard',
-    icon: MdWarehouse,
+    icon: Warehouse,
     hideFromSidebar: true,
   },
+
+  // 1. CRM
   {
-    label: 'Administation',
-    icon: MdAdminPanelSettings,
+    label: 'CRM',
+    icon: Users,
+    children: [
+      {
+        path: '/crm/leads',
+        component: <Leads />,
+        label: 'Leads & Inquiries',
+        icon: UserPlus
+      },
+      {
+        path: '/crm/quotations',
+        component: <Quotations />,
+        label: 'Quotations',
+        icon: FileText
+      },
+      {
+        path: '/Sales/Customers/List',
+        component: <CustomerHistory />,
+        label: 'Customers',
+        icon: Users
+      },
+      {
+        path: '/Sales/Customers/Add',
+        component: <AddCustomer />,
+        label: 'Add Customer',
+        icon: UserPlus,
+        hideFromSidebar: true
+      },
+      {
+        path: '/Sales/Salesman/List',
+        component: <SalesmanHistory />,
+        label: 'Salesmen',
+        icon: Briefcase
+      },
+      {
+        path: '/Sales/Salesman/Add',
+        component: <AddSalesman />,
+        label: 'Add Salesman',
+        icon: UserPlus,
+        hideFromSidebar: true
+      },
+      {
+        path: '/crm/due-list',
+        component: <CustomerDueList />,
+        label: 'Customer Due List',
+        icon: AlertCircle
+      },
+      {
+        path: '/crm/follow-ups',
+        component: <FollowUps />,
+        label: 'Follow-ups',
+        icon: CalendarClock
+      },
+      {
+        path: '/crm/recovery-history',
+        component: <RecoveryHistory />,
+        label: 'Recovery History',
+        icon: History
+      }
+    ]
+  },
+
+  // 2. SALES
+  {
+    label: 'SALES',
+    icon: ShoppingCart,
+    children: [
+      {
+        path: '/Sales/Invoice/List',
+        component: <SalesHistory />,
+        label: 'Sales Invoices',
+        icon: Receipt
+      },
+      {
+        path: '/Sales/Invoice/New',
+        component: <NewInvoice />,
+        label: 'New Invoice',
+        icon: FilePlus,
+        hideFromSidebar: true
+      },
+      {
+        path: '/sales/orders',
+        component: <SalesOrders />,
+        label: 'Sales Orders',
+        icon: ClipboardList
+      },
+      {
+        path: '/sales/price-lists',
+        component: <CustomerPriceList />,
+        label: 'Customer Price Lists',
+        icon: Tag
+      },
+      {
+        path: '/Sales/Delivery-Challan/List',
+        component: <DeliveryChallanHistory />,
+        label: 'Delivery Challans',
+        icon: Truck
+      },
+      {
+        path: '/Sales/Delivery-Challan/Add',
+        component: <AddDeliveryChallan />,
+        label: 'Add Challan',
+        icon: Plus,
+        hideFromSidebar: true
+      },
+      {
+        path: '/Sales/Shop-Dispatch/List',
+        component: <ShopDispatchQueue />,
+        label: 'Shop Dispatch Queue',
+        icon: Send
+      },
+      {
+        path: '/Sales/Sales-Return/List',
+        component: <SalesReturnList />,
+        label: 'Sales Return',
+        icon: Undo2
+      },
+      {
+        path: '/Sales/Sales-Return/Add',
+        component: <AddSalesReturn />,
+        label: 'Add Sales Return',
+        icon: Plus,
+        hideFromSidebar: true
+      },
+      {
+        path: '/Sales/Sales-Return-Receipt/List',
+        component: <SaleReturnReceiptList />,
+        label: 'Return Receipts',
+        icon: FileCheck
+      },
+      {
+        path: '/Registration/InvoiceReceipt/List',
+        component: <InvoiceReceiptList />,
+        label: 'Invoice Receipts',
+        icon: CreditCard
+      }
+    ]
+  },
+
+  // 3. PURCHASE
+  {
+    label: 'PURCHASE',
+    icon: ShoppingBag,
+    children: [
+      {
+        path: '/Purchase/Purchases/List',
+        component: <PurchaseList />,
+        label: 'Supplier Purchases',
+        icon: ShoppingBag
+      },
+      {
+        path: '/Purchase/Purchases/Add',
+        component: <AddPurchases />,
+        label: 'New Purchase',
+        icon: FilePlus,
+        hideFromSidebar: true
+      },
+      {
+        path: '/purchase/orders',
+        component: <PurchaseOrders />,
+        label: 'Purchase Orders',
+        icon: ClipboardList
+      },
+      {
+        path: '/purchase/quotations',
+        component: <SupplierQuotations />,
+        label: 'Supplier Quotations',
+        icon: FileText
+      },
+      {
+        path: '/Purchase/GRN/List',
+        component: <GRNList />,
+        label: 'Goods Receiving Note (GRN)',
+        icon: PackageCheck
+      },
+      {
+        path: '/Purchase/GRN/Add',
+        component: <AddGRN />,
+        label: 'Add GRN',
+        icon: Plus,
+        hideFromSidebar: true
+      },
+      {
+        path: '/Purchase/Inward-Challan/List',
+        component: <InwardChallanList />,
+        label: 'Inward Challans',
+        icon: Truck
+      },
+      {
+        path: '/Purchase/Purchase-Return/List',
+        component: <PurchaseReturnList />,
+        label: 'Purchase Returns',
+        icon: Undo2
+      },
+      {
+        path: '/Purchase/Purchase-Return-Receipt/List',
+        component: <PurchaseReturnReceiptList />,
+        label: 'Purchase Return Receipts',
+        icon: FileCheck
+      },
+      {
+        path: '/Purchase/Purchase-Receipt/List',
+        component: <PurchaseReceiptList />,
+        label: 'Vendor Payment Receipts',
+        icon: CreditCard
+      },
+      {
+        path: '/purchase/vendor-ledger',
+        component: <VendorLedger />,
+        label: 'Vendor Ledger',
+        icon: BookOpen
+      },
+      {
+        path: '/Purchase/Vendor/List',
+        component: <VendorList />,
+        label: 'Suppliers / Vendors',
+        icon: Building2
+      },
+      {
+        path: '/Purchase/Vendor/Add',
+        component: <AddVendor />,
+        label: 'Add Vendor',
+        icon: Plus,
+        hideFromSidebar: true
+      }
+    ]
+  },
+
+  // 4. CLASSIFICATION
+  {
+    label: 'CLASSIFICATION',
+    icon: Layers,
     children: [
       {
         path: '/Administration/Categories/List',
         component: <Categories />,
         label: 'Categories',
-        icon: MdCategory
+        icon: Folder
+      },
+      {
+        path: '/administration/subcategories',
+        component: <SubCategories />,
+        label: 'Sub-Categories',
+        icon: FolderTree
       },
       {
         path: '/Administration/Surface-Finish',
         component: <SurfaceFinish />,
-        label: 'Brand',
-        icon: MdTexture
+        label: 'Brands / Surface Finish',
+        icon: Sparkles
+      },
+      {
+        path: '/administration/tile-dimensions',
+        component: <TileDimensions />,
+        label: 'Tile Dimensions Matrix',
+        icon: Ruler
       },
       {
         path: '/Administration/UOM/List',
         component: <UomManager />,
-        label: 'UOMs',
-        icon: MdStraighten
-      },
-      /*
-      {
-        path: '/Administration/Brands',
-        component: <Brands />,
-        label: 'Brands',
-        icon: MdDomain
-      },
-      */
-      {
-        label: 'Products',
-        icon: MdDashboard,
-        path: '/Administration/Products/List',
-        component: <ProductList />,
-      },
-      {
-        label: 'Bulk Upload',
-        icon: MdDashboard,
-        path: '/Administration/Products/Bulk-Upload',
-        component: <BulkProductUpload />,
+        label: 'Units of Measure (UOM)',
+        icon: Scale
       },
       {
         path: '/Administration/Locations/List',
         component: <LocationList />,
-        label: 'Locations',
-        icon: MdLocationOn
+        label: 'Locations / Warehouses',
+        icon: MapPin
+      },
+      {
+        path: '/Administration/Locations/Add',
+        component: <AddLocation />,
+        label: 'Add Location',
+        icon: Plus,
+        hideFromSidebar: true
       },
       {
         path: '/Administration/Transportation/List',
         component: <TransportationList />,
-        label: 'Transportation',
-        icon: MdLocalShipping
+        label: 'Transportation & Couriers',
+        icon: Truck
       },
       {
-        path: '/Administration/StockTransfer/List',
-        component: <StockTransferList />,
-        label: 'Stock Transfer',
-        icon: MdCompareArrows
+        path: '/administration/drivers',
+        component: <DriversDirectory />,
+        label: 'Drivers & Fleet Directory',
+        icon: Car
       }
-      /* 
-      {
-        path: '/company',
-        component: <AddCompany />,
-        label: 'Company',
-        icon: MdAccountBox
-      }
-      */
     ]
   },
+
+  // 5. ACCOUNTS
   {
-    label: 'REGISTRATION',
-    icon: MdFormatListBulleted,
+    label: 'ACCOUNTS',
+    icon: Landmark,
     children: [
       {
         path: '/Registration/Chart-of-Account/List',
         component: <ChartOfAccountList />,
-        label: 'Chart Of Account',
-        icon: MdAccountTree
+        label: 'Chart of Accounts',
+        icon: FolderTree
+      },
+      {
+        path: '/Registration/Chart-of-Account/Add',
+        component: <AddChartOfAccount />,
+        label: 'Add Account',
+        icon: Plus,
+        hideFromSidebar: true
       },
       {
         path: '/Registration/Vouchers/List',
         component: <VoucherList />,
-        label: 'Vouchers',
-        icon: MdReceiptLong
+        label: 'Financial Vouchers',
+        icon: Receipt
+      },
+      {
+        path: '/Registration/Vouchers/Add',
+        component: <AddVoucher />,
+        label: 'Add Voucher',
+        icon: Plus,
+        hideFromSidebar: true
+      },
+      {
+        path: '/registration/journal-vouchers',
+        component: <JournalVouchers />,
+        label: 'Journal Vouchers (JV)',
+        icon: BookMarked
       },
       {
         path: '/Registration/Bank-Account/BankAccountList',
         component: <BankAccountList />,
-        label: 'Bank Account',
-        icon: MdAccountBalance
+        label: 'Bank Accounts',
+        icon: Landmark
+      },
+      {
+        path: '/registration/bank-reconciliation',
+        component: <BankReconciliation />,
+        label: 'Bank Reconciliation (BRS)',
+        icon: FileCheck
+      },
+      {
+        path: '/registration/trial-balance',
+        component: <TrialBalance />,
+        label: 'Trial Balance',
+        icon: Scale
+      },
+      {
+        path: '/Registration/Multi-Invoice-Receipt/Add',
+        component: <AddMultiInvoiceReceipt />,
+        label: 'Multi-Invoice Receipt',
+        icon: Layers
       },
       {
         path: '/Inventory/OpeningStock/List',
         component: <OpeningStockList />,
-        label: 'Opening Stock',
-        icon: MdInventory
-      },
+        label: 'Opening Stock Balance',
+        icon: Coins
+      }
     ]
   },
+
+  // 6. POS
   {
-    label: 'Sales',
-    icon: MdReceipt,
+    label: 'POS',
+    icon: Store,
     children: [
       {
-        label: 'Invoice',
-        icon: MdReceipt,
-        path: '/Sales/Invoice/List',
-        component: <SalesHistory />
+        path: '/pos/terminal',
+        component: <PosTerminal />,
+        label: 'POS Terminal',
+        icon: Store
       },
       {
-        path: '/Sales/InvoiceReceipt/List',
-        component: <InvoiceReceiptList />,
-        label: 'Invoice Receipt',
-        icon: MdReceipt
+        path: '/pos/register',
+        component: <PosRegister />,
+        label: 'POS Shift Register',
+        icon: Clock
       },
       {
-        label: 'Sales Return',
-        icon: MdEdit,
-        path: '/Sales/Sales-Return/List',
-        component: <SalesReturnList />,
+        path: '/pos/hold-orders',
+        component: <PosHoldOrders />,
+        label: 'Hold Orders Queue',
+        icon: PauseCircle
       },
       {
-        label: 'Sales Return Receipt',
-        icon: MdEdit,
-        path: '/Sales/Sales-Return-Receipt/List',
-        component: <SaleReturnReceiptList />
-      },
-      {
-        label: 'Customers',
-        path: '/Sales/Customers/List',
-        component: <CustomerHistory />,
-        icon: MdPeople,
-      },
-      {
-        label: 'Salesman',
-        path: '/Sales/Salesman/List',
-        component: <SalesmanHistory />,
-        icon: MdPeople,
-      },
-      {
-        label: 'Delivery Challan',
-        path: '/Sales/Delivery-Challan/List',
-        component: <DeliveryChallanHistory />,
-        icon: MdEmojiTransportation,
-      },
-      {
-        label: 'Shop Dispatch Queue (SDQ)',
-        path: '/Sales/Shop-Dispatch/List',
-        component: <ShopDispatchQueue />,
-        icon: MdEmojiTransportation,
-      },
-      {
-        label: 'Return Challan',
-        path: '/Warehouse/Return-Challan',
-        component: <ReturnChallanList locationFilter="WAREHOUSE" />,
-        icon: MdAssignmentReturn
-      },
-      {
-        label: 'Shop Return Queue',
-        path: '/Warehouse/Shop-Return',
-        component: <ReturnChallanList locationFilter="SHOP" />,
-        icon: MdAssignmentReturn
+        path: '/pos/barcode-generator',
+        component: <BarcodeGenerator />,
+        label: 'Barcode Generator',
+        icon: Barcode
       }
-    ],
-  },
-  {
-    label: 'Purchase',
-    icon: MdLaptop,
-    children: [
-      {
-        label: 'Purchases',
-        path: '/Purchase/Purchases/List',
-        component: <PurchaseList />,
-        icon: MdLaptopChromebook
-      },
-
-      {
-        label: 'Inward Challan (Warehouse)',
-        path: '/Purchase/Inward-Challan/List',
-        component: <InwardChallanList locationFilter="WAREHOUSE" />,
-        icon: MdInbox
-      },
-      {
-        label: 'Shop Receiving Queue',
-        path: '/Purchase/Shop-Receiving',
-        component: <InwardChallanList locationFilter="SHOP" />,
-        icon: MdInbox
-      },
-
-      {
-        label: 'Purchase Receipt',
-        path: '/Purchase/Purchase-Receipt/List',
-        component: <PurchaseReceiptList />,
-        icon: MdPayment
-      },
-      {
-        label: 'Purchase Return',
-        path: '/Purchase/Purchase-Return/List',
-        component: <PurchaseReturnList />,
-        icon: MdAssignmentReturn
-      },
-      {
-        label: 'Purchase Return Receipt',
-        path: '/Purchase/Purchase-Return-Receipt/List',
-        component: <PurchaseReturnReceiptList />,
-        icon: MdReceiptLong
-      },
-      {
-        label: 'Vendor',
-        path: '/Purchase/Vendor/List',
-        component: <VendorList />,
-        icon: MdPeople
-      }
-
     ]
   },
+
+  // 7. INVENTORY
   {
-    label: 'Human Resource',
-    icon: MdBadge,
+    label: 'INVENTORY',
+    icon: Warehouse,
     children: [
       {
-        label: 'Employees',
+        path: '/inventory/warehouse-terminal',
+        component: <WarehouseTerminal />,
+        label: 'Warehouse Terminal',
+        icon: Warehouse
+      },
+      {
+        path: '/Administration/Products/List',
+        component: <ProductList />,
+        label: 'Item Master',
+        icon: Boxes
+      },
+      {
+        path: '/Administration/StockTransfer/List',
+        component: <StockTransferList />,
+        label: 'Stock Movements',
+        icon: ArrowLeftRight
+      },
+      {
+        path: '/inventory/stock-adjustments',
+        component: <StockAdjustments />,
+        label: 'Stock Adjustments',
+        icon: SlidersHorizontal
+      },
+      {
+        path: '/inventory/stock-audits',
+        component: <StockAudits />,
+        label: 'Stock Audits',
+        icon: ClipboardCheck
+      },
+      {
+        path: '/inventory/adjustment-types',
+        component: <AdjustmentTypes />,
+        label: 'Adjustment Types',
+        icon: Tag
+      },
+      {
+        path: '/inventory/stock-ledger',
+        component: <StockLedger />,
+        label: 'Stock Ledger',
+        icon: BookOpen
+      },
+      {
+        path: '/inventory/scheduled-valuations',
+        component: <ScheduledValuations />,
+        label: 'Scheduled Valuations',
+        icon: Calendar
+      }
+    ]
+  },
+
+  // 8. REPORTS
+  {
+    label: 'REPORTS',
+    icon: BarChart3,
+    children: [
+      {
+        path: '/Reports/Reports-Dashboard',
+        component: <ReportDashboard />,
+        label: 'Reports Dashboard',
+        icon: LayoutDashboard
+      },
+      {
+        path: '/Reports/Stock-Report',
+        component: <StockReport />,
+        label: 'Stock Report',
+        icon: Boxes
+      },
+      {
+        path: '/Reports/Sales-Report',
+        component: <SalesReport />,
+        label: 'Sales Report',
+        icon: TrendingUp
+      },
+      {
+        path: '/Reports/Purchase-Report',
+        component: <PurchaseReport />,
+        label: 'Purchase Report',
+        icon: ShoppingBag
+      },
+      {
+        path: '/Reports/Account-Report',
+        component: <AccountReport />,
+        label: 'Account Ledger Report',
+        icon: BookOpen
+      },
+      {
+        path: '/Reports/Holding-Report',
+        component: <HoldingReport />,
+        label: 'Holding Report',
+        icon: Layers
+      },
+      {
+        path: '/Reports/Balance-Sheet',
+        component: <BalanceSheet />,
+        label: 'Balance Sheet & P&L',
+        icon: FileSpreadsheet
+      }
+    ]
+  },
+
+  // 9. HUMAN RESOURCE
+  {
+    label: 'HUMAN RESOURCE',
+    icon: UserCheck,
+    children: [
+      {
         path: '/Human-Resources/Employees',
         component: <EmployeesPage />,
-        icon: MdPeople
+        label: 'Employees Directory',
+        icon: Users
       },
       {
-        label: 'Attendance Sheet',
+        path: '/Human-Resources/Employees/Add',
+        component: <AddEmployee />,
+        label: 'Add Employee',
+        icon: UserPlus,
+        hideFromSidebar: true
+      },
+      {
         path: '/Human-Resources/Attendance',
         component: <AttendanceSheetPage />,
-        icon: MdClass
+        label: 'Attendance Sheet',
+        icon: CalendarCheck2
       },
       {
-        label: 'Salary Sheet (Payroll)',
         path: '/Human-Resources/Salary-Sheet',
         component: <SalarySheetPage />,
-        icon: MdPayment
+        label: 'Salary Sheet',
+        icon: Banknote
       },
       {
-        label: 'Leaves',
+        path: '/Human-Resources/Salary-Structure',
+        component: <SalaryStructurePage />,
+        label: 'Salary Structure',
+        icon: Coins
+      },
+      {
+        path: '/Human-Resources/Pay-Heads',
+        component: <PayHeadsPage />,
+        label: 'Pay Heads',
+        icon: ListPlus
+      },
+      {
         path: '/Human-Resources/Leaves',
         component: <LeavePage />,
-        icon: MdAssignmentReturn
+        label: 'Leave Management',
+        icon: CalendarOff
       },
       {
-        label: 'Loans & Advances',
         path: '/Human-Resources/Loans',
         component: <LoansPage />,
-        icon: MdAccountBalanceWallet
+        label: 'Loans & Advances',
+        icon: HandCoins
       }
     ]
   },
-  {
-    label: 'Reports',
-    path: '/Reports/Reports-Dashboard',
-    component: <ReportDashboard />,
-    icon: MdAssessment
-  },
-  {
-    path: '/Reports/Sales-Report',
-    component: <SalesReport />,
-    label: 'Sales Report',
-    hideFromSidebar: true
-  },
-  {
-    path: '/Reports/Purchase-Report',
-    component: <PurchaseReport />,
-    label: 'Purchase Report',
-    hideFromSidebar: true
-  },
-  {
-    path: '/Reports/Stock-Report',
-    component: <StockReport />,
-    label: 'Stock Report',
-    hideFromSidebar: true
-  },
-  {
-    path: '/Reports/Account-Report',
-    component: <AccountReport />,
-    label: 'Account Report',
-    hideFromSidebar: true
-  },
-  {
-    path: '/Reports/Holding-Report',
-    component: <HoldingReport />,
-    label: 'Holding Item Report',
-    hideFromSidebar: true
-  },
-  {
-    path: '/Reports/Balance-Sheet',
-    component: <BalanceSheet />,
-    label: 'Balance Sheet',
-    hideFromSidebar: true
-  },
-  {
-    path: '/Reports/view/:reportId',
-    component: <DedicatedReportFilter />,
-    label: 'Report Filter',
-    hideFromSidebar: true
-  },
-  {
-    path: '/Administration/Products/Add',
-    component: <AddProduct />,
-    label: 'Add Product',
-    hideFromSidebar: true
-  },
-  {
-    path: '/Administration/Locations/Add',
-    component: <AddLocation />,
-    label: 'Add Location',
-    hideFromSidebar: true
-  },
-  {
-    path: '/Administration/Transportation/Add',
-    component: <AddTransportation />,
-    label: 'Add Transportation',
-    hideFromSidebar: true
-  },
-  {
-    path: '/Administration/StockTransfer/Add',
-    component: <AddStockTransfer />,
-    label: 'Add Stock Transfer',
-    hideFromSidebar: true
-  },
-  {
-    path: '/Registration/Chart-of-Account/Add',
-    component: <AddChartOfAccount />,
-    label: 'Add Account',
-    hideFromSidebar: true
-  },
-  {
-    path: '/Registration/Vouchers/Add',
-    component: <AddVoucher />,
-    label: 'Add Voucher',
-    hideFromSidebar: true
-  },
-  {
-    path: '/Delivery-Challan/Print/:id',
-    component: <PrintChallan />,
-    label: 'Print Challan',
-    hideFromSidebar: true
-  },
-  {
-    path: '/Sales/Delivery-Challan/Print/:id',
-    component: <PrintChallan />,
-    label: 'Print Challan',
-    hideFromSidebar: true
-  },
-  {
-    path: '/Sales-Return/Debit-Notes/Print/:id',
-    component: <PrintSalesReturn />,
-    label: 'Print Voucher',
-    hideFromSidebar: true
-  },
-  {
-    path: '/Sales/Sales-Return/Print/:id',
-    component: <PrintSalesReturn />,
-    label: 'Print Voucher',
-    hideFromSidebar: true
-  },
-  {
-    path: '/sales/invoice/print/:id',
-    component: <PrintInvoice />,
-    label: 'Print Invoice',
-    hideFromSidebar: true
-  },
-  {
-    path: '/Sales/Invoice/Print/:id',
-    component: <PrintInvoice />,
-    label: 'Print Invoice',
-    hideFromSidebar: true
-  },
-  {
-    path: '/Registration/Bank-Account/AddBank',
-    component: <AddBank />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Inventory/OpeningStock/Add',
-    component: <AddOpeningStock />,
-    label: 'Add Opening Stock',
-    hideFromSidebar: true
-  },
-  {
-    path: '/sales/invoice/add',
-    component: <NewInvoice />,
-    label: 'New Invoice',
-    hideFromSidebar: true
-  },
-  {
-    path: '/Sales/Invoice/Add',
-    component: <NewInvoice />,
-    label: 'New Invoice',
-    hideFromSidebar: true
-  },
-  {
-    path: '/Sales/Invoice/edit/:id',
-    component: <NewInvoice />,
-    label: 'Edit Invoice',
-    hideFromSidebar: true
-  },
-  {
-    path: '/sales/invoice/edit/:id',
-    component: <NewInvoice />,
-    label: 'Edit Invoice',
-    hideFromSidebar: true
-  },
-  {
-    path: '/sales/invoice/list',
-    component: <SalesHistory />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Sales-Return/Debit-Notes/Add',
-    component: <AddSalesReturn />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/sales-return/debit-notes/add',
-    component: <AddSalesReturn />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Sales-Return/Debit-Notes/Edit/:id',
-    component: <AddSalesReturn />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/sales-return/debit-notes/edit/:id',
-    component: <AddSalesReturn />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Sales/Sales-Return/Add',
-    component: <AddSalesReturn />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/sales/sales-return/add',
-    component: <AddSalesReturn />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Sales/Sales-Return/Edit/:id',
-    component: <AddSalesReturn />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/sales/sales-return/edit/:id',
-    component: <AddSalesReturn />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Sales-Return/Debit-Notes/List',
-    component: <SalesReturnList />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/sales-return/debit-notes/list',
-    component: <SalesReturnList />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Sales-Return/List',
-    component: <SalesReturnList />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/sales-return/list',
-    component: <SalesReturnList />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Sales-Return/Add',
-    component: <AddSalesReturn />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/sales-return/add',
-    component: <AddSalesReturn />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Sales-Return/Edit/:id',
-    component: <AddSalesReturn />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/sales-return/edit/:id',
-    component: <AddSalesReturn />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Sales-Return/Print/:id',
-    component: <PrintSalesReturn />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/sales-return/print/:id',
-    component: <PrintSalesReturn />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Registration/InvoiceReceipt/Add',
-    component: <AddInvoiceReceipt />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Sales/InvoiceReceipt/Add',
-    component: <AddInvoiceReceipt />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Registration/InvoiceReceipt/List',
-    component: <InvoiceReceiptList />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Customers/customer-details',
-    component: <AddCustomer />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Sales/Customers/Add',
-    component: <AddCustomer />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Customers/list',
-    component: <CustomerHistory />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Human-Resources/Employees/Add',
-    component: <AddEmployee />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Human-Resources/Employees/add',
-    component: <AddEmployee />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Human-Resources/Employees/employee-details',
-    component: <AddEmployee />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Human-Resources/Employees/Edit',
-    component: <AddEmployee />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Salesman/add',
-    component: <AddSalesman />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Sales/Salesman/Add',
-    component: <AddSalesman />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Salesman/list',
-    component: <SalesmanHistory />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Delivery-Challan/Details',
-    component: <AddDeliveryChallan />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Sales/Delivery-Challan/Add',
-    component: <AddDeliveryChallan />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Delivery-Challan/List',
-    component: <DeliveryChallanHistory />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Registration/MultiInvoiceReceipt/Add',
-    component: <AddMultiInvoiceReceipt />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Sales/MultiInvoiceReceipt/Add',
-    component: <AddMultiInvoiceReceipt />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Purchase/Purchases/Add',
-    component: <AddPurchases />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Purchase/GRN/Add',
-    component: <AddGRN />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Purchase/GRN/Edit/:id',
-    component: <AddGRN />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Purchase/Inward-Challan/Verify/:id',
-    component: <VerifyInward />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Warehouse/Return-Challan/Verify/:id',
-    component: <VerifyReturnChallan />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Purchase/Purchases/Print/:id',
-    component: <PrintPurchase />,
-    label: 'Print Purchase',
-    hideFromSidebar: true
-  },
-  {
-    path: '/purchase/purchases/print/:id',
-    component: <PrintPurchase />,
-    label: 'Print Purchase',
-    hideFromSidebar: true
-  },
-  {
-    path: '/Purchase/Vendor/Add',
-    component: <AddVendor />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Purchase/Purchase-Receipt/Add',
-    component: <AddPurchaseReceipt />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Purchase/Purchase-Return/Add',
-    component: <AddPurchaseReturn />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Purchase/Purchase-Return/Print/:id',
-    component: <PrintPurchaseReturn />,
-    label: 'Print Debit Note',
-    hideFromSidebar: true
-  },
-  {
-    path: '/purchase/purchase-return/print/:id',
-    component: <PrintPurchaseReturn />,
-    label: 'Print Debit Note',
-    hideFromSidebar: true
-  },
-  {
-    path: '/Purchase-Return/Debit-Notes/Print/:id',
-    component: <PrintPurchaseReturn />,
-    label: 'Print Debit Note',
-    hideFromSidebar: true
-  },
-  {
-    path: '/Purchase/Purchase-Return-Receipt/Add',
-    component: <AddPurchaseReturnReceipt />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Purchase/Purchase-Return-Receipt/Print/:id',
-    component: <PrintPurchaseReturnReceipt />,
-    label: 'Print Return Receipt',
-    hideFromSidebar: true
-  },
-  {
-    path: '/purchase/purchase-return-receipt/print/:id',
-    component: <PrintPurchaseReturnReceipt />,
-    label: 'Print Return Receipt',
-    hideFromSidebar: true
-  },
-  {
-    path: '/Purchase-Return-Receipt/Print/:id',
-    component: <PrintPurchaseReturnReceipt />,
-    label: 'Print Return Receipt',
-    hideFromSidebar: true
-  },
-  {
-    path: '/Reports/Sales-Report/Print',
-    component: <SaleReportPrint />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/sales/sales-return-receipt/add',
-    component: <SaleReturnReceiptAdd />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Sales/Sales-Return-Receipt/Add',
-    component: <SaleReturnReceiptAdd />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/sales/sales-return-receipt/list',
-    component: <SaleReturnReceiptList />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Reports/Purchase-Report/Print',
-    component: <PurchaseReportPrint />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Reports/Stock-Report/Print',
-    component: <StockReportPrint />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Reports/Account-Report/Print',
-    component: <AccountReportPrint />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Reports/Holding-Report/Print',
-    component: <HoldingReportPrint />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Registration/InvoiceReceipt/Print/:id',
-    component: <PrintInvoiceReceipt />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Sales/InvoiceReceipt/Print/:id',
-    component: <PrintInvoiceReceipt />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Purchase/Purchase-Receipt/Print/:id',
-    component: <PrintPurchaseReceipt />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/purchase/purchase-receipt/print/:id',
-    component: <PrintPurchaseReceipt />,
-    hideFromSidebar: true
-  },
-  {
-    path: '/Sales/Sales-Return-Receipt/Print/:id',
-    component: <PrintSalesReturnReceipt />,
-    label: 'Print Sales Return Receipt',
-    hideFromSidebar: true
-  },
-  {
-    path: '/sales/sales-return-receipt/print/:id',
-    component: <PrintSalesReturnReceipt />,
-    label: 'Print Sales Return Receipt',
-    hideFromSidebar: true
-  },
-  {
-    path: '/Sales-Return-Receipt/Print/:id',
-    component: <PrintSalesReturnReceipt />,
-    label: 'Print Sales Return Receipt',
-    hideFromSidebar: true
-  }
+
+  // 10. ADMINISTRATION
+  {
+    label: 'ADMINISTRATION',
+    icon: ShieldCheck,
+    children: [
+      {
+        path: '/company',
+        component: <AddCompany />,
+        label: 'Company Profile',
+        icon: Building
+      },
+      {
+        path: '/Administration/Products/List',
+        component: <ProductList />,
+        label: 'Product Catalog',
+        icon: PackageSearch
+      },
+      {
+        path: '/Administration/Products/Add',
+        component: <AddProduct />,
+        label: 'Add Product',
+        icon: Plus,
+        hideFromSidebar: true
+      },
+      {
+        path: '/Administration/Products/Bulk-Upload',
+        component: <BulkProductUpload />,
+        label: 'Bulk Product Upload',
+        icon: UploadCloud
+      }
+    ]
+  },
+
+  // Print & Hidden Sub-routes
+  { path: '/Sales/Invoice/Print/:id', component: <PrintInvoice />, hideFromSidebar: true },
+  { path: '/sales/invoice/print/:id', component: <PrintInvoice />, hideFromSidebar: true },
+  { path: '/Sales/Delivery-Challan/Print/:id', component: <PrintChallan />, hideFromSidebar: true },
+  { path: '/sales/delivery-challan/print/:id', component: <PrintChallan />, hideFromSidebar: true },
+  { path: '/Sales/Sales-Return/Print/:id', component: <PrintSalesReturn />, hideFromSidebar: true },
+  { path: '/sales/sales-return/print/:id', component: <PrintSalesReturn />, hideFromSidebar: true },
+  { path: '/Purchase/Purchases/Print/:id', component: <PrintPurchase />, hideFromSidebar: true },
+  { path: '/purchase/purchases/print/:id', component: <PrintPurchase />, hideFromSidebar: true },
+  { path: '/Purchase/Inward-Challan/Verify/:id', component: <VerifyInward />, hideFromSidebar: true },
+  { path: '/Warehouse/Return-Challan/Verify/:id', component: <VerifyReturnChallan />, hideFromSidebar: true },
+  { path: '/Purchase/Purchase-Return/Print/:id', component: <PrintPurchaseReturn />, hideFromSidebar: true },
+  { path: '/purchase/purchase-return/print/:id', component: <PrintPurchaseReturn />, hideFromSidebar: true },
+  { path: '/Purchase/Purchase-Return-Receipt/Print/:id', component: <PrintPurchaseReturnReceipt />, hideFromSidebar: true },
+  { path: '/purchase/purchase-return-receipt/print/:id', component: <PrintPurchaseReturnReceipt />, hideFromSidebar: true },
+  { path: '/Purchase/Purchase-Receipt/Print/:id', component: <PrintPurchaseReceipt />, hideFromSidebar: true },
+  { path: '/purchase/purchase-receipt/print/:id', component: <PrintPurchaseReceipt />, hideFromSidebar: true },
+  { path: '/Sales/Sales-Return-Receipt/Print/:id', component: <PrintSalesReturnReceipt />, hideFromSidebar: true },
+  { path: '/sales/sales-return-receipt/print/:id', component: <PrintSalesReturnReceipt />, hideFromSidebar: true },
+  { path: '/Registration/InvoiceReceipt/Print/:id', component: <PrintInvoiceReceipt />, hideFromSidebar: true },
+  { path: '/Sales/InvoiceReceipt/Print/:id', component: <PrintInvoiceReceipt />, hideFromSidebar: true },
+  { path: '/Reports/Sales-Report/Print', component: <SaleReportPrint />, hideFromSidebar: true },
+  { path: '/Reports/Purchase-Report/Print', component: <PurchaseReportPrint />, hideFromSidebar: true },
+  { path: '/Reports/Stock-Report/Print', component: <StockReportPrint />, hideFromSidebar: true },
+  { path: '/Reports/Account-Report/Print', component: <AccountReportPrint />, hideFromSidebar: true },
+  { path: '/Reports/Holding-Report/Print', component: <HoldingReportPrint />, hideFromSidebar: true }
 ];
+
+export const salesmanRoutes = adminRoutes;
+export const warehouseRoutes = adminRoutes;

@@ -44,6 +44,7 @@ import {
   MdLink,
   MdGroup,
   MdSwapHoriz,
+  MdDelete,
 } from 'react-icons/md';
 import { ROLE_PRESETS, RolePreset, getModulesForRole } from '../../constant/roles';
 
@@ -61,90 +62,139 @@ export interface PermissionNode {
 export const PERMISSION_TREE: PermissionNode[] = [
   {
     id: 'dashboards',
-    label: 'Dashboards',
+    label: 'Home & Core Dashboards',
     children: [
-      { id: 'dashboard', label: 'Main / Executive Dashboard' },
+      { id: '/', label: 'Home (Operations & Quick Launchpad)' },
+      { id: '/dashboard', label: 'Executive BI & Deep Analytics' },
       { id: '/Dashboard/Salesman', label: 'Salesman Dashboard' },
       { id: '/Dashboard/Warehouse', label: 'Warehouse (Location) Dashboard' },
     ],
   },
   {
-    id: 'administration',
-    label: 'Administration',
+    id: 'crm',
+    label: 'CRM & Customer Inquiries',
     children: [
-      { id: '/Administration/Categories/List', label: 'Categories' },
-      { id: '/Administration/Surface-Finish', label: 'Brand / Surface Finish' },
-      { id: '/Administration/UOM/List', label: 'UOM (Units of Measure)' },
-      { id: '/Administration/Products/List', label: 'Products' },
-      { id: '/Administration/Products/Bulk-Upload', label: 'Bulk Product Upload' },
-      { id: '/Administration/Locations/List', label: 'Locations' },
-      { id: '/Administration/Transportation/List', label: 'Transportation' },
-      { id: '/Administration/StockTransfer/List', label: 'Stock Transfer' },
-      { id: '/company', label: 'Company Profile' },
-    ],
-  },
-  {
-    id: 'registration',
-    label: 'Registration',
-    children: [
-      { id: '/Registration/Chart-of-Account/List', label: 'Chart of Account' },
-      { id: '/Registration/Vouchers/List', label: 'Financial Vouchers' },
-      { id: '/Registration/Bank-Account/BankAccountList', label: 'Bank Accounts' },
-      { id: '/Inventory/OpeningStock/List', label: 'Opening Stock' },
+      { id: '/crm/leads', label: 'Leads & Demand Capture' },
+      { id: '/crm/quotations', label: 'Quotations' },
+      { id: '/Sales/Customers/List', label: 'Customers Directory' },
+      { id: '/Sales/Salesman/List', label: 'Salesmen Ledger' },
+      { id: '/crm/due-list', label: 'Customer Due List' },
+      { id: '/crm/follow-ups', label: 'Follow-ups' },
+      { id: '/crm/recovery-history', label: 'Recovery History' },
     ],
   },
   {
     id: 'sales',
-    label: 'Sales',
+    label: 'Sales Operations',
     children: [
-      { id: '/Sales/Invoice/List', label: 'Sales Invoice' },
-      { id: '/Sales/InvoiceReceipt/List', label: 'Invoice Receipts' },
+      { id: '/Sales/Invoice/List', label: 'Sales Invoices' },
+      { id: '/sales/orders', label: 'Sales Orders' },
+      { id: '/sales/price-lists', label: 'Customer Price Lists' },
+      { id: '/Sales/Delivery-Challan/List', label: 'Delivery Challan (A-39 WDQ)' },
+      { id: '/Sales/Shop-Dispatch/List', label: 'Shop Dispatch Queue (SDQ)' },
       { id: '/Sales/Sales-Return/List', label: 'Sales Returns' },
       { id: '/Sales-Return/Debit-Notes/List', label: 'Debit Notes' },
       { id: '/Sales/Sales-Return-Receipt/List', label: 'Sales Return Receipts' },
-      { id: '/Sales/Customers/List', label: 'Customers Directory' },
-      { id: '/Sales/Salesman/List', label: 'Salesmen Ledger' },
-      { id: '/Sales/Delivery-Challan/List', label: 'Delivery Challan (A-39 WDQ)' },
-      { id: '/Sales/Shop-Dispatch/List', label: 'Shop Dispatch Queue (SHOP SDQ)' },
+      { id: '/Registration/InvoiceReceipt/List', label: 'Invoice Receipts' },
     ],
   },
   {
     id: 'purchase',
-    label: 'Purchase',
+    label: 'Purchase & Vendor Procurement',
     children: [
-      { id: '/Purchase/Purchases/List', label: 'Purchases (PO & Invoices)' },
-      { id: '/Purchase/Inward-Challan/List', label: 'Inward Challan (A-39 Warehouse)' },
-      { id: '/Purchase/Shop-Receiving', label: 'Shop Receiving Queue (SHOP)' },
-      { id: '/Purchase/Purchase-Receipt/List', label: 'Purchase Receipts' },
+      { id: '/Purchase/Purchases/List', label: 'Supplier Purchases (PO & Invoices)' },
+      { id: '/purchase/orders', label: 'Purchase Orders' },
+      { id: '/purchase/quotations', label: 'Supplier Quotations' },
+      { id: '/Purchase/GRN/List', label: 'Goods Receiving Note (GRN)' },
+      { id: '/Purchase/Inward-Challan/List', label: 'A-39 Inward Challans (Receiving)' },
+      { id: '/Purchase/Shop-Receiving', label: 'Shop Incoming Stock Receiving' },
       { id: '/Purchase/Purchase-Return/List', label: 'Purchase Returns' },
       { id: '/Purchase/Purchase-Return-Receipt/List', label: 'Purchase Return Receipts' },
-      { id: '/Purchase/Vendor/List', label: 'Vendors Directory' },
+      { id: '/Purchase/Purchase-Receipt/List', label: 'Vendor Payment Receipts' },
+      { id: '/purchase/vendor-ledger', label: 'Vendor Ledger' },
+      { id: '/Purchase/Vendor/List', label: 'Suppliers / Vendors Directory' },
     ],
   },
   {
-    id: 'warehouse',
-    label: 'Warehouse & Logistics (A-39 & SHOP)',
+    id: 'pos',
+    label: 'POS (Point of Sale)',
     children: [
-      { id: '/Sales/Delivery-Challan/List', label: 'A-39 Outward Delivery Challan (WDQ)' },
-      { id: '/Sales/Shop-Dispatch/List', label: 'Shop Counter Dispatch Queue (SDQ)' },
-      { id: '/Purchase/Inward-Challan/List', label: 'A-39 Supplier Inward Challan (Receiving)' },
-      { id: '/Purchase/Shop-Receiving', label: 'Shop Incoming Stock Receiving' },
+      { id: '/pos/terminal', label: 'POS Terminal' },
+      { id: '/pos/register', label: 'POS Shift Register' },
+      { id: '/pos/hold-orders', label: 'Hold Orders Queue' },
+      { id: '/pos/barcode-generator', label: 'Barcode Generator' },
+    ],
+  },
+  {
+    id: 'inventory',
+    label: 'Inventory, Stock & Warehouses',
+    children: [
+      { id: '/inventory/warehouse-terminal', label: 'Warehouse Terminal' },
+      { id: '/Administration/Products/List', label: 'Item Master / Products' },
+      { id: '/Administration/Products/Bulk-Upload', label: 'Bulk Product Upload' },
+      { id: '/Administration/StockTransfer/List', label: 'Inter-Warehouse Stock Transfers' },
+      { id: '/inventory/stock-adjustments', label: 'Stock Adjustments' },
+      { id: '/inventory/stock-audits', label: 'Stock Audits & Reconciliation' },
+      { id: '/inventory/adjustment-types', label: 'Adjustment Reason Codes' },
+      { id: '/inventory/stock-ledger', label: 'Stock Movement Ledger' },
+      { id: '/inventory/scheduled-valuations', label: 'Scheduled Valuations' },
       { id: '/Warehouse/Return-Challan', label: 'A-39 Customer Return Challans' },
       { id: '/Warehouse/Shop-Return', label: 'Shop Return Receiving Queue' },
-      { id: '/Administration/StockTransfer/List', label: 'Inter-Warehouse Stock Transfers' },
+      { id: '/Inventory/OpeningStock/List', label: 'Opening Stock Balance' },
+    ],
+  },
+  {
+    id: 'accounts',
+    label: 'Accounts & Finance',
+    children: [
+      { id: '/Registration/Chart-of-Account/List', label: 'Chart of Accounts' },
+      { id: '/Registration/Vouchers/List', label: 'Financial Vouchers' },
+      { id: '/registration/journal-vouchers', label: 'Journal Vouchers (JV)' },
+      { id: '/Registration/Bank-Account/BankAccountList', label: 'Bank Accounts' },
+      { id: '/registration/bank-reconciliation', label: 'Bank Reconciliation (BRS)' },
+      { id: '/registration/trial-balance', label: 'Trial Balance' },
+      { id: '/Registration/Multi-Invoice-Receipt/Add', label: 'Multi-Invoice Receipt' },
+    ],
+  },
+  {
+    id: 'administration',
+    label: 'Classification & Settings',
+    children: [
+      { id: '/Administration/Categories/List', label: 'Categories' },
+      { id: '/administration/subcategories', label: 'Sub-Categories' },
+      { id: '/Administration/Surface-Finish', label: 'Brands / Surface Finish' },
+      { id: '/administration/tile-dimensions', label: 'Tile Dimensions Matrix' },
+      { id: '/Administration/UOM/List', label: 'Units of Measure (UOM)' },
+      { id: '/Administration/Locations/List', label: 'Locations / Warehouses' },
+      { id: '/Administration/Transportation/List', label: 'Transportation & Couriers' },
+      { id: '/administration/drivers', label: 'Drivers & Fleet Directory' },
+      { id: '/company', label: 'Company Profile' },
     ],
   },
   {
     id: 'reports',
-    label: 'Reports',
+    label: 'Reports & Analytics',
     children: [
       { id: '/Reports/Reports-Dashboard', label: 'Reports Dashboard' },
       { id: '/Reports/Sales-Report', label: 'Sales Reports' },
       { id: '/Reports/Purchase-Report', label: 'Purchase Reports' },
       { id: '/Reports/Stock-Report', label: 'Stock Reports' },
       { id: '/Reports/Holding-Report', label: 'Holding Reports' },
-      { id: '/Reports/Account-Report', label: 'Account Reports' },
-      { id: '/Reports/Balance-Sheet', label: 'Balance Sheet' },
+      { id: '/Reports/Account-Report', label: 'Account Ledger Reports' },
+      { id: '/Reports/Balance-Sheet', label: 'Balance Sheet & P&L' },
+    ],
+  },
+  {
+    id: 'hr',
+    label: 'Human Resources (HR)',
+    children: [
+      { id: '/Human-Resources/Employees', label: 'Employees Directory' },
+      { id: '/Human-Resources/Attendance', label: 'Daily Attendance Sheet' },
+      { id: '/Human-Resources/Salary-Sheet', label: 'Monthly Salary Sheet' },
+      { id: '/Human-Resources/Salary-Structure', label: 'Salary Structure' },
+      { id: '/Human-Resources/Pay-Heads', label: 'Pay Heads' },
+      { id: '/Human-Resources/Leaves', label: 'Leave Policy & Approvals' },
+      { id: '/Human-Resources/Loans', label: 'Employee Loans & Advances' },
     ],
   },
 ];
@@ -185,12 +235,15 @@ const PermissionTreeEditor: React.FC<{
 }> = ({ selectedIds, onChange }) => {
   const [expandedNodes, setExpandedNodes] = useState<Record<string, boolean>>({
     dashboards: true,
-    administration: true,
-    registration: true,
+    crm: true,
     sales: true,
     purchase: true,
-    warehouse: true,
+    pos: true,
+    inventory: true,
+    accounts: true,
+    administration: true,
     reports: true,
+    hr: true,
   });
 
   const toggleExpand = (nodeId: string) => {
@@ -594,35 +647,7 @@ const DeveloperDashboard: React.FC = () => {
           created_at: t.created_at || new Date().toISOString(),
         }));
       } else {
-        formattedEmployees = [
-          {
-            id: '1',
-            name: 'Zoaib Ali (Super Admin)',
-            slug: 'zoaib-admin',
-            email: 'admin@zoaibalicompany.com',
-            role: 'Super Admin',
-            allowed_modules: ROLE_PRESETS['Super Admin'].modules,
-            created_at: new Date().toISOString(),
-          },
-          {
-            id: '2',
-            name: 'Warehouse Manager',
-            slug: 'warehouse-mgr',
-            email: 'warehouse@zoaibalicompany.com',
-            role: 'Warehouse Manager',
-            allowed_modules: ROLE_PRESETS['Warehouse Manager'].modules,
-            created_at: new Date().toISOString(),
-          },
-          {
-            id: '3',
-            name: 'Finance & Accounts',
-            slug: 'accountant',
-            email: 'accountant@zoaibalicompany.com',
-            role: 'Accountant',
-            allowed_modules: ROLE_PRESETS['Accountant'].modules,
-            created_at: new Date().toISOString(),
-          },
-        ];
+        formattedEmployees = [];
       }
 
       setEmployees(formattedEmployees);
@@ -670,8 +695,8 @@ const DeveloperDashboard: React.FC = () => {
       // 1. Create User in Supabase Auth with allowed modules and role
       // Create a secondary client so we don't log out the active session
       const secondaryAuthClient = createClient(
-        import.meta.env.VITE_SUPABASE_URL || 'https://wpzwntbgpeiiclytuuht.supabase.co',
-        import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_IpW1ssWRf1_q6-J0hvXTzA_kVDyZcjy',
+        import.meta.env.VITE_SUPABASE_URL || 'https://zzjxukhrhvmuxxznjbos.supabase.co',
+        import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_1rECaTLSxzwonvR12iOOKQ_XEI8wqCb',
         { auth: { persistSession: false, autoRefreshToken: false } }
       );
       
@@ -694,7 +719,7 @@ const DeveloperDashboard: React.FC = () => {
 
       // 2. Record employee in tenants table
       try {
-        await supabase.from('tenants').upsert([
+        const { error: tenantErr } = await supabase.from('tenants').upsert([
           {
             name: newEmployee.name.trim(),
             slug: cleanSlug,
@@ -705,6 +730,21 @@ const DeveloperDashboard: React.FC = () => {
             location_id: newEmployee.role === 'Warehouse Manager' && newEmployee.location_id ? Number(newEmployee.location_id) : null,
           },
         ], { onConflict: 'slug' });
+
+        if (tenantErr) {
+          console.warn('Upsert fallback to insert:', tenantErr);
+          await supabase.from('tenants').insert([
+            {
+              name: newEmployee.name.trim(),
+              slug: cleanSlug,
+              email: newEmployee.email.trim(),
+              business_activity: newEmployee.role,
+              seller_address: 'Zoaib Ali & Company Headquarters',
+              allowed_modules: newEmployee.modules,
+              location_id: newEmployee.role === 'Warehouse Manager' && newEmployee.location_id ? Number(newEmployee.location_id) : null,
+            },
+          ]);
+        }
       } catch (err) {
         console.warn('Tenants table upsert:', err);
       }
@@ -720,7 +760,6 @@ const DeveloperDashboard: React.FC = () => {
           console.warn('Salesmen table insert:', err);
         }
       }
-
 
       setCreatedResult({
         name: newEmployee.name.trim(),
@@ -738,7 +777,9 @@ const DeveloperDashboard: React.FC = () => {
         location_id: '',
         modules: ROLE_PRESETS['Warehouse Manager'].modules,
       });
-      fetchDevData();
+
+      await fetchDevData();
+      setActiveTab('employees');
     } catch (err: any) {
       toast.error('Registration failed: ' + err.message);
     } finally {
@@ -815,6 +856,20 @@ const DeveloperDashboard: React.FC = () => {
       toast.error('Update failed: ' + e.message);
     } finally {
       setIsSavingEdit(false);
+    }
+  };
+
+  const handleDeleteEmployee = async (emp: EmployeeAccount) => {
+    if (!window.confirm(`Are you sure you want to delete employee "${emp.name}"?`)) {
+      return;
+    }
+    try {
+      const { error } = await supabase.from('tenants').delete().eq('id', emp.id);
+      if (error) throw error;
+      toast.success(`Employee account "${emp.name}" removed successfully.`);
+      fetchDevData();
+    } catch (err: any) {
+      toast.error('Failed to delete employee: ' + err.message);
     }
   };
 
@@ -1452,35 +1507,66 @@ const DeveloperDashboard: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stroke dark:divide-strokedark">
-                  {employees.map(emp => (
-                    <tr key={emp.id} className="hover:bg-gray-50 dark:hover:bg-meta-4/20 transition">
-                      <td className="p-4 font-bold text-black dark:text-white flex items-center gap-2">
-                        <MdBadge className="text-emerald-600 text-base shrink-0" />
-                        <span>{emp.name}</span>
-                      </td>
-                      <td className="p-4">
-                        <span className="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60 px-2.5 py-1 rounded-md text-[11px] font-bold">
-                          {emp.role || 'Staff'}
-                        </span>
-                      </td>
-                      <td className="p-4 font-mono text-gray-600 dark:text-gray-400">
-                        {emp.email || '—'}
-                      </td>
-                      <td className="p-4">
-                        <span className="bg-gray-100 dark:bg-meta-4 text-emerald-700 dark:text-emerald-400 px-2.5 py-1 rounded-md text-[11px] font-mono border border-stroke dark:border-strokedark font-bold">
-                          {emp.allowed_modules?.length || 0} pages allowed
-                        </span>
-                      </td>
-                      <td className="p-4 text-center">
-                        <button
-                          onClick={() => handleOpenEditModal(emp)}
-                          className="inline-flex items-center gap-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition shadow-xs"
-                        >
-                          <MdEdit /> Edit Role & Permissions
-                        </button>
+                  {employees.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-12 px-4 text-center">
+                        <div className="flex flex-col items-center justify-center max-w-sm mx-auto">
+                          <div className="w-12 h-12 rounded-full bg-emerald-50 dark:bg-emerald-950/40 flex items-center justify-center text-emerald-600 dark:text-emerald-400 text-xl font-bold mb-3">
+                            <MdBadge />
+                          </div>
+                          <h4 className="text-sm font-bold text-black dark:text-white mb-1">No Active Employee Accounts</h4>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
+                            All previous user accounts have been cleared. You can add new employee accounts with custom roles anytime.
+                          </p>
+                          <button
+                            onClick={() => setActiveTab('create')}
+                            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs py-2 px-4 rounded-xl flex items-center gap-1.5 transition shadow-xs cursor-pointer"
+                          >
+                            <MdAddCircle /> Add New Employee User
+                          </button>
+                        </div>
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    employees.map(emp => (
+                      <tr key={emp.id} className="hover:bg-gray-50 dark:hover:bg-meta-4/20 transition">
+                        <td className="p-4 font-bold text-black dark:text-white flex items-center gap-2">
+                          <MdBadge className="text-emerald-600 text-base shrink-0" />
+                          <span>{emp.name}</span>
+                        </td>
+                        <td className="p-4">
+                          <span className="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/60 px-2.5 py-1 rounded-md text-[11px] font-bold">
+                            {emp.role || 'Staff'}
+                          </span>
+                        </td>
+                        <td className="p-4 font-mono text-gray-600 dark:text-gray-400">
+                          {emp.email || '—'}
+                        </td>
+                        <td className="p-4">
+                          <span className="bg-gray-100 dark:bg-meta-4 text-emerald-700 dark:text-emerald-400 px-2.5 py-1 rounded-md text-[11px] font-mono border border-stroke dark:border-strokedark font-bold">
+                            {emp.allowed_modules?.length || 0} pages allowed
+                          </span>
+                        </td>
+                        <td className="p-4 text-center">
+                          <div className="flex items-center justify-center gap-2">
+                            <button
+                              onClick={() => handleOpenEditModal(emp)}
+                              className="inline-flex items-center gap-1 bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30 px-2.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition shadow-xs"
+                            >
+                              <MdEdit /> Edit
+                            </button>
+                            <button
+                              onClick={() => handleDeleteEmployee(emp)}
+                              className="inline-flex items-center gap-1 bg-rose-500/10 hover:bg-rose-500/20 text-rose-700 dark:text-rose-400 border border-rose-500/30 px-2.5 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition shadow-xs"
+                              title="Delete employee account"
+                            >
+                              <MdDelete /> Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>

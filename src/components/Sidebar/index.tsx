@@ -1,19 +1,18 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import SidebarLinkGroup from './SidebarLinkGroup';
-import { AiOutlineUp, AiOutlineDown, AiOutlineRight, AiOutlineArrowLeft } from 'react-icons/ai';
-import { LuLogOut } from 'react-icons/lu';
+import {
+  Home,
+  LayoutDashboard,
+  ChevronDown,
+  ChevronRight
+} from 'lucide-react';
 import { useModal } from '../../Context/Modal';
 import { useAuth } from '../../Context/Auth';
-import LogoDark from '../../images/logo/logo-dark.png';
-import LogoLight from '../../images/logo/logo-light.png';
-import IconDark from '../../images/logo/icon-dark.png';
-import IconLight from '../../images/logo/icon-light.png';
-import { Weight } from 'lucide-react';
 
 interface SidebarProps {
   sidebarOpen: boolean;
-  setSidebarOpen: (arg: boolean) => void;
+  setSidebarOpen: (arg: boolean | ((prev: boolean) => boolean)) => void;
 }
 
 const FlyoutSubMenu = ({ item, pathname, handleLinkClick, getTenantPath }: any) => {
@@ -28,7 +27,7 @@ const FlyoutSubMenu = ({ item, pathname, handleLinkClick, getTenantPath }: any) 
       >
         <div className="flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-xs font-medium duration-150 hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-200 cursor-pointer pr-4">
           <span className="truncate">{item.label}</span>
-          <AiOutlineRight size={10} className="shrink-0 text-slate-400" />
+          <ChevronRight size={12} className="shrink-0 text-slate-400" />
         </div>
 
         {showSubFlyout && (
@@ -64,7 +63,7 @@ const FlyoutSubMenu = ({ item, pathname, handleLinkClick, getTenantPath }: any) 
         onClick={handleLinkClick}
         className={`flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-medium duration-150 ${
           isActive
-            ? 'text-emerald-600 bg-emerald-50/80 dark:bg-emerald-500/15 dark:text-emerald-400 font-semibold'
+            ? 'text-primary bg-primary-light dark:bg-primary/15 font-semibold'
             : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-800'
         }`}
       >
@@ -80,7 +79,6 @@ const SidebarItem = ({ item, pathname, depth = 0, sidebarOpen, setSidebarOpen, h
   const [showFlyout, setShowFlyout] = useState(false);
   const [flyoutTop, setFlyoutTop] = useState<number>(0);
 
-  // Helper check: Recursively verifies if any nested children match the active route URL
   const checkHasActiveChild = (routeItem: any): boolean => {
     if (!routeItem) return false;
     if (!routeItem.children || !Array.isArray(routeItem.children)) return false;
@@ -93,7 +91,6 @@ const SidebarItem = ({ item, pathname, depth = 0, sidebarOpen, setSidebarOpen, h
 
       if (cleanChildPath && (cleanPathname === cleanChildPath || cleanPathname === cleanDest)) return true;
 
-      // Match sub-routes (e.g., /Add, /Edit, /Print, /customer-details) of this child
       const baseChild = cleanChildPath.replace(/\/(list|customer-details|add)$/i, '');
       if (baseChild && baseChild.length > 2 && cleanPathname.includes(baseChild)) {
         return true;
@@ -107,7 +104,6 @@ const SidebarItem = ({ item, pathname, depth = 0, sidebarOpen, setSidebarOpen, h
   const itemDestination = item?.path && getTenantPath ? getTenantPath(item.path) : (item?.path || '');
   const isChildActive = checkHasActiveChild(item) || Boolean(item?.path && (pathname === item.path || pathname === itemDestination));
 
-  // Local toggle state initializes accurately based on the active path to support hard refreshes
   const [open, setOpen] = useState(isChildActive);
 
   useEffect(() => {
@@ -116,7 +112,6 @@ const SidebarItem = ({ item, pathname, depth = 0, sidebarOpen, setSidebarOpen, h
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Sync active route ONLY when pathname changes
   useEffect(() => {
     if (isChildActive) {
       setOpen(true);
@@ -124,7 +119,6 @@ const SidebarItem = ({ item, pathname, depth = 0, sidebarOpen, setSidebarOpen, h
     }
   }, [pathname, isChildActive, depth, menuUniqueKey, setOpenMenuId]);
 
-  // Closes other parent groups if a completely different parent node section is selected
   useEffect(() => {
     if (depth === 0 && openMenuId !== menuUniqueKey && !isChildActive) {
       setOpen(false);
@@ -163,12 +157,12 @@ const SidebarItem = ({ item, pathname, depth = 0, sidebarOpen, setSidebarOpen, h
             <>
               <NavLink
                 to="#"
-                className={`group relative flex items-center rounded-xl py-2.5 font-medium duration-200 ease-in-out ${
+                className={`group relative flex items-center rounded-xl py-2 px-3 text-xs font-semibold duration-150 ease-in-out uppercase tracking-wider ${
                   isChildActive && shouldShowLabels
-                    ? 'text-emerald-600 dark:text-emerald-400 bg-emerald-50/80 dark:bg-emerald-500/15 font-semibold shadow-xs'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-800'
-                } ${shouldShowLabels ? 'px-3.5 justify-start' : 'justify-center mx-auto w-10 h-10 px-0'}`}
-                style={{ paddingLeft: shouldShowLabels ? `${(depth + 1) * 0.85}rem` : undefined }}
+                    ? 'text-primary bg-primary-light dark:bg-primary/15'
+                    : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-800/60'
+                } ${shouldShowLabels ? 'justify-between' : 'justify-center mx-auto w-10 h-10 px-0'}`}
+                style={{ paddingLeft: shouldShowLabels ? `${(depth + 1) * 0.75}rem` : undefined }}
                 onClick={(e) => {
                   e.preventDefault();
                   const nextState = !open;
@@ -181,33 +175,33 @@ const SidebarItem = ({ item, pathname, depth = 0, sidebarOpen, setSidebarOpen, h
                   handleClick();
                 }}
               >
-                {item.icon && <item.icon className={`text-lg shrink-0 ${isChildActive ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300'}`} />}
+                <div className="flex items-center gap-2.5 min-w-0">
+                  {item.icon && (
+                    <item.icon size={16} className={`shrink-0 ${isChildActive ? 'text-primary' : 'text-slate-400 group-hover:text-slate-600'}`} />
+                  )}
+                  {shouldShowLabels && (
+                    <span className="truncate text-xs font-bold tracking-wider">{item.label}</span>
+                  )}
+                </div>
                 {shouldShowLabels && (
-                  <>
-                    <span className="text-xs font-medium ml-2.5 whitespace-nowrap overflow-hidden text-ellipsis flex flex-col gap-1 tracking-wide">
-                      {item.label}
-                    </span>
-                    <span className="ml-auto text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-transform duration-200">
-                      {open ? <AiOutlineUp size={11} /> : <AiOutlineDown size={11} />}
-                    </span>
-                  </>
+                  <span className="text-slate-400 transition-transform duration-200 shrink-0">
+                    {open ? <ChevronDown size={13} /> : <ChevronRight size={14} />}
+                  </span>
                 )}
               </NavLink>
 
-              {/* Collapsible Sub-item Drawer */}
+              {/* Submenu List */}
               {shouldShowLabels && (
                 <div
-                  className="transition-all duration-300 ease-in-out overflow-hidden transform pl-3 ml-2 border-l border-slate-200/80 dark:border-slate-800"
+                  className="transition-all duration-200 ease-in-out overflow-hidden"
                   style={{
                     maxHeight: open ? '1000px' : '0px',
                     opacity: open ? '100' : '0',
-                    marginTop: open ? '4px' : '0px',
-                    marginBottom: open ? '4px' : '0px',
                     pointerEvents: open ? 'auto' : 'none'
                   }}
                 >
-                  <ul className="flex flex-col gap-1 py-1">
-                    {Array.isArray(item.children) && item.children.map((child: any, idx: number) => (
+                  <ul className="flex flex-col gap-0.5 py-1 pl-6">
+                    {Array.isArray(item.children) && item.children.filter((c: any) => !c.hideFromSidebar).map((child: any, idx: number) => (
                       <SidebarItem
                         key={idx}
                         item={child}
@@ -237,17 +231,11 @@ const SidebarItem = ({ item, pathname, depth = 0, sidebarOpen, setSidebarOpen, h
               animation: 'sidebarFlyoutFadeIn 0.18s ease-out forwards'
             }}
           >
-            <style>{`
-              @keyframes sidebarFlyoutFadeIn {
-                from { opacity: 0; transform: translateX(-6px); }
-                to { opacity: 1; transform: translateX(0); }
-              }
-            `}</style>
-            <div className="px-3 py-1.5 mb-1.5 border-b border-slate-100 dark:border-slate-800 font-bold text-[10px] text-emerald-600 dark:text-emerald-400 uppercase tracking-wider text-left">
+            <div className="px-3 py-1.5 mb-1.5 border-b border-slate-100 dark:border-slate-800 font-bold text-[10px] text-primary uppercase tracking-wider text-left">
               {item.label}
             </div>
             <ul className="flex flex-col gap-1">
-              {item.children.map((child: any, idx: number) => (
+              {item.children.filter((c: any) => !c.hideFromSidebar).map((child: any, idx: number) => (
                 <FlyoutSubMenu key={idx} item={child} pathname={pathname} handleLinkClick={handleLinkClick} getTenantPath={getTenantPath} />
               ))}
             </ul>
@@ -264,15 +252,19 @@ const SidebarItem = ({ item, pathname, depth = 0, sidebarOpen, setSidebarOpen, h
     <li onClick={handleLinkClick} className="w-full" title={!shouldShowLabels ? item.label : undefined}>
       <NavLink
         to={singleDestination}
-        className={`group relative flex items-center rounded-xl py-2.5 font-medium duration-200 ease-in-out ${
+        className={`group relative flex items-center rounded-xl py-2 px-3 text-xs font-medium duration-150 ease-in-out ${
           isDirectActive
-            ? 'text-emerald-600 bg-emerald-50/80 dark:bg-emerald-500/15 dark:text-emerald-400 font-semibold shadow-xs'
-            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-800'
-        } ${shouldShowLabels ? 'px-3.5 justify-start' : 'justify-center mx-auto w-10 h-10 px-0'}`}
-        style={{ paddingLeft: shouldShowLabels ? `${(depth + 1) * 0.85}rem` : undefined }}
+            ? 'text-primary bg-primary-light dark:bg-primary/15 font-semibold'
+            : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-300 dark:hover:text-white dark:hover:bg-slate-800/60'
+        } ${shouldShowLabels ? 'justify-start' : 'justify-center mx-auto w-10 h-10 px-0'}`}
+        style={{ paddingLeft: shouldShowLabels ? `${(depth + 1) * 0.75}rem` : undefined }}
       >
-        {item.icon && <item.icon className={`text-lg shrink-0 ${isDirectActive ? 'text-emerald-600 dark:text-emerald-400' : 'text-slate-400 group-hover:text-slate-600 dark:group-hover:text-slate-300'}`} />}
-        {shouldShowLabels && <span className="text-xs font-medium ml-2.5 whitespace-nowrap overflow-hidden text-ellipsis tracking-wide">{item.label}</span>}
+        {item.icon && (
+          <item.icon size={15} className={`shrink-0 ${isDirectActive ? 'text-primary' : 'text-slate-400 group-hover:text-slate-600'}`} />
+        )}
+        {shouldShowLabels && (
+          <span className="text-xs ml-2.5 truncate font-medium">{item.label}</span>
+        )}
       </NavLink>
     </li>
   );
@@ -301,7 +293,6 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }: SidebarProps) => {
     return `${cleanPrefix}${cleanSub}`;
   };
 
-  // Master tracking ID to determine which global branch header is clicked open
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -311,6 +302,8 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }: SidebarProps) => {
   }, []);
 
   const isMobile = windowWidth <= 750;
+  const isHomeActive = pathname === '/' || (cleanPrefix ? pathname === cleanPrefix : false);
+  const isDashboardActive = pathname === '/dashboard' || pathname.startsWith('/dashboard');
 
   return (
     <>
@@ -318,65 +311,54 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }: SidebarProps) => {
         <div className="fixed inset-0 bg-slate-900/60 z-9999 backdrop-blur-xs transition-opacity duration-300" onClick={() => setSidebarOpen(false)} />
       )}
 
-      <aside ref={sidebar} className={`fixed left-0 top-0 z-99999 flex h-screen flex-col bg-white duration-300 ease-in-out dark:bg-[#111827] shadow-xl ${isMobile ? 'block' : 'min-[751px]:sticky min-[751px]:top-0'} ${sidebarOpen ? 'w-72.5 translate-x-0 border-r border-slate-200/80 dark:border-slate-800/80 visible' : 'w-0 -translate-x-full min-[751px]:w-18 min-[751px]:translate-x-0 min-[751px]:border-r min-[751px]:border-slate-200/80 min-[751px]:dark:border-slate-800/80 max-[750px]:invisible'}`} >
-
-        {/* Brand Header */}
-        <div className={`flex items-center justify-between gap-2 py-5 border-b border-slate-200/80 dark:border-slate-800/80 min-h-[76px] duration-300 ${sidebarOpen ? 'px-6' : 'px-0 min-[751px]:px-2 justify-center'}`} >
-          {(sidebarOpen || isMobile) ? (
-            <div className="flex items-center justify-between w-full">
-              <NavLink className="flex items-center gap-3.5 group" to="/">
-                <div className="w-13 h-13 rounded-2xl bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-800 flex items-center justify-center shadow-lg shadow-emerald-600/30 group-hover:scale-105 transition-all duration-200 border border-emerald-400/40 relative overflow-hidden select-none shrink-0">
-                  <div className="absolute inset-0 bg-gradient-to-t from-transparent via-white/10 to-white/20 pointer-events-none" />
-                  <span className="relative z-10 font-cinzel font-black tracking-widest text-[16px] text-white dark:text-[#111827] leading-none pl-0.5">
-                    ZAC
-                  </span>
-                </div>
-                <div className="text-left">
-                  <div className="flex items-center gap-1.5 leading-tight">
-                    <span className="text-[20px] font-black text-emerald-600 dark:text-emerald-400 tracking-tight">ZOAIB</span>
-                    <span className="text-[20px] font-black text-slate-800 dark:text-slate-100 tracking-tight">ALI</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 mt-0.5">
-                    <span className="text-[12.5px] font-bold text-slate-500 dark:text-slate-400 tracking-wider">& COMPANY</span>
-                  </div>
-                </div>
-              </NavLink>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSidebarOpen(false);
-                }}
-                className="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-white transition-colors"
-                title="Collapse Sidebar"
-              >
-                <AiOutlineArrowLeft size={18} />
-              </button>
-            </div>
-          ) : (
-            <div
-              className="w-full flex justify-center cursor-pointer py-1"
-              onClick={(e) => {
-                e.stopPropagation();
-                setSidebarOpen(true);
-              }}
-              title="Open Sidebar"
-            >
-              <div className="w-13 h-13 rounded-2xl bg-gradient-to-br from-emerald-500 via-emerald-600 to-teal-800 flex items-center justify-center shadow-lg shadow-emerald-600/30 hover:scale-105 transition-all duration-200 border border-emerald-400/40 relative overflow-hidden select-none">
-                <div className="absolute inset-0 bg-gradient-to-t from-transparent via-white/10 to-white/20 pointer-events-none" />
-                <span className="relative z-10 font-cinzel font-black tracking-widest text-[16px] text-white dark:text-[#111827] leading-none pl-0.5">
-                  ZAC
-                </span>
-              </div>
-            </div>
-          )}
-        </div>
-
+      <aside
+        ref={sidebar}
+        className={`fixed left-0 top-0 z-99999 flex h-screen flex-col bg-white duration-200 ease-in-out dark:bg-[#0B0F17] shadow-sm ${
+          isMobile ? 'block' : 'min-[751px]:sticky min-[751px]:top-0'
+        } ${
+          sidebarOpen
+            ? 'w-64 translate-x-0 border-r border-slate-200/90 dark:border-slate-800 visible'
+            : 'w-0 -translate-x-full min-[751px]:w-16 min-[751px]:translate-x-0 min-[751px]:border-r min-[751px]:border-slate-200/90 min-[751px]:dark:border-slate-800 max-[750px]:invisible'
+        }`}
+      >
         {/* Navigation Section */}
-        <div className="no-scrollbar flex flex-col overflow-y-auto overflow-x-hidden flex-1">
-          <nav className={`py-4 duration-300 ${sidebarOpen ? 'px-3' : 'px-0 min-[751px]:px-2'}`}>
-            <ul className="mb-6 flex flex-col gap-1.5 w-full">
+        <div className="no-scrollbar flex flex-col overflow-y-auto overflow-x-hidden flex-1 py-3 px-2.5">
+          <nav className="flex flex-col gap-1 w-full">
+            
+            {/* Top "Home" Button (Xenith Blue Pill Style) */}
+            <NavLink
+              to={getTenantPath('/') || '/'}
+              className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition duration-150 ${
+                isHomeActive
+                  ? 'bg-[#EBF5FF] text-[#1E40AF] dark:bg-blue-950/40 dark:text-blue-300 shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800'
+              } ${sidebarOpen || isMobile ? 'justify-start' : 'justify-center mx-auto w-10 h-10 px-0'}`}
+              title={!sidebarOpen && !isMobile ? 'Home' : undefined}
+            >
+              <Home size={17} className={isHomeActive ? 'text-[#2563EB]' : 'text-slate-400'} />
+              {(sidebarOpen || isMobile) && <span>Home</span>}
+            </NavLink>
+
+            {/* Dashboard Link */}
+            <NavLink
+              to={getTenantPath('/dashboard') || '/dashboard'}
+              className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-bold transition duration-150 ${
+                isDashboardActive
+                  ? 'bg-primary-light text-primary dark:bg-primary/15 font-bold shadow-xs'
+                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50 dark:text-slate-300 dark:hover:bg-slate-800 font-semibold'
+              } ${sidebarOpen || isMobile ? 'justify-start' : 'justify-center mx-auto w-10 h-10 px-0'}`}
+              title={!sidebarOpen && !isMobile ? 'Dashboard' : undefined}
+            >
+              <LayoutDashboard size={16} className={isDashboardActive ? 'text-primary' : 'text-slate-400'} />
+              {(sidebarOpen || isMobile) && <span>Dashboard</span>}
+            </NavLink>
+
+            <div className="my-2 border-t border-slate-100 dark:border-slate-800" />
+
+            {/* Dynamic Module Routes (CRM, SALES, PURCHASE, INVENTORY, etc.) */}
+            <ul className="flex flex-col gap-1 w-full">
               {(Array.isArray(roleRoutes) ? roleRoutes : [])
-                .filter((route: any) => route && !route.hideFromSidebar)
+                .filter((route: any) => route && !route.hideFromSidebar && route.label !== 'Home' && route.label !== 'Dashboard')
                 .map((route: any, index: number) => (
                   <SidebarItem
                     key={index}
@@ -390,18 +372,9 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }: SidebarProps) => {
                     menuUniqueKey={`root-${index}`}
                     getTenantPath={getTenantPath}
                   />
-
-                ))
-              }
-              <li 
-                className={`group relative flex items-center rounded-xl py-2.5 font-medium text-slate-600 dark:text-slate-300 duration-200 ease-in-out hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-500/10 dark:hover:text-rose-400 cursor-pointer mt-4 border-t border-slate-200/80 dark:border-slate-800 pt-4 ${sidebarOpen ? 'justify-start px-3.5' : 'justify-center mx-auto w-10 h-10 px-0'}`} 
-                onClick={() => logout()} 
-                title={!sidebarOpen ? 'LogOut' : undefined} 
-              >
-                <LuLogOut className="text-lg shrink-0 text-slate-400 group-hover:text-rose-600 dark:group-hover:text-rose-400" />
-                {(sidebarOpen || isMobile) && <span className="ml-3 text-xs font-semibold">Log Out</span>}
-              </li>
+                ))}
             </ul>
+
           </nav>
         </div>
       </aside>

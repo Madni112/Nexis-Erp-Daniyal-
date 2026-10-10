@@ -7,12 +7,14 @@ interface ActionCardProps {
   subtitle: string;
   Icon: IconType;
   bgGradient?: string; // Tailwind gradient class for background
+  style?: React.CSSProperties;
   onClick: () => void;
 }
 
-const ActionCard: React.FC<ActionCardProps> = ({ title, subtitle, Icon, bgGradient = 'bg-gradient-to-br from-emerald-600 to-teal-700', onClick }) => {
+const ActionCard: React.FC<ActionCardProps> = ({ title, subtitle, Icon, bgGradient = 'bg-gradient-to-br from-emerald-600 to-teal-700', style, onClick }) => {
   return (
     <div
+      style={style}
       className={`p-5 rounded-2xl cursor-pointer transform transition-all duration-200 hover:-translate-y-1 hover:shadow-xl ${bgGradient} text-white flex items-center justify-between shadow-md relative overflow-hidden group`}
       onClick={onClick}
     >

@@ -37,10 +37,11 @@ module.exports = {
         bodydark: '#94A3B8',
         bodydark1: '#E2E8F0',
         bodydark2: '#64748B',
-        primary: '#059669', // Sophisticated Emerald
-        'primary-hover': '#047857',
-        'primary-light': '#D1FAE5',
-        secondary: '#0F766E', // Deep Teal
+        primary: 'var(--color-primary, #059669)',
+        'primary-hover': 'var(--color-primary-hover, #047857)',
+        'primary-light': 'var(--color-primary-light, #ECFDF5)',
+        'primary-dark': 'var(--color-primary-dark, #064E3B)',
+        secondary: 'var(--color-primary-hover, #0F766E)',
         textColor: '#0F172A',
 
         stroke: '#E2E8F0',

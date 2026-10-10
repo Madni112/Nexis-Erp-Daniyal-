@@ -315,8 +315,8 @@ const CustomerHistory = () => {
           <p className="text-xs text-gray-500 mt-0.5">Manage customer directory and assign Chart of Account ledger codes</p>
         </div>
         <button 
-          onClick={() => navigate(`${tenantId ? `/${tenantId}` : ''}/Customers/customer-details`)} 
-          className="bg-primary text-white py-2 px-4 rounded text-sm font-medium hover:bg-opacity-90 transition cursor-pointer shadow-sm" 
+          onClick={() => navigate('/Sales/Customers/Add')} 
+          className="bg-emerald-600 hover:bg-emerald-700 text-white py-2 px-4 rounded-xl text-sm font-semibold transition cursor-pointer shadow-sm flex items-center gap-1.5" 
         > 
           + Add New Customer
         </button> 
