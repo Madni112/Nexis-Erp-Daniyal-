@@ -31,6 +31,9 @@ import Spinner from '../../../ui/Spinner';
 import { useAuth } from '../../../Context/Auth';
 import { MdSquareFoot, MdViewModule, MdAttachMoney, MdLayers, MdClose, MdSave, MdFormatColorFill, MdAdd, MdDelete, MdInfo, MdLabelOutline } from 'react-icons/md';
 import SearchableDropdown from '../../../components/SearchableDropdown';
+import AppCombobox from '../../../components/AppCombobox';
+
+
 
 interface UomItem {
   id: number;
@@ -58,8 +61,6 @@ const AddProduct = () => {
   const [isUomDropdownOpen, setIsUomDropdownOpen] = useState(false);
   const [highlightedUomIndex, setHighlightedUomIndex] = useState(0);
 
-  const [isBinDropdownOpen, setIsBinDropdownOpen] = useState(false);
-  const [highlightedBinIndex, setHighlightedBinIndex] = useState(0);
 
   const location = useLocation();
   const navigate = useNavigate();
@@ -67,63 +68,296 @@ const AddProduct = () => {
   const editData = location.state?.product;
   const isEditMode = !!editData;
 
-  useEffect(() => {
-    const fetchAllMasterMetadata = async () => {
+  // Quick Create Modal State
+  const [quickCreateType, setQuickCreateType] = useState<'parent' | 'sub' | 'category' | 'brand' | 'uom' | null>(null);
+  const [quickCreateName, setQuickCreateName] = useState('');
+  const [quickCreateFullName, setQuickCreateFullName] = useState('');
+  const [quickCreateUomCategory, setQuickCreateUomCategory] = useState('Count & Units');
+  const [quickCreateLoading, setQuickCreateLoading] = useState(false);
+  const [quickCreateSetFieldValue, setQuickCreateSetFieldValue] = useState<((field: string, value: any) => void) | null>(null);
+  const [quickCreateCurrentValues, setQuickCreateCurrentValues] = useState<any>(null);
+
+  const fetchAllMasterMetadata = useCallback(async () => {
+    try {
+      setMetadataLoading(true);
+      const activeTenant = tenantId || 'bashir';
+      
+      const { data: catData } = await supabase
+        .from('inventory_categories')
+        .select('*')
+        .order('name', { ascending: true });
+
+      setCategories(catData || []);
+
       try {
-        setMetadataLoading(true);
-        const activeTenant = tenantId || 'bashir';
-        
-        const { data: catData } = await supabase
-          .from('inventory_categories')
-          .select('id, name, code, parent_id')
+        const { data: finishData } = await supabase
+          .from('inventory_surface_finishes')
+          .select('id, name')
           .order('name', { ascending: true });
 
-        
-        try {
-          const { data: finishData } = await supabase
-            .from('inventory_surface_finishes')
-            .select('id, name')
-            .order('name', { ascending: true });
-          if (finishData && finishData.length > 0) {
-            setSurfaceFinishes(finishData);
-          } else {
-            const local = localStorage.getItem('zac_surface_finishes');
-            if (local) setSurfaceFinishes(JSON.parse(local));
-          }
-        } catch (e) {
+        let brandList: any[] = finishData && finishData.length > 0 ? finishData : [];
+        if (brandList.length === 0) {
           const local = localStorage.getItem('zac_surface_finishes');
-          if (local) setSurfaceFinishes(JSON.parse(local));
+          if (local) brandList = JSON.parse(local);
         }
 
-        const { data: uomData } = await supabase
+        const { data: prodBrands } = await supabase
+          .from('products')
+          .select('bin, brand');
+
+        if (prodBrands) {
+          const existingNames = new Set(brandList.map((b: any) => (typeof b === 'string' ? b : b.name).toLowerCase()));
+          prodBrands.forEach((p: any) => {
+            const name = (p.brand || p.bin || '').trim();
+            if (name && !existingNames.has(name.toLowerCase())) {
+              existingNames.add(name.toLowerCase());
+              brandList.push({ id: name, name });
+            }
+          });
+        }
+        setSurfaceFinishes(brandList);
+      } catch (e) {
+        console.warn('Brand loading error:', e);
+      }
+
+      const { data: uomData } = await supabase
+        .from('inventory_uom')
+        .select('*')
+        .eq('tenant_id', activeTenant)
+        .eq('is_active', true)
+        .order('category', { ascending: true })
+        .order('short_code', { ascending: true });
+
+      let finalUoms = uomData;
+      if (!finalUoms || finalUoms.length === 0) {
+        const { data: fallbackData } = await supabase
           .from('inventory_uom')
           .select('*')
-          .eq('tenant_id', activeTenant)
-          .eq('is_active', true)
-          .order('category', { ascending: true })
-          .order('short_code', { ascending: true });
-
-        if (catData) setCategories(catData);
-
-        
-        if (uomData) {
-          const groups = uomData.reduce((acc: { [key: string]: UomItem[] }, curr: UomItem) => {
-            if (!acc[curr.category]) acc[curr.category] = [];
-            acc[curr.category].push(curr);
-            return acc;
-          }, {});
-          setGroupedUoms(groups);
-        }
-      } catch (err: any) {
-        console.error('Metadata aggregation error: ', err.message);
-        toast.error('Failed to load setup configurations');
-      } finally {
-        setMetadataLoading(false);
+          .eq('is_active', true);
+        finalUoms = fallbackData || [];
       }
-    };
 
+      if (finalUoms && finalUoms.length > 0) {
+        const groups = finalUoms.reduce((acc: { [key: string]: UomItem[] }, curr: UomItem) => {
+          if (!acc[curr.category]) acc[curr.category] = [];
+          acc[curr.category].push(curr);
+          return acc;
+        }, {});
+        setGroupedUoms(groups);
+      }
+    } catch (err: any) {
+      console.error('Metadata aggregation error: ', err.message);
+      toast.error('Failed to load setup configurations');
+    } finally {
+      setMetadataLoading(false);
+    }
+  }, [tenantId]);
+
+  useEffect(() => {
     fetchAllMasterMetadata();
-  }, []);
+  }, [fetchAllMasterMetadata]);
+
+  const handleOpenQuickCreate = (
+    type: 'parent' | 'sub' | 'category' | 'brand' | 'uom',
+    currentValues: any,
+    setFieldValue: (field: string, value: any) => void
+  ) => {
+    if (type === 'sub' && !currentValues?.subSubCategory?.trim()) {
+      toast.error('Please select or add a Parent Category first');
+      return;
+    }
+    if (type === 'category' && !currentValues?.subCategory?.trim()) {
+      toast.error('Please select or add a Sub Category first');
+      return;
+    }
+
+    setQuickCreateType(type);
+    setQuickCreateCurrentValues(currentValues);
+    setQuickCreateSetFieldValue(() => setFieldValue);
+
+    if (type === 'parent') setQuickCreateName(currentValues?.subSubCategory || '');
+    else if (type === 'sub') setQuickCreateName(currentValues?.subCategory || '');
+    else if (type === 'category') setQuickCreateName(currentValues?.category || '');
+    else if (type === 'brand') setQuickCreateName(currentValues?.finishType || '');
+    else if (type === 'uom') {
+      const u = currentValues?.uom;
+      setQuickCreateName(u && u !== 'PCS' && u !== 'BOX' ? u : '');
+      setQuickCreateFullName('');
+      setQuickCreateUomCategory('Count & Units');
+    }
+  };
+
+  const handleSaveQuickCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanName = quickCreateName.trim();
+    if (!cleanName) {
+      toast.error('Please enter a name');
+      return;
+    }
+
+    try {
+      setQuickCreateLoading(true);
+      const activeTenant = tenantId || 'bashir';
+
+      if (quickCreateType === 'parent') {
+        const existing = categories.find(
+          c => !c.parent_id && c.name?.toLowerCase() === cleanName.toLowerCase()
+        );
+        if (existing) {
+          toast.success(`Parent category "${cleanName}" selected!`);
+          quickCreateSetFieldValue?.('subSubCategory', cleanName);
+          quickCreateSetFieldValue?.('subCategory', '');
+          quickCreateSetFieldValue?.('category', '');
+          setQuickCreateType(null);
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from('inventory_categories')
+          .insert([{ name: cleanName, parent_id: null, tenant_id: activeTenant }])
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        toast.success(`Parent Category "${cleanName}" created!`);
+        if (data) {
+          setCategories(prev => [...prev, data]);
+        }
+        await fetchAllMasterMetadata();
+        quickCreateSetFieldValue?.('subSubCategory', cleanName);
+        quickCreateSetFieldValue?.('subCategory', '');
+        quickCreateSetFieldValue?.('category', '');
+        setQuickCreateType(null);
+
+      } else if (quickCreateType === 'sub') {
+        const parentName = quickCreateCurrentValues?.subSubCategory?.trim();
+        let parent = categories.find(
+          c => !c.parent_id && c.name?.toLowerCase() === parentName.toLowerCase()
+        );
+        let parentId = parent?.id;
+
+        if (!parentId) {
+          const { data: newP, error: pErr } = await supabase
+            .from('inventory_categories')
+            .insert([{ name: parentName, parent_id: null, tenant_id: activeTenant }])
+            .select()
+            .single();
+          if (pErr) throw pErr;
+          parentId = newP?.id;
+          if (newP) setCategories(prev => [...prev, newP]);
+        }
+
+        const existingSub = categories.find(
+          c => c.parent_id === parentId && c.name?.toLowerCase() === cleanName.toLowerCase()
+        );
+        if (existingSub) {
+          toast.success(`Sub category "${cleanName}" selected!`);
+          quickCreateSetFieldValue?.('subCategory', cleanName);
+          quickCreateSetFieldValue?.('category', '');
+          setQuickCreateType(null);
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from('inventory_categories')
+          .insert([{ name: cleanName, parent_id: parentId, tenant_id: activeTenant }])
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        toast.success(`Sub Category "${cleanName}" created under ${parentName}!`);
+        if (data) {
+          setCategories(prev => [...prev, data]);
+        }
+        await fetchAllMasterMetadata();
+        quickCreateSetFieldValue?.('subCategory', cleanName);
+        quickCreateSetFieldValue?.('category', '');
+        setQuickCreateType(null);
+
+      } else if (quickCreateType === 'category') {
+        const subName = quickCreateCurrentValues?.subCategory?.trim();
+        let sub = categories.find(
+          c => c.name?.toLowerCase() === subName.toLowerCase()
+        );
+        let subId = sub?.id;
+
+        if (!subId) {
+          toast.error('Parent Sub Category not found');
+          return;
+        }
+
+        const existingCat = categories.find(
+          c => c.parent_id === subId && c.name?.toLowerCase() === cleanName.toLowerCase()
+        );
+        if (existingCat) {
+          toast.success(`Category "${cleanName}" selected!`);
+          quickCreateSetFieldValue?.('category', cleanName);
+          setQuickCreateType(null);
+          return;
+        }
+
+        const { data, error } = await supabase
+          .from('inventory_categories')
+          .insert([{ name: cleanName, parent_id: subId, tenant_id: activeTenant }])
+          .select()
+          .single();
+
+        if (error) throw error;
+
+        toast.success(`Category "${cleanName}" created!`);
+        if (data) {
+          setCategories(prev => [...prev, data]);
+        }
+        await fetchAllMasterMetadata();
+        quickCreateSetFieldValue?.('category', cleanName);
+        setQuickCreateType(null);
+
+      } else if (quickCreateType === 'brand') {
+        const isDuplicate = surfaceFinishes.some(
+          (b: any) => (typeof b === 'string' ? b : b.name)?.toLowerCase() === cleanName.toLowerCase()
+        );
+        if (!isDuplicate) {
+          const { error } = await supabase
+            .from('inventory_surface_finishes')
+            .insert([{ name: cleanName }]);
+          if (error) throw error;
+        }
+
+        toast.success(`Brand "${cleanName}" added!`);
+        await fetchAllMasterMetadata();
+        quickCreateSetFieldValue?.('finishType', cleanName);
+        setQuickCreateType(null);
+
+      } else if (quickCreateType === 'uom') {
+        const upperCode = cleanName.toUpperCase();
+        const { error } = await supabase
+          .from('inventory_uom')
+          .upsert([
+            {
+              short_code: upperCode,
+              full_name: quickCreateFullName.trim() || upperCode,
+              category: quickCreateUomCategory || 'Count & Units',
+              tenant_id: activeTenant,
+              is_active: true
+            }
+          ], { onConflict: 'tenant_id,short_code' });
+
+        if (error) throw error;
+
+        toast.success(`UOM "${upperCode}" added!`);
+        await fetchAllMasterMetadata();
+        quickCreateSetFieldValue?.('uom', upperCode);
+        setQuickCreateType(null);
+      }
+    } catch (err: any) {
+      console.error('Quick create error:', err);
+      toast.error('Failed to create: ' + (err.message || 'Error occurred'));
+    } finally {
+      setQuickCreateLoading(false);
+    }
+  };
 
   const blockInvalidChar = (e: React.KeyboardEvent<HTMLInputElement>) => 
     ['-', 'e', 'E', '+'].includes(e.key) && e.preventDefault();
@@ -310,6 +544,86 @@ const AddProduct = () => {
                 if (error) throw error;
                 toast.success('Product saved successfully!');
               }
+
+              // Auto-sync custom categories to inventory_categories
+              if (values.subSubCategory?.trim()) {
+                try {
+                  let parentId: number | null = null;
+                  let { data: existingParent } = await supabase
+                    .from('inventory_categories')
+                    .select('id, name')
+                    .ilike('name', values.subSubCategory.trim())
+                    .is('parent_id', null)
+                    .maybeSingle();
+
+                  if (!existingParent) {
+                    const { data: createdParent } = await supabase
+                      .from('inventory_categories')
+                      .insert([{ name: values.subSubCategory.trim(), parent_id: null }])
+                      .select()
+                      .maybeSingle();
+                    parentId = createdParent?.id || null;
+                  } else {
+                    parentId = existingParent.id;
+                  }
+
+                  if (values.subCategory?.trim() && parentId) {
+                    let subId: number | null = null;
+                    let { data: existingSub } = await supabase
+                      .from('inventory_categories')
+                      .select('id, name')
+                      .ilike('name', values.subCategory.trim())
+                      .eq('parent_id', parentId)
+                      .maybeSingle();
+
+                    if (!existingSub) {
+                      const { data: createdSub } = await supabase
+                        .from('inventory_categories')
+                        .insert([{ name: values.subCategory.trim(), parent_id: parentId }])
+                        .select()
+                        .maybeSingle();
+                      subId = createdSub?.id || null;
+                    } else {
+                      subId = existingSub.id;
+                    }
+
+                    if (values.category?.trim() && subId) {
+                      let { data: existingCat } = await supabase
+                        .from('inventory_categories')
+                        .select('id, name')
+                        .ilike('name', values.category.trim())
+                        .eq('parent_id', subId)
+                        .maybeSingle();
+
+                      if (!existingCat) {
+                        await supabase
+                          .from('inventory_categories')
+                          .insert([{ name: values.category.trim(), parent_id: subId }]);
+                      }
+                    }
+                  }
+                } catch (catErr) {
+                  console.warn('Auto-sync categories warning:', catErr);
+                }
+              }
+
+              // Auto-sync custom brand if provided
+              if (values.finishType?.trim()) {
+                try {
+                  const { data: existingBrand } = await supabase
+                    .from('inventory_surface_finishes')
+                    .select('id, name')
+                    .ilike('name', values.finishType.trim())
+                    .maybeSingle();
+                  if (!existingBrand) {
+                    await supabase
+                      .from('inventory_surface_finishes')
+                      .insert([{ name: values.finishType.trim() }]);
+                  }
+                } catch (brandErr) {
+                  console.warn('Auto-sync brand warning:', brandErr);
+                }
+              }
               navigate('/Administration/Products/List');
             } catch (err: any) {
               toast.error('Database Operation Failure: ' + err.message);
@@ -391,10 +705,21 @@ const AddProduct = () => {
 
                     {/* 1. Parent Category (Top Level) */}
                     <div>
-                      <label className="mb-1.5 block font-bold text-slate-800 dark:text-slate-100">
-                        Parent Category
-                      </label>
-                      <SearchableDropdown
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block font-bold text-slate-800 dark:text-slate-100 text-xs">
+                          Parent Category
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenQuickCreate('parent', values, setFieldValue)}
+                          className="inline-flex items-center gap-0.5 text-[11px] font-bold text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 hover:underline transition"
+                          title="Add new parent category"
+                        >
+                          <MdAdd className="w-3.5 h-3.5" />
+                          <span>Add</span>
+                        </button>
+                      </div>
+                      <AppCombobox
                         value={values.subSubCategory}
                         onChange={(val) => {
                           setFieldValue('subSubCategory', val);
@@ -402,18 +727,34 @@ const AddProduct = () => {
                           setFieldValue('category', '');
                         }}
                         options={categories.filter(c => c.parent_id === null).map(cat => cat.name)}
-                        placeholder="Parent Category"
-                        allowAll={false}
+                        placeholder="-- Select Parent Category --"
                       />
                     </div>
 
                     {/* 1.1 Sub Category (Middle Level) */}
                     <div>
-                      <label className="mb-1.5 block font-bold text-slate-800 dark:text-slate-100">
-                        Sub Category
-                      </label>
-                      <SearchableDropdown
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block font-bold text-slate-800 dark:text-slate-100 text-xs">
+                          Sub Category
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenQuickCreate('sub', values, setFieldValue)}
+                          disabled={!values.subSubCategory}
+                          className={`inline-flex items-center gap-0.5 text-[11px] font-bold transition ${
+                            !values.subSubCategory
+                              ? 'text-slate-300 dark:text-slate-600 cursor-not-allowed'
+                              : 'text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 hover:underline'
+                          }`}
+                          title="Add new sub category"
+                        >
+                          <MdAdd className="w-3.5 h-3.5" />
+                          <span>Add</span>
+                        </button>
+                      </div>
+                      <AppCombobox
                         value={values.subCategory}
+                        disabled={!values.subSubCategory}
                         onChange={(val) => {
                           setFieldValue('subCategory', val);
                           setFieldValue('category', '');
@@ -423,19 +764,35 @@ const AddProduct = () => {
                           if (!parent) return [];
                           return categories.filter(c => c.parent_id === parent.id).map(cat => cat.name);
                         })()}
-                        placeholder="Sub Category"
-                        allowAll={false}
-                        disabled={!values.subSubCategory}
+                        placeholder={!values.subSubCategory ? "Select parent category first" : "-- Select Sub Category --"}
                       />
                     </div>
 
                     {/* 1.2 Category (Bottom Level) */}
                     <div>
-                      <label className="mb-1.5 block font-bold text-slate-800 dark:text-slate-100">
-                        Category <span className="text-rose-500">*</span>
-                      </label>
-                      <SearchableDropdown
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block font-bold text-slate-800 dark:text-slate-100 text-xs">
+                          Category <span className="text-rose-500">*</span>
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenQuickCreate('category', values, setFieldValue)}
+                          disabled={!values.subCategory}
+                          className={`inline-flex items-center gap-0.5 text-[11px] font-bold transition ${
+                            !values.subCategory
+                              ? 'text-slate-300 dark:text-slate-600 cursor-not-allowed'
+                              : 'text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 hover:underline'
+                          }`}
+                          title="Add new category"
+                        >
+                          <MdAdd className="w-3.5 h-3.5" />
+                          <span>Add</span>
+                        </button>
+                      </div>
+                      <AppCombobox
                         value={values.category}
+                        disabled={!values.subCategory}
+                        required
                         onChange={(val) => setFieldValue('category', val)}
                         options={(() => {
                           const parent = categories.find(c => c.name === values.subSubCategory && c.parent_id === null);
@@ -444,10 +801,7 @@ const AddProduct = () => {
                           if (!sub) return [];
                           return categories.filter(c => c.parent_id === sub.id).map(cat => cat.name);
                         })()}
-                        placeholder="Category"
-                        allowAll={false}
-                        disabled={!values.subCategory}
-                        className={touched.category && errors.category ? 'border border-rose-500 rounded-lg' : ''}
+                        placeholder={!values.subCategory ? "Select sub category first" : "-- Select Category --"}
                       />
                       {touched.category && errors.category && (
                         <p className="text-[10px] text-rose-500 mt-1 font-semibold">{errors.category as string}</p>
@@ -456,190 +810,64 @@ const AddProduct = () => {
 
                     {/* 4. Brand */}
                     <div>
-                      <label className="mb-1.5 block font-bold text-slate-800 dark:text-slate-100">
-                        Brand
-                      </label>
-                      <div className="relative">
-                        <input
-                          type="text"
-                          name="finishType"
-                          autoComplete="off"
-                          onChange={(e) => {
-                            handleChange(e);
-                            setIsBinDropdownOpen(true);
-                            setHighlightedBinIndex(0);
-                          }}
-                          onFocus={() => {
-                            setIsBinDropdownOpen(true);
-                            setHighlightedBinIndex(0);
-                          }}
-                          onBlur={() => {
-                            setTimeout(() => setIsBinDropdownOpen(false), 200);
-                          }}
-                          onKeyDown={(e) => {
-                            let availableBins = surfaceFinishes.map((f: any) => f.name);
-                            const filteredBins = availableBins.filter(b => b.toLowerCase().includes(String(values.finishType || '').toLowerCase()));
-                            
-                            if (e.key === 'ArrowDown') {
-                              e.preventDefault();
-                              setHighlightedBinIndex((prev) => prev < filteredBins.length - 1 ? prev + 1 : 0);
-                            } else if (e.key === 'ArrowUp') {
-                              e.preventDefault();
-                              setHighlightedBinIndex((prev) => prev > 0 ? prev - 1 : filteredBins.length - 1);
-                            } else if (e.key === 'Enter') {
-                              e.preventDefault();
-                              if (filteredBins.length > 0) {
-                                setFieldValue('finishType', filteredBins[highlightedBinIndex] || filteredBins[0]);
-                                setIsBinDropdownOpen(false);
-                              }
-                            } else if (e.key === 'Tab' || e.key === 'Escape') {
-                              setIsBinDropdownOpen(false);
-                            }
-                          }}
-                          value={values.finishType}
-                          className="w-full rounded-xl border border-slate-200 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-800 outline-none focus:border-emerald-600 text-xs font-semibold text-slate-900 dark:text-white"
-                          placeholder="Search or enter brand..."
-                        />
-                        {isBinDropdownOpen && (
-                          <div className="absolute left-0 top-full mt-1.5 z-[99999] w-full min-w-[200px] max-h-[250px] overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#1A222C] shadow-2xl divide-y divide-slate-100 dark:divide-slate-800 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-600">
-                            {(() => {
-                              let availableBins = surfaceFinishes.map((f: any) => f.name);
-                              const filteredBins = availableBins.filter(b => b.toLowerCase().includes(String(values.finishType || '').toLowerCase()));
-                              
-                              return filteredBins.length > 0 ? (
-                                filteredBins.map((bin, idx) => {
-                                  const isHighlighted = idx === highlightedBinIndex;
-                                  return (
-                                    <div
-                                      key={bin}
-                                      onMouseEnter={() => setHighlightedBinIndex(idx)}
-                                      onMouseDown={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        setFieldValue('finishType', bin);
-                                        setIsBinDropdownOpen(false);
-                                      }}
-                                      className={`p-3 cursor-pointer transition text-xs font-bold flex items-center ${
-                                        isHighlighted 
-                                          ? 'bg-emerald-50 dark:bg-emerald-950/40 border-l-4 border-emerald-500 text-emerald-700 dark:text-emerald-400' 
-                                          : 'hover:bg-slate-50 dark:hover:bg-slate-800/80 text-slate-800 dark:text-slate-200'
-                                      }`}
-                                    >
-                                      {bin}
-                                    </div>
-                                  );
-                                })
-                              ) : (
-                                <div className="p-4 text-center text-xs text-slate-400 italic">
-                                  Press Enter to add "{values.finishType}"
-                                </div>
-                              );
-                            })()}
-                          </div>
-                        )}
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block font-bold text-slate-800 dark:text-slate-100 text-xs">
+                          Brand
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenQuickCreate('brand', values, setFieldValue)}
+                          className="inline-flex items-center gap-0.5 text-[11px] font-bold text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 hover:underline transition"
+                          title="Add new brand"
+                        >
+                          <MdAdd className="w-3.5 h-3.5" />
+                          <span>Add</span>
+                        </button>
                       </div>
+                      <AppCombobox
+                        value={values.finishType}
+                        onChange={(val) => setFieldValue('finishType', val)}
+                        options={surfaceFinishes.map((f: any) => (typeof f === 'string' ? f : f.name))}
+                        placeholder="Search or enter brand..."
+                      />
                     </div>
 
                     {/* 5. UOM */}
                     <div>
-                      <label className="mb-1.5 block font-bold text-slate-800 dark:text-slate-100">
-                        {isTileCategory ? 'Inventory UOM (e.g. BOX)' : 'UOM *'}
-                      </label>
-                      <div className="relative">
-                        <input
-                          type="text"
-                          name="uom"
-                          autoComplete="off"
-                          onChange={(e) => {
-                            handleChange(e);
-                            setIsUomDropdownOpen(true);
-                            setHighlightedUomIndex(0);
-                          }}
-                          onFocus={() => {
-                            setIsUomDropdownOpen(true);
-                            setHighlightedUomIndex(0);
-                          }}
-                          onBlur={() => {
-                            setTimeout(() => setIsUomDropdownOpen(false), 200);
-                          }}
-                          onKeyDown={(e) => {
-                            let availableUoms: string[] = [];
-                            if (isTileCategory) {
-                              availableUoms = ['BOX', 'SQM', 'SQFT', 'PCS'];
-                            }
-                            Object.keys(groupedUoms).forEach(cat => {
-                              groupedUoms[cat].forEach(u => availableUoms.push(u.short_code));
-                            });
-                            availableUoms.push('EACH');
-                            availableUoms = Array.from(new Set(availableUoms));
-                            const filteredUoms = availableUoms.filter(u => u.toLowerCase().includes(String(values.uom || '').toLowerCase()));
-                            
-                            if (e.key === 'ArrowDown') {
-                              e.preventDefault();
-                              setHighlightedUomIndex((prev) => prev < filteredUoms.length - 1 ? prev + 1 : 0);
-                            } else if (e.key === 'ArrowUp') {
-                              e.preventDefault();
-                              setHighlightedUomIndex((prev) => prev > 0 ? prev - 1 : filteredUoms.length - 1);
-                            } else if (e.key === 'Enter') {
-                              e.preventDefault();
-                              if (filteredUoms.length > 0) {
-                                setFieldValue('uom', filteredUoms[highlightedUomIndex] || filteredUoms[0]);
-                                setIsUomDropdownOpen(false);
-                              }
-                            } else if (e.key === 'Tab' || e.key === 'Escape') {
-                              setIsUomDropdownOpen(false);
-                            }
-                          }}
-                          value={values.uom}
-                          className="w-full rounded-xl border border-slate-200 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-800 outline-none focus:border-emerald-600 text-xs font-bold text-emerald-600 dark:text-emerald-400"
-                          placeholder="Search or enter UOM..."
-                        />
-                        {isUomDropdownOpen && (
-                          <div className="absolute left-0 top-full mt-1.5 z-[99999] w-full min-w-[200px] max-h-[250px] overflow-y-auto rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-[#1A222C] shadow-2xl divide-y divide-slate-100 dark:divide-slate-800 scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-slate-600">
-                            {(() => {
-                              let availableUoms: string[] = [];
-                              if (isTileCategory) {
-                                availableUoms = ['BOX', 'SQM', 'SQFT', 'PCS'];
-                              }
-                              Object.keys(groupedUoms).forEach(cat => {
-                                groupedUoms[cat].forEach(u => availableUoms.push(u.short_code));
-                              });
-                              availableUoms.push('EACH');
-                              availableUoms = Array.from(new Set(availableUoms));
-                              const filteredUoms = availableUoms.filter(u => u.toLowerCase().includes(String(values.uom || '').toLowerCase()));
-                              
-                              return filteredUoms.length > 0 ? (
-                                filteredUoms.map((uom, idx) => {
-                                  const isHighlighted = idx === highlightedUomIndex;
-                                  return (
-                                    <div
-                                      key={uom}
-                                      onMouseEnter={() => setHighlightedUomIndex(idx)}
-                                      onMouseDown={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        setFieldValue('uom', uom);
-                                        setIsUomDropdownOpen(false);
-                                      }}
-                                      className={`p-3 cursor-pointer transition text-xs font-bold flex items-center ${
-                                        isHighlighted 
-                                          ? 'bg-emerald-50 dark:bg-emerald-950/40 border-l-4 border-emerald-500 text-emerald-700 dark:text-emerald-400' 
-                                          : 'hover:bg-slate-50 dark:hover:bg-slate-800/80 text-slate-800 dark:text-slate-200'
-                                      }`}
-                                    >
-                                      {uom}
-                                    </div>
-                                  );
-                                })
-                              ) : (
-                                <div className="p-4 text-center text-xs text-slate-400 italic">
-                                  Press Enter to add "{values.uom}"
-                                </div>
-                              );
-                            })()}
-                          </div>
-                        )}
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block font-bold text-slate-800 dark:text-slate-100 text-xs">
+                          {isTileCategory ? 'Inventory UOM (e.g. BOX)' : 'UOM *'}
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenQuickCreate('uom', values, setFieldValue)}
+                          className="inline-flex items-center gap-0.5 text-[11px] font-bold text-emerald-600 hover:text-emerald-700 dark:text-emerald-400 dark:hover:text-emerald-300 hover:underline transition"
+                          title="Add new unit of measure"
+                        >
+                          <MdAdd className="w-3.5 h-3.5" />
+                          <span>Add</span>
+                        </button>
                       </div>
+                      <AppCombobox
+                        value={values.uom}
+                        onChange={(val) => setFieldValue('uom', val)}
+                        options={(() => {
+                          let availableUoms: string[] = [];
+                          if (isTileCategory) {
+                            availableUoms = ['BOX', 'SQM', 'SQFT', 'PCS'];
+                          }
+                          Object.keys(groupedUoms).forEach(cat => {
+                            groupedUoms[cat].forEach(u => availableUoms.push(u.short_code));
+                          });
+                          availableUoms.push('EACH');
+                          return Array.from(new Set(availableUoms));
+                        })()}
+                        placeholder="Search or enter UOM..."
+                        required
+                      />
+                      {touched.uom && errors.uom && (
+                        <p className="text-[10px] text-rose-500 mt-1 font-semibold">{errors.uom as string}</p>
+                      )}
                     </div>
 
                     {/* 6. Code */}
@@ -949,6 +1177,130 @@ const AddProduct = () => {
             );
           }}
         </Formik>
+
+        {/* Quick Create Sub-Modal */}
+        {quickCreateType && (
+          <div className="fixed inset-0 z-[99999999] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 animate-in fade-in duration-150">
+            <div className="w-full max-w-sm rounded-2xl bg-white dark:bg-[#1E293B] border border-slate-200 dark:border-slate-700 p-5 shadow-2xl">
+              <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-700/60 pb-3">
+                <div>
+                  <h4 className="text-sm font-black text-slate-900 dark:text-white">
+                    {quickCreateType === 'parent' && 'Add Parent Category'}
+                    {quickCreateType === 'sub' && 'Add Sub Category'}
+                    {quickCreateType === 'category' && 'Add Category'}
+                    {quickCreateType === 'brand' && 'Add Brand'}
+                    {quickCreateType === 'uom' && 'Add Unit of Measure (UOM)'}
+                  </h4>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                    {quickCreateType === 'parent' && 'Create top-level category in database'}
+                    {quickCreateType === 'sub' && `Grouping under: "${quickCreateCurrentValues?.subSubCategory}"`}
+                    {quickCreateType === 'category' && `Leaf category under: "${quickCreateCurrentValues?.subCategory}"`}
+                    {quickCreateType === 'brand' && 'New brand in product catalog'}
+                    {quickCreateType === 'uom' && 'New measurement unit in database'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setQuickCreateType(null)}
+                  className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 rounded-lg"
+                >
+                  <MdClose className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="mt-4 space-y-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
+                    {quickCreateType === 'uom' ? 'Short Code *' : 'Name *'}
+                  </label>
+                  <input
+                    type="text"
+                    autoFocus
+                    required
+                    value={quickCreateName}
+                    onChange={(e) => setQuickCreateName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleSaveQuickCreate(e as any);
+                      }
+                    }}
+                    placeholder={
+                      quickCreateType === 'parent'
+                        ? 'e.g. Tiles, Sanitary, Hardware'
+                        : quickCreateType === 'sub'
+                        ? 'e.g. Floor Tiles, Bath Fittings'
+                        : quickCreateType === 'category'
+                        ? 'e.g. Porcelain, Ceramic'
+                        : quickCreateType === 'brand'
+                        ? 'e.g. Master, Sonex'
+                        : 'e.g. CTN, BDL, MTR'
+                    }
+                    className="w-full rounded-xl border border-slate-200 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-800 dark:text-white outline-none focus:border-emerald-600"
+                  />
+                </div>
+
+                {quickCreateType === 'uom' && (
+                  <>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
+                        Full Name (Optional)
+                      </label>
+                      <input
+                        type="text"
+                        value={quickCreateFullName}
+                        onChange={(e) => setQuickCreateFullName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleSaveQuickCreate(e as any);
+                          }
+                        }}
+                        placeholder="e.g. Carton, Bundle, Meter"
+                        className="w-full rounded-xl border border-slate-200 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-800 dark:text-white outline-none focus:border-emerald-600"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 dark:text-slate-200 mb-1">
+                        Category
+                      </label>
+                      <select
+                        value={quickCreateUomCategory}
+                        onChange={(e) => setQuickCreateUomCategory(e.target.value)}
+                        className="w-full rounded-xl border border-slate-200 dark:border-slate-700 p-2.5 bg-white dark:bg-slate-800 text-xs font-semibold text-slate-800 dark:text-white outline-none focus:border-emerald-600"
+                      >
+                        <option value="Count & Units">Count & Units</option>
+                        <option value="Packaging & Containers">Packaging & Containers</option>
+                        <option value="Area & Surface">Area & Surface</option>
+                        <option value="Length & Distance">Length & Distance</option>
+                        <option value="Weight & Mass">Weight & Mass</option>
+                        <option value="Volume & Liquid">Volume & Liquid</option>
+                      </select>
+                    </div>
+                  </>
+                )}
+
+                <div className="flex items-center justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setQuickCreateType(null)}
+                    className="rounded-xl px-4 py-2 text-xs font-bold text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={quickCreateLoading}
+                    onClick={(e) => handleSaveQuickCreate(e as any)}
+                    className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-emerald-600/20"
+                  >
+                    {quickCreateLoading ? 'Saving...' : 'Create & Select'}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     </div>

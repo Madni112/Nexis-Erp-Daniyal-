@@ -73,13 +73,13 @@ const AddSalesman = () => {
 
         if (error) throw error;
         toast.success('Salesman updated successfully!');
-        navigate('/Salesman/list');
+        navigate('/Sales/Salesman/List');
       } else {
         // INSERT NEW SALESMAN 
         const { error } = await supabase.from('salesmen').insert([payload]);
         if (error) throw error;
         toast.success('Salesman registered successfully!');
-        navigate('/Salesman/list');
+        navigate('/Sales/Salesman/List');
       }
     } catch (err: any) {
       toast.error(err.message);
@@ -96,7 +96,7 @@ const AddSalesman = () => {
             {isEditMode ? `Edit Salesman: ${editData.name}` : 'Add New Salesman'}
           </h3>
           <button
-            onClick={() => navigate('/Salesman/list')}
+            onClick={() => navigate('/Sales/Salesman/List')}
             className="text-sm text-primary hover:underline font-medium cursor-pointer"
           >
             {isEditMode ? 'Back to List' : 'See List'}
@@ -132,7 +132,7 @@ const AddSalesman = () => {
               <div className="flex items-center justify-end gap-3 pt-4 mt-4 border-t border-stroke dark:border-strokedark">
                 <button
                   type="button"
-                  onClick={() => navigate('/Salesman/list')}
+                  onClick={() => navigate('/Sales/Salesman/List')}
                   className="rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 py-3 px-6 font-bold text-slate-700 dark:text-slate-300 transition shadow-sm text-xs cursor-pointer"
                 >
                   Cancel

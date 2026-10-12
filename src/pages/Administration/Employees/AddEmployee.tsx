@@ -64,7 +64,7 @@ const AddEmployee = () => {
           </h3>
           <button
             type="button"
-            onClick={() => navigate('/Administration/Employees/List')}
+            onClick={() => navigate('/Human-Resources/Employees')}
             className="text-sm font-medium text-primary hover:underline"
           >
             Back to Directory
@@ -121,7 +121,7 @@ const AddEmployee = () => {
                 if (error) throw error;
                 toast.success('Employee card added to live ledger database successfully!');
               }
-              navigate('/Administration/Employees/List');
+              navigate('/Human-Resources/Employees');
             } catch (err: any) {
               toast.error('DB Operation Error: ' + err.message);
             } finally {
@@ -226,7 +226,7 @@ const AddEmployee = () => {
               <div className="flex items-center justify-end gap-3 mt-8 pt-4 border-t border-stroke dark:border-strokedark">
                 <button
                   type="button"
-                  onClick={() => navigate('/Administration/Employees/List')}
+                  onClick={() => navigate('/Human-Resources/Employees')}
                   className="rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 py-3 px-6 font-bold text-slate-700 dark:text-slate-300 transition shadow-sm text-xs cursor-pointer"
                 >
                   Cancel

@@ -166,10 +166,10 @@ const SurfaceFinish = () => {
         <div className="border-b border-slate-100 dark:border-slate-800 pb-3 mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2 font-bold text-slate-900 dark:text-white text-sm">
             <MdTexture className="text-teal-600 text-lg" />
-            <span>{editingId ? 'Edit Tile Brand' : 'Register New Tile Brand'}</span>
+            <span>{editingId ? 'Edit Brand' : 'Register New Brand'}</span>
           </div>
           <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 font-mono">
-            {finishes.length} Finishes Registered
+            {finishes.length} Brands Registered
           </span>
         </div>
 
@@ -183,7 +183,7 @@ const SurfaceFinish = () => {
               required
               value={finishName}
               onChange={(e) => setFinishName(e.target.value)}
-              placeholder="e.g. Lappato / Semi-Polished, Matte, High Gloss"
+              placeholder="e.g. Master, Sonex, Grohe"
               className="w-full rounded-xl border border-slate-200 dark:border-slate-700 p-2.5 bg-slate-50/50 dark:bg-slate-800/80 outline-none focus:border-teal-600 text-xs font-bold text-slate-900 dark:text-white"
             />
           </div>
@@ -195,7 +195,7 @@ const SurfaceFinish = () => {
               className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 rounded-xl bg-teal-600 hover:bg-teal-700 py-2.5 px-6 text-xs font-bold text-white transition shadow-sm cursor-pointer disabled:opacity-50"
             >
               {submitting ? <Spinner /> : editingId ? <MdCheckCircle /> : <MdAdd />}
-              <span>{editingId ? 'Update Finish' : 'Add Brand'}</span>
+              <span>{editingId ? 'Update Brand' : 'Add Brand'}</span>
             </button>
             {editingId && (
               <button
@@ -210,7 +210,7 @@ const SurfaceFinish = () => {
         </form>
       </div>
 
-      {/* FINISHES DIRECTORY TABLE */}
+      {/* BRANDS DIRECTORY TABLE */}
       <div className="rounded-2xl border border-slate-200/80 bg-white shadow-sm dark:border-slate-800/80 dark:bg-[#111827] p-5 sm:p-6">
         <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-5">
           <div className="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 font-medium">
@@ -235,7 +235,7 @@ const SurfaceFinish = () => {
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              placeholder="Search Brandes..."
+              placeholder="Search Brands..."
               className="w-full sm:w-72 rounded-xl border border-slate-200 py-2 px-3.5 bg-slate-50/50 dark:bg-slate-800/60 dark:border-slate-700 outline-none focus:border-teal-600 focus:ring-2 focus:ring-teal-500/20 text-xs text-slate-800 dark:text-white transition"
             />
           </div>

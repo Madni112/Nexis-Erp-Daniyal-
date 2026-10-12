@@ -74,12 +74,12 @@ const AddCustomer = () => {
 
         if (error) throw error;
         toast.success('Customer profile updated successfully!');
-        navigate(`${tenantId ? `/${tenantId}` : ''}/Customers/list`);
+        navigate(`${tenantId ? `/${tenantId}` : ''}/Sales/Customers/List`);
       } else {
         const { error } = await supabase.from('customers').insert([payload]);
         if (error) throw error;
         toast.success('Customer registered successfully!');
-        navigate(`${tenantId ? `/${tenantId}` : ''}/Customers/list`);
+        navigate(`${tenantId ? `/${tenantId}` : ''}/Sales/Customers/List`);
       }
     } catch (err: any) {
       toast.error(err.message);
@@ -97,7 +97,7 @@ const AddCustomer = () => {
           </h3>
           <button
             type="button"
-            onClick={() => navigate(`${tenantId ? `/${tenantId}` : ''}/Customers/list`)}
+            onClick={() => navigate(`${tenantId ? `/${tenantId}` : ''}/Sales/Customers/List`)}
             className="text-sm text-primary hover:underline font-medium cursor-pointer"
           >
             {isEditMode ? 'Back to List' : 'See List'}
@@ -335,7 +335,7 @@ const AddCustomer = () => {
               <div className="pt-5 mt-6 border-t border-stroke dark:border-strokedark flex justify-end gap-3">
                 <button
                   type="button"
-                  onClick={() => navigate(`${tenantId ? `/${tenantId}` : ''}/Customers/list`)}
+                  onClick={() => navigate(`${tenantId ? `/${tenantId}` : ''}/Sales/Customers/List`)}
                   className="rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 py-3 px-6 font-bold text-slate-700 dark:text-slate-300 transition shadow-sm text-xs cursor-pointer"
                 >
                   Cancel

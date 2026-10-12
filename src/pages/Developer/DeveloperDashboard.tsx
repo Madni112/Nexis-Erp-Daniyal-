@@ -162,7 +162,7 @@ export const PERMISSION_TREE: PermissionNode[] = [
     children: [
       { id: '/Administration/Categories/List', label: 'Categories' },
       { id: '/administration/subcategories', label: 'Sub-Categories' },
-      { id: '/Administration/Surface-Finish', label: 'Brands / Surface Finish' },
+      { id: '/Administration/Surface-Finish', label: 'Brand' },
       { id: '/administration/tile-dimensions', label: 'Tile Dimensions Matrix' },
       { id: '/Administration/UOM/List', label: 'Units of Measure (UOM)' },
       { id: '/Administration/Locations/List', label: 'Locations / Warehouses' },

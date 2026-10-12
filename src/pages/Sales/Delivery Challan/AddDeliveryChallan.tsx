@@ -132,7 +132,7 @@ const AddDeliveryChallan = () => {
             )}
           </div>
           <button
-            onClick={() => navigate('/Delivery-Challan/List')}
+            onClick={() => navigate('/Sales/Delivery-Challan/List')}
             className="text-sm text-primary hover:underline font-medium"
           >
             {isEditMode ? 'Back to List' : 'See List'}
@@ -237,7 +237,7 @@ const AddDeliveryChallan = () => {
                 if (error) throw error;
                 toast.success('Challan logged successfully!');
               }
-              navigate('/Delivery-Challan/List'); // Redirect back straight to historical records grid
+              navigate('/Sales/Delivery-Challan/List'); // Redirect back straight to historical records grid
             } catch (err: any) {
               toast.error(err.message);
             } finally {
@@ -462,7 +462,7 @@ const AddDeliveryChallan = () => {
               <div className="flex items-center justify-end gap-3 pt-4 mt-4 border-t border-stroke dark:border-strokedark">
                 <button
                   type="button"
-                  onClick={() => navigate(`${tenantId ? `/${tenantId}` : ''}/Sales/Delivery-Challans/List`)}
+                  onClick={() => navigate(`${tenantId ? `/${tenantId}` : ''}/Sales/Delivery-Challan/List`)}
                   className="rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 py-3 px-6 font-bold text-slate-700 dark:text-slate-300 transition shadow-sm text-xs cursor-pointer"
                 >
                   Cancel

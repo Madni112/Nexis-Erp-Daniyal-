@@ -475,7 +475,7 @@ const SalesReturnReceiptAdd: React.FC = () => {
         </div>
         <button
           type="button"
-          onClick={() => navigate(`${tenantId ? `/${tenantId}` : ''}/sales/sales-return-receipt/list`)}
+          onClick={() => navigate(`${tenantId ? `/${tenantId}` : ''}/Sales/Sales-Return-Receipt/List`)}
           className="flex items-center gap-1.5 px-4 py-2 text-xs font-bold bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 rounded-xl hover:bg-slate-50 dark:hover:bg-slate-700 transition cursor-pointer shadow-xs"
         >
           <MdArrowBack size={16} /> Back to Return Payouts
@@ -715,7 +715,7 @@ const SalesReturnReceiptAdd: React.FC = () => {
             if (shouldPrintAfterSave && savedReceiptId) {
               navigate(`${tenantId ? `/${tenantId}` : ''}/sales/sales-return-receipt/print/${savedReceiptId}`);
             } else {
-              navigate(`${tenantId ? `/${tenantId}` : ''}/sales/sales-return-receipt/list`);
+              navigate(`${tenantId ? `/${tenantId}` : ''}/Sales/Sales-Return-Receipt/List`);
             }
           } catch (err: any) {
             toast.error('Error processing sales return receipt: ' + err.message);
@@ -1185,7 +1185,7 @@ const SalesReturnReceiptAdd: React.FC = () => {
                 <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-200 dark:border-slate-700">
                   <button
                     type="button"
-                    onClick={() => navigate(`${tenantId ? `/${tenantId}` : ''}/sales/sales-return-receipt/list`)}
+                    onClick={() => navigate(`${tenantId ? `/${tenantId}` : ''}/Sales/Sales-Return-Receipt/List`)}
                     className="rounded-xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 py-3 px-6 font-bold text-slate-700 dark:text-slate-300 transition text-xs cursor-pointer"
                   >
                     Cancel

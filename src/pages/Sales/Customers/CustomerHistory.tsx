@@ -463,7 +463,7 @@ const CustomerHistory = () => {
                     {/* 7. Actions */}
                     <td className="py-3.5 px-4 text-center"> 
                       <TableActions
-                        onEdit={() => navigate(`${tenantId ? `/${tenantId}` : ''}/Customers/customer-details`, { state: { customer: c } })}
+                        onEdit={() => navigate(`${tenantId ? `/${tenantId}` : ''}/Sales/Customers/Add`, { state: { customer: c } })}
                         onDelete={() => handleDelete(c.id)}
                         editTitle="Edit Customer"
                         deleteTitle="Delete Customer"

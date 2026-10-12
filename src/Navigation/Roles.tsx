@@ -455,7 +455,7 @@ export const adminRoutes = [
       {
         path: '/Administration/Surface-Finish',
         component: <SurfaceFinish />,
-        label: 'Brands / Surface Finish',
+        label: 'Brand',
         icon: Sparkles
       },
       {
@@ -821,7 +821,26 @@ export const adminRoutes = [
   { path: '/Reports/Purchase-Report/Print', component: <PurchaseReportPrint />, hideFromSidebar: true },
   { path: '/Reports/Stock-Report/Print', component: <StockReportPrint />, hideFromSidebar: true },
   { path: '/Reports/Account-Report/Print', component: <AccountReportPrint />, hideFromSidebar: true },
-  { path: '/Reports/Holding-Report/Print', component: <HoldingReportPrint />, hideFromSidebar: true }
+  { path: '/Reports/Holding-Report/Print', component: <HoldingReportPrint />, hideFromSidebar: true },
+
+  // Route aliases & compatibility fallbacks
+  { path: '/Customers/list', component: <CustomerHistory />, hideFromSidebar: true },
+  { path: '/customers/list', component: <CustomerHistory />, hideFromSidebar: true },
+  { path: '/Customers/customer-details', component: <AddCustomer />, hideFromSidebar: true },
+  { path: '/Salesman/list', component: <SalesmanHistory />, hideFromSidebar: true },
+  { path: '/salesman/list', component: <SalesmanHistory />, hideFromSidebar: true },
+  { path: '/Delivery-Challan/List', component: <DeliveryChallanHistory />, hideFromSidebar: true },
+  { path: '/delivery-challan/list', component: <DeliveryChallanHistory />, hideFromSidebar: true },
+  { path: '/Sales/Delivery-Challans/List', component: <DeliveryChallanHistory />, hideFromSidebar: true },
+  { path: '/Sales-Return/Debit-Notes/List', component: <SalesReturnList />, hideFromSidebar: true },
+  { path: '/sales-return/debit-notes/list', component: <SalesReturnList />, hideFromSidebar: true },
+  { path: '/Sales-Return/Debit-Notes/Add', component: <AddSalesReturn />, hideFromSidebar: true },
+  { path: '/sales/sales-return-receipt/list', component: <SaleReturnReceiptList />, hideFromSidebar: true },
+  { path: '/sales/sales-return-receipt/add', component: <SaleReturnReceiptAdd />, hideFromSidebar: true },
+  { path: '/Sales/Invoice/Add', component: <NewInvoice />, hideFromSidebar: true },
+  { path: '/sales/invoice/add', component: <NewInvoice />, hideFromSidebar: true },
+  { path: '/sales/invoice/list', component: <SalesHistory />, hideFromSidebar: true },
+  { path: '/Administration/Employees/List', component: <EmployeesPage />, hideFromSidebar: true }
 ];
 
 export const salesmanRoutes = adminRoutes;
