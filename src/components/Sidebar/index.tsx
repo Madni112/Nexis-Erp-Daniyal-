@@ -308,13 +308,15 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }: SidebarProps) => {
   return (
     <>
       {isMobile && sidebarOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 z-9999 backdrop-blur-xs transition-opacity duration-300" onClick={() => setSidebarOpen(false)} />
+        <div className="fixed inset-0 top-[57px] bg-slate-900/60 z-40 backdrop-blur-xs transition-opacity duration-300" onClick={() => setSidebarOpen(false)} />
       )}
 
       <aside
         ref={sidebar}
-        className={`fixed left-0 top-0 z-99999 flex h-screen flex-col bg-white duration-200 ease-in-out dark:bg-[#0B0F17] shadow-sm ${
-          isMobile ? 'block' : 'min-[751px]:sticky min-[751px]:top-0'
+        className={`duration-200 ease-in-out bg-white dark:bg-[#0B0F17] shadow-sm flex flex-col shrink-0 ${
+          isMobile
+            ? 'fixed left-0 top-[57px] z-50 h-[calc(100vh-57px)]'
+            : 'relative top-0 h-full z-30'
         } ${
           sidebarOpen
             ? 'w-64 translate-x-0 border-r border-slate-200/90 dark:border-slate-800 visible'
