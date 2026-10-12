@@ -75,6 +75,7 @@ const FlyoutSubMenu = ({ item, pathname, handleLinkClick, getTenantPath }: any) 
 
 const SidebarItem = ({ item, pathname, depth = 0, sidebarOpen, setSidebarOpen, hideModal, openMenuId, setOpenMenuId, menuUniqueKey, getTenantPath }: any) => {
   const itemRef = useRef<HTMLDivElement>(null);
+  const linkRef = useRef<HTMLAnchorElement>(null);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   const [showFlyout, setShowFlyout] = useState(false);
   const [flyoutTop, setFlyoutTop] = useState<number>(0);
@@ -137,10 +138,18 @@ const SidebarItem = ({ item, pathname, depth = 0, sidebarOpen, setSidebarOpen, h
   };
 
   const handleMouseEnter = () => {
-    if (!sidebarOpen && itemRef.current && !isMobile) {
-      const rect = itemRef.current.getBoundingClientRect();
-      setFlyoutTop(rect.top);
-      setShowFlyout(true);
+    if (!sidebarOpen && !isMobile) {
+      const target = linkRef.current || itemRef.current;
+      if (target) {
+        const rect = target.getBoundingClientRect();
+        // Shift up to align directly alongside the hovered icon button
+        let topPos = Math.max(64, rect.top - 40);
+        if (rect.top > window.innerHeight - 220) {
+          topPos = Math.max(64, rect.bottom - 280);
+        }
+        setFlyoutTop(Math.round(topPos));
+        setShowFlyout(true);
+      }
     }
   };
 
@@ -156,6 +165,7 @@ const SidebarItem = ({ item, pathname, depth = 0, sidebarOpen, setSidebarOpen, h
           {(handleClick, isGroupOpen) => (
             <>
               <NavLink
+                ref={linkRef}
                 to="#"
                 className={`group relative flex items-center rounded-xl py-2 px-3 text-xs font-semibold duration-150 ease-in-out uppercase tracking-wider ${
                   isChildActive && shouldShowLabels
@@ -225,12 +235,14 @@ const SidebarItem = ({ item, pathname, depth = 0, sidebarOpen, setSidebarOpen, h
 
         {!sidebarOpen && showFlyout && !isMobile && (
           <div
-            className="fixed left-[56px] z-99999 w-56 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-[#1E293B]/95 p-2.5 shadow-2xl backdrop-blur-md"
+            className="fixed left-[74px] z-99999 w-56 overflow-y-auto no-scrollbar rounded-2xl border border-slate-200 dark:border-slate-800 bg-white/95 dark:bg-[#1E293B]/95 p-2.5 shadow-2xl backdrop-blur-md"
             style={{
               top: `${flyoutTop}px`,
-              animation: 'sidebarFlyoutFadeIn 0.18s ease-out forwards'
+              maxHeight: `calc(100vh - ${flyoutTop}px - 16px)`,
             }}
           >
+            {/* Invisible bridge so mouse hover doesn't drop across the gap */}
+            <div className="absolute top-0 -left-3 w-3.5 h-full bg-transparent" />
             <div className="px-3 py-1.5 mb-1.5 border-b border-slate-100 dark:border-slate-800 font-bold text-[10px] text-primary uppercase tracking-wider text-left">
               {item.label}
             </div>
@@ -308,23 +320,21 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }: SidebarProps) => {
   return (
     <>
       {isMobile && sidebarOpen && (
-        <div className="fixed inset-0 top-[57px] bg-slate-900/60 z-40 backdrop-blur-xs transition-opacity duration-300" onClick={() => setSidebarOpen(false)} />
+        <div className="fixed inset-0 top-[57px] bg-slate-900/60 z-30 backdrop-blur-xs transition-opacity duration-300" onClick={() => setSidebarOpen(false)} />
       )}
 
       <aside
         ref={sidebar}
-        className={`duration-200 ease-in-out bg-white dark:bg-[#0B0F17] shadow-sm flex flex-col shrink-0 ${
-          isMobile
-            ? 'fixed left-0 top-[57px] z-50 h-[calc(100vh-57px)]'
-            : 'relative top-0 h-full z-30'
-        } ${
+        className={`fixed left-0 top-[57px] bottom-0 z-40 duration-200 ease-in-out bg-white dark:bg-[#0B0F17] shadow-sm flex flex-col border-r border-slate-200/90 dark:border-slate-800 ${
           sidebarOpen
-            ? 'w-64 translate-x-0 border-r border-slate-200/90 dark:border-slate-800 visible'
-            : 'w-0 -translate-x-full min-[751px]:w-16 min-[751px]:translate-x-0 min-[751px]:border-r min-[751px]:border-slate-200/90 min-[751px]:dark:border-slate-800 max-[750px]:invisible'
+            ? 'w-64 translate-x-0'
+            : isMobile
+              ? 'w-64 -translate-x-full pointer-events-none'
+              : 'w-16 translate-x-0'
         }`}
       >
-        {/* Navigation Section */}
-        <div className="no-scrollbar flex flex-col overflow-y-auto overflow-x-hidden flex-1 py-3 px-2.5">
+        {/* Navigation Section with dedicated internal scroll */}
+        <div className="no-scrollbar flex flex-col overflow-y-auto overflow-x-hidden flex-1 py-3 px-2.5 h-full">
           <nav className="flex flex-col gap-1 w-full">
             
             {/* Top "Home" Button (Xenith Blue Pill Style) */}

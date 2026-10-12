@@ -52,7 +52,11 @@ const DefaultLayout: React.FC<{ children: ReactNode }> = ({ children }) => {
       <div className="flex flex-1 overflow-hidden relative w-full h-[calc(100vh-57px)]">
         <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={handleSetSidebarOpen} />
 
-        <div className="relative flex flex-1 flex-col overflow-y-auto overflow-x-hidden duration-200 ease-in-out w-full">
+        <div
+          className={`relative flex flex-1 flex-col overflow-y-auto overflow-x-hidden duration-200 ease-in-out w-full transition-[padding] ${
+            sidebarOpen ? 'min-[751px]:pl-64' : 'min-[751px]:pl-16'
+          }`}
+        >
           <main className="flex-1 bg-[#F8FAFC] dark:bg-[#0B0F17] w-full relative">
             <div className="relative mx-auto max-w-screen-2xl p-4 md:p-6 2xl:p-8 w-full">
               {children}
